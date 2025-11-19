@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App utilities */
+.btn {
+  @apply inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ring-1 ring-inset;
+}
+.btn-primary {
+  @apply bg-brand-600 text-white ring-brand-600 hover:bg-brand-700;
+}
+.btn-secondary {
+  @apply bg-white text-gray-800 ring-gray-300 hover:bg-gray-50;
+}
+.card {
+  @apply rounded-lg border border-gray-200 bg-white shadow-sm;
+}
+.card-header { @apply border-b px-4 py-3 text-sm font-semibold; }
+.card-body { @apply p-4; }

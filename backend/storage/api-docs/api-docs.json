@@ -1,0 +1,2157 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Smart Queue API",
+        "description": "API de gestion intelligente des files d’attente (Laravel 11).",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://localhost",
+            "description": "Local"
+        }
+    ],
+    "paths": {
+        "/api/auth/register": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "operationId": "ab5e99ccc41aaf9ec3db4b819e1eb64c",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "email",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "email": {
+                                        "type": "string"
+                                    },
+                                    "password": {
+                                        "type": "string"
+                                    },
+                                    "phone": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AuthTokenResponse"
+                                },
+                                "example": {
+                                    "user": {
+                                        "id": 1,
+                                        "name": "Alice",
+                                        "email": "alice@example.com",
+                                        "phone": "+221770000000",
+                                        "role": "user"
+                                    },
+                                    "token": "eyJ0eXAiOiJKV1Qi..."
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/login": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "operationId": "231c066184691f047c3d68253aa7af86",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "email",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string"
+                                    },
+                                    "password": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AuthTokenResponse"
+                                },
+                                "example": {
+                                    "user": {
+                                        "id": 1,
+                                        "name": "Alice",
+                                        "email": "alice@example.com",
+                                        "phone": "+221770000000",
+                                        "role": "user"
+                                    },
+                                    "token": "eyJ0eXAiOiJKV1Qi..."
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/logout": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "operationId": "eca8401fb26ce450eac8c76c5eda84ce",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "message": "Logged out"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/auth/devices/register": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "operationId": "8a30b84d426215d52defc03364431d60",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "fcm_token"
+                                ],
+                                "properties": {
+                                    "fcm_token": {
+                                        "type": "string"
+                                    },
+                                    "platform": {
+                                        "type": "string",
+                                        "enum": [
+                                            "android",
+                                            "ios",
+                                            "web"
+                                        ]
+                                    },
+                                    "app_version": {
+                                        "type": "string"
+                                    },
+                                    "push_enabled": {
+                                        "type": "boolean"
+                                    },
+                                    "sms_enabled": {
+                                        "type": "boolean"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "message": "Device registered",
+                                    "device_id": 42
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/establishments": {
+            "get": {
+                "tags": [
+                    "Establishments"
+                ],
+                "operationId": "e63875a8879cd737ccac148bcb521b22",
+                "parameters": [
+                    {
+                        "name": "lat",
+                        "in": "query",
+                        "schema": {
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "lng",
+                        "in": "query",
+                        "schema": {
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "radius",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Establishment"
+                                            }
+                                        },
+                                        "links": {
+                                            "$ref": "#/components/schemas/PaginationLinks"
+                                        },
+                                        "meta": {
+                                            "$ref": "#/components/schemas/PaginationMeta"
+                                        }
+                                    },
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "data": [
+                                        {
+                                            "id": 5,
+                                            "name": "Hôpital Central",
+                                            "address": "Av. de la République",
+                                            "lat": 14.7167,
+                                            "lng": -17.4677,
+                                            "open_at": "08:00:00",
+                                            "close_at": "17:00:00",
+                                            "is_active": true,
+                                            "distance_m": 350
+                                        }
+                                    ],
+                                    "links": {
+                                        "first": "http://localhost/api/establishments?page=1",
+                                        "last": "http://localhost/api/establishments?page=1",
+                                        "prev": null,
+                                        "next": null
+                                    },
+                                    "meta": {
+                                        "current_page": 1,
+                                        "per_page": 20,
+                                        "total": 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/establishments/search": {
+            "get": {
+                "tags": [
+                    "Establishments"
+                ],
+                "operationId": "586dfe2428542ed62dca915adb4ee076",
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "data": [
+                                        {
+                                            "id": 5,
+                                            "name": "Hôpital Central",
+                                            "address": "Av. ...",
+                                            "lat": 14.7167,
+                                            "lng": -17.4677,
+                                            "open_at": "08:00:00",
+                                            "close_at": "17:00:00",
+                                            "is_active": true
+                                        }
+                                    ],
+                                    "links": {
+                                        "first": "http://localhost/api/establishments/search?page=1",
+                                        "last": "http://localhost/api/establishments/search?page=1",
+                                        "prev": null,
+                                        "next": null
+                                    },
+                                    "meta": {
+                                        "current_page": 1,
+                                        "per_page": 20,
+                                        "total": 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/establishments/{id}": {
+            "get": {
+                "tags": [
+                    "Establishments"
+                ],
+                "operationId": "e76f5d8c92202c6ccfcfc632b10fd657",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Establishment"
+                                },
+                                "example": {
+                                    "id": 5,
+                                    "name": "Hôpital Central",
+                                    "address": "Av. ...",
+                                    "lat": 14.7167,
+                                    "lng": -17.4677,
+                                    "open_at": "08:00:00",
+                                    "close_at": "17:00:00",
+                                    "is_active": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/establishments/{id}/services": {
+            "get": {
+                "tags": [
+                    "Services"
+                ],
+                "operationId": "e46cc70bab77ff8c62f6a607fe13e41c",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "open",
+                                "closed"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "priority_support",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "people_waiting_min",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "people_waiting_max",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "data": [
+                                        {
+                                            "id": 123,
+                                            "name": "Consultation",
+                                            "status": "open",
+                                            "avg_service_time_minutes": 5,
+                                            "people_waiting": 3,
+                                            "establishment": {
+                                                "id": 5,
+                                                "name": "Hôpital Central"
+                                            }
+                                        }
+                                    ],
+                                    "links": {
+                                        "first": "http://localhost/api/establishments/5/services?page=1",
+                                        "last": "http://localhost/api/establishments/5/services?page=1",
+                                        "prev": null,
+                                        "next": null
+                                    },
+                                    "meta": {
+                                        "current_page": 1,
+                                        "per_page": 20,
+                                        "total": 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/services/{id}": {
+            "get": {
+                "tags": [
+                    "Services"
+                ],
+                "operationId": "818c8e1df66d6307e8a79ec38eb08995",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Service"
+                                },
+                                "example": {
+                                    "id": 123,
+                                    "name": "Consultation",
+                                    "status": "open",
+                                    "avg_service_time_minutes": 5,
+                                    "people_waiting": 3,
+                                    "establishment": {
+                                        "id": 5,
+                                        "name": "Hôpital Central"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/services/{id}/affluence": {
+            "get": {
+                "tags": [
+                    "Services"
+                ],
+                "operationId": "3b45254e69cdec34a2dddfaab48feaab",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Affluence"
+                                },
+                                "example": {
+                                    "level": "medium",
+                                    "people": 6,
+                                    "eta_avg": 12
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/services/{id}/recommendations": {
+            "get": {
+                "tags": [
+                    "Services"
+                ],
+                "operationId": "720d59c0e597712d2bb0a521c1cde365",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object"
+                                    }
+                                },
+                                "example": [
+                                    {
+                                        "start": "08:00",
+                                        "end": "09:00",
+                                        "reason": "Faible affluence historique"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/tickets": {
+            "post": {
+                "tags": [
+                    "Tickets"
+                ],
+                "operationId": "5c935973543cea8b9094231137c84a76",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "service_id"
+                                ],
+                                "properties": {
+                                    "service_id": {
+                                        "type": "integer"
+                                    },
+                                    "lat": {
+                                        "type": "number"
+                                    },
+                                    "lng": {
+                                        "type": "number"
+                                    },
+                                    "from_qr": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Ticket"
+                                },
+                                "example": {
+                                    "id": 987,
+                                    "number": "C-012-20251117",
+                                    "status": "waiting",
+                                    "priority": "normal",
+                                    "position": 12,
+                                    "eta_minutes": 60,
+                                    "called_at": null,
+                                    "service": {
+                                        "id": 123,
+                                        "name": "Consultation",
+                                        "status": "open",
+                                        "avg_service_time_minutes": 5
+                                    },
+                                    "establishment": {
+                                        "id": 5,
+                                        "name": "Hôpital Central"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tickets/active": {
+            "get": {
+                "tags": [
+                    "Tickets"
+                ],
+                "operationId": "090ac1bcc98d26919f1c5aacf062637d",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Ticket"
+                                    }
+                                },
+                                "example": [
+                                    {
+                                        "id": 987,
+                                        "number": "C-012-20251117",
+                                        "status": "waiting",
+                                        "priority": "normal",
+                                        "position": 12,
+                                        "eta_minutes": 60,
+                                        "called_at": null,
+                                        "service": {
+                                            "id": 123,
+                                            "name": "Consultation",
+                                            "status": "open",
+                                            "avg_service_time_minutes": 5
+                                        },
+                                        "establishment": {
+                                            "id": 5,
+                                            "name": "Hôpital Central"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tickets/history": {
+            "get": {
+                "tags": [
+                    "Tickets"
+                ],
+                "operationId": "1ba18200a8983387bed6dc1affa11f80",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "closed",
+                                "canceled"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "data": [
+                                        {
+                                            "id": 654,
+                                            "number": "A-101-20251117",
+                                            "status": "closed",
+                                            "priority": "normal",
+                                            "position": null,
+                                            "eta_minutes": null,
+                                            "called_at": "2025-11-17T13:15:00Z",
+                                            "service": {
+                                                "id": 123,
+                                                "name": "Consultation",
+                                                "status": "open",
+                                                "avg_service_time_minutes": 5
+                                            },
+                                            "establishment": {
+                                                "id": 5,
+                                                "name": "Hôpital Central"
+                                            }
+                                        }
+                                    ],
+                                    "links": {
+                                        "first": "http://localhost/api/tickets/history?page=1",
+                                        "last": "http://localhost/api/tickets/history?page=5",
+                                        "prev": null,
+                                        "next": "http://localhost/api/tickets/history?page=2"
+                                    },
+                                    "meta": {
+                                        "current_page": 1,
+                                        "per_page": 20,
+                                        "total": 96
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tickets/{ticket}": {
+            "get": {
+                "tags": [
+                    "Tickets"
+                ],
+                "operationId": "908fa1f3e4298eab89bab3ddd2eaedd3",
+                "parameters": [
+                    {
+                        "name": "ticket",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Ticket"
+                                },
+                                "example": {
+                                    "id": 987,
+                                    "number": "C-012-20251117",
+                                    "status": "waiting",
+                                    "priority": "normal",
+                                    "position": 12,
+                                    "eta_minutes": 60,
+                                    "called_at": null,
+                                    "service": {
+                                        "id": 123,
+                                        "name": "Consultation",
+                                        "status": "open",
+                                        "avg_service_time_minutes": 5
+                                    },
+                                    "establishment": {
+                                        "id": 5,
+                                        "name": "Hôpital Central"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "patch": {
+                "tags": [
+                    "Tickets"
+                ],
+                "operationId": "373845bc43afc01127af5416e60c5218",
+                "parameters": [
+                    {
+                        "name": "ticket",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "action"
+                                ],
+                                "properties": {
+                                    "action": {
+                                        "type": "string",
+                                        "enum": [
+                                            "cancel"
+                                        ]
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Ticket"
+                                },
+                                "example": {
+                                    "id": 987,
+                                    "number": "C-012-20251117",
+                                    "status": "canceled",
+                                    "priority": "normal",
+                                    "position": null,
+                                    "eta_minutes": null,
+                                    "called_at": null,
+                                    "service": {
+                                        "id": 123,
+                                        "name": "Consultation",
+                                        "status": "open",
+                                        "avg_service_time_minutes": 5
+                                    },
+                                    "establishment": {
+                                        "id": 5,
+                                        "name": "Hôpital Central"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/services/{service}/call-next": {
+            "post": {
+                "tags": [
+                    "Agent"
+                ],
+                "operationId": "20293204fa98b198b28ce5812dfa1067",
+                "parameters": [
+                    {
+                        "name": "service",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "called_ticket": {
+                                        "id": 987,
+                                        "number": "C-012-20251117",
+                                        "status": "called"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "204": {
+                        "description": "No eligible ticket"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tickets/{ticket}/mark-absent": {
+            "post": {
+                "tags": [
+                    "Agent"
+                ],
+                "operationId": "95363ba8526475b5ec75fbe5d2f61776",
+                "parameters": [
+                    {
+                        "name": "ticket",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "ticket": {
+                                        "id": 987,
+                                        "status": "absent"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tickets/{ticket}/recall": {
+            "post": {
+                "tags": [
+                    "Agent"
+                ],
+                "operationId": "9190ab76f34828e74898024911440800",
+                "parameters": [
+                    {
+                        "name": "ticket",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "ticket": {
+                                        "id": 987,
+                                        "status": "called"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/services/{service}/close": {
+            "post": {
+                "tags": [
+                    "Agent"
+                ],
+                "operationId": "81be7f465761f494081197c11a63feb5",
+                "parameters": [
+                    {
+                        "name": "service",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "message": "Service closed",
+                                    "service_id": 123
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/establishments": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "e6ea0c02eab03853efcdf60905a48155",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "data": [
+                                        {
+                                            "id": 5,
+                                            "name": "Hôpital Central",
+                                            "address": "Av. ...",
+                                            "lat": 14.7167,
+                                            "lng": -17.4677,
+                                            "open_at": "08:00:00",
+                                            "close_at": "17:00:00",
+                                            "is_active": true
+                                        }
+                                    ],
+                                    "links": {
+                                        "first": "http://localhost/api/admin/establishments?page=1",
+                                        "last": "http://localhost/api/admin/establishments?page=1",
+                                        "prev": null,
+                                        "next": null
+                                    },
+                                    "meta": {
+                                        "current_page": 1,
+                                        "per_page": 50,
+                                        "total": 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "b56b7a11dfffceecbc2f435764243671",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Establishment"
+                                },
+                                "example": {
+                                    "id": 6,
+                                    "name": "Clinique Diamniadio",
+                                    "address": "Zone A",
+                                    "lat": 14.7,
+                                    "lng": -17.45,
+                                    "open_at": "08:00:00",
+                                    "close_at": "17:00:00",
+                                    "is_active": true
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/establishments/{id}": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "8ad764c3d6e5fb671ec86218c7cfbe1b",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Establishment"
+                                },
+                                "example": {
+                                    "id": 5,
+                                    "name": "Hôpital Central",
+                                    "address": "Av. ...",
+                                    "lat": 14.7167,
+                                    "lng": -17.4677,
+                                    "open_at": "08:00:00",
+                                    "close_at": "17:00:00",
+                                    "is_active": true
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "2c3c0dd9179818caccabb89712a31ed8",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Establishment"
+                                },
+                                "example": {
+                                    "id": 5,
+                                    "name": "Hôpital Central (Maj)",
+                                    "address": "Av. ...",
+                                    "lat": 14.7167,
+                                    "lng": -17.4677,
+                                    "open_at": "08:00:00",
+                                    "close_at": "17:00:00",
+                                    "is_active": true
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "26ba3b64602ef315447567da050a9218",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "message": "Deleted"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/services": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "724ab249f066e1f15181a04e4c22bdee",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "data": [
+                                        {
+                                            "id": 123,
+                                            "name": "Consultation",
+                                            "status": "open",
+                                            "avg_service_time_minutes": 5,
+                                            "priority_support": false,
+                                            "establishment": {
+                                                "id": 5,
+                                                "name": "Hôpital Central"
+                                            }
+                                        }
+                                    ],
+                                    "links": {
+                                        "first": "http://localhost/api/admin/services?page=1",
+                                        "last": "http://localhost/api/admin/services?page=1",
+                                        "prev": null,
+                                        "next": null
+                                    },
+                                    "meta": {
+                                        "current_page": 1,
+                                        "per_page": 50,
+                                        "total": 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "85ab443be3a28416fd2cfc66c94e385f",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Service"
+                                },
+                                "example": {
+                                    "id": 124,
+                                    "name": "Vaccination",
+                                    "status": "open",
+                                    "avg_service_time_minutes": 7,
+                                    "priority_support": true,
+                                    "establishment": {
+                                        "id": 5,
+                                        "name": "Hôpital Central"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/services/{id}": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "d11265f914e8d2f7c832db348363638c",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Service"
+                                },
+                                "example": {
+                                    "id": 123,
+                                    "name": "Consultation",
+                                    "status": "open",
+                                    "avg_service_time_minutes": 5,
+                                    "priority_support": false,
+                                    "establishment": {
+                                        "id": 5,
+                                        "name": "Hôpital Central"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "1afd30a6c380600ab1b14050cacf1d36",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Service"
+                                },
+                                "example": {
+                                    "id": 123,
+                                    "name": "Consultation (Maj)",
+                                    "status": "open",
+                                    "avg_service_time_minutes": 6,
+                                    "priority_support": false,
+                                    "establishment": {
+                                        "id": 5,
+                                        "name": "Hôpital Central"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "645ece51ff169993adb0f98a683fbade",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "message": "Deleted"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/agents": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "2576c202b08292b305df3d4bd90a7544",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "data": [
+                                        {
+                                            "id": 9,
+                                            "name": "Agent Bob",
+                                            "email": "bob@example.com",
+                                            "phone": "+221770000001",
+                                            "role": "agent",
+                                            "services": [
+                                                {
+                                                    "id": 123,
+                                                    "name": "Consultation"
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "links": {
+                                        "first": "http://localhost/api/admin/agents?page=1",
+                                        "last": "http://localhost/api/admin/agents?page=1",
+                                        "prev": null,
+                                        "next": null
+                                    },
+                                    "meta": {
+                                        "current_page": 1,
+                                        "per_page": 50,
+                                        "total": 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "c92dbbb1762329440ff5626ca32f7c86",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "id": 10,
+                                    "name": "Agent Alice",
+                                    "email": "agent.alice@example.com",
+                                    "phone": "+221770000002",
+                                    "role": "agent",
+                                    "services": [
+                                        {
+                                            "id": 123,
+                                            "name": "Consultation"
+                                        },
+                                        {
+                                            "id": 124,
+                                            "name": "Vaccination"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/agents/{id}": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "0b0fc2135f791827751576f29813223f",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "id": 9,
+                                    "name": "Agent Bob",
+                                    "email": "bob@example.com",
+                                    "phone": "+221770000001",
+                                    "role": "agent",
+                                    "services": [
+                                        {
+                                            "id": 123,
+                                            "name": "Consultation"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "877e056a3330a5d93b38edd393fe63b2",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "id": 9,
+                                    "name": "Agent Bob (Maj)",
+                                    "email": "bob@example.com",
+                                    "phone": "+221770000001",
+                                    "role": "agent",
+                                    "services": [
+                                        {
+                                            "id": 123,
+                                            "name": "Consultation"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "20e0107e639ecdaff94bd0dbf56df6a5",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "message": "Deleted"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/stats/overview": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "e44cb236bd3bd2d03f946f1cc5110a5f",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "from": "2025-11-10 00:00:00",
+                                    "to": "2025-11-17 23:59:59",
+                                    "tickets": {
+                                        "created": 120,
+                                        "closed": 100,
+                                        "absent": 8,
+                                        "wait_avg_minutes": 14
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/stats/services/{serviceId}": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "operationId": "b6d7f54793d5acf7f176a9da4999c8cd",
+                "parameters": [
+                    {
+                        "name": "serviceId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {},
+                                "example": {
+                                    "service_id": 123,
+                                    "from": "2025-11-10 00:00:00",
+                                    "to": "2025-11-17 23:59:59",
+                                    "tickets": {
+                                        "created": 30,
+                                        "closed": 28,
+                                        "absent": 2,
+                                        "service_time_avg_minutes": 6
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Error": {
+                "properties": {
+                    "error": {
+                        "properties": {
+                            "code": {
+                                "type": "string"
+                            },
+                            "message": {
+                                "type": "string"
+                            },
+                            "details": {
+                                "type": "object",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "PaginationLinks": {
+                "type": "object",
+                "additionalProperties": true
+            },
+            "PaginationMeta": {
+                "type": "object",
+                "additionalProperties": true
+            },
+            "Establishment": {
+                "required": [
+                    "id",
+                    "name"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "address": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "lat": {
+                        "type": "number",
+                        "format": "float",
+                        "nullable": true
+                    },
+                    "lng": {
+                        "type": "number",
+                        "format": "float",
+                        "nullable": true
+                    },
+                    "open_at": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "close_at": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "is_active": {
+                        "type": "boolean"
+                    },
+                    "distance_m": {
+                        "type": "integer",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "Service": {
+                "required": [
+                    "id",
+                    "name",
+                    "status"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "open",
+                            "closed"
+                        ]
+                    },
+                    "avg_service_time_minutes": {
+                        "type": "integer"
+                    },
+                    "people_waiting": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "establishment": {
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "Ticket": {
+                "required": [
+                    "id",
+                    "number",
+                    "status",
+                    "priority",
+                    "service",
+                    "establishment"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "number": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "waiting",
+                            "called",
+                            "absent",
+                            "closed",
+                            "canceled"
+                        ]
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": [
+                            "normal",
+                            "high",
+                            "vip"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "eta_minutes": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "called_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "service": {
+                        "$ref": "#/components/schemas/Service"
+                    },
+                    "establishment": {
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "Affluence": {
+                "required": [
+                    "level",
+                    "people",
+                    "eta_avg"
+                ],
+                "properties": {
+                    "level": {
+                        "type": "string",
+                        "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                        ]
+                    },
+                    "people": {
+                        "type": "integer"
+                    },
+                    "eta_avg": {
+                        "type": "integer"
+                    }
+                },
+                "type": "object"
+            },
+            "AuthTokenResponse": {
+                "properties": {
+                    "user": {
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "email": {
+                                "type": "string"
+                            },
+                            "phone": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "role": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "token": {
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            }
+        },
+        "securitySchemes": {
+            "sanctum": {
+                "type": "http",
+                "bearerFormat": "Token",
+                "scheme": "bearer"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Auth"
+        },
+        {
+            "name": "Establishments"
+        },
+        {
+            "name": "Services"
+        },
+        {
+            "name": "Tickets"
+        },
+        {
+            "name": "Agent"
+        },
+        {
+            "name": "Admin"
+        }
+    ]
+}
