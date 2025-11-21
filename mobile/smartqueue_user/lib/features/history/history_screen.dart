@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smartqueue_user/core/app_theme.dart';
 import 'package:smartqueue_user/features/history/history_provider.dart';
+import 'package:smartqueue_user/core/app_router.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -100,7 +101,15 @@ class HistoryScreen extends ConsumerWidget {
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
-                      // TODO: Navigate to ticket details
+                      Navigator.pushNamed(
+                        context,
+                        AppRouter.ticketDetail,
+                        arguments: {
+                          'ticketId': ticket.id,
+                          'serviceName': ticket.serviceName,
+                          'ticket': ticket,
+                        },
+                      );
                     },
                   ),
                 );

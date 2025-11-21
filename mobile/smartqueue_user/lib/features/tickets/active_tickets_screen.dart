@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/ticket.dart';
 import 'active_tickets_provider.dart';
+import 'package:smartqueue_user/core/app_router.dart';
 
 /// Tickets actifs de l'utilisateur (waiting/called/absent)
 class ActiveTicketsScreen extends ConsumerWidget {
@@ -12,7 +13,16 @@ class ActiveTicketsScreen extends ConsumerWidget {
     final asyncTickets = ref.watch(activeTicketsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mes tickets')),
+      appBar: AppBar(
+        title: const Text('Mes tickets'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Historique',
+            onPressed: () => Navigator.pushNamed(context, AppRouter.history),
+          ),
+        ],
+      ),
       body: asyncTickets.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erreur: $e')),
@@ -33,7 +43,15 @@ class ActiveTicketsScreen extends ConsumerWidget {
                 subtitle: Text('Statut: ${t.status}${t.position != null ? ' • Position: ${t.position}' : ''}${t.etaMinutes != null ? ' • ETA: ${t.etaMinutes} min' : ''}'),
                 trailing: Icon(Icons.chevron_right, color: Colors.grey[600]),
                 onTap: () {
-                  // Option: naviguer vers suivi détaillé si nécessaire
+                  Navigator.pushNamed(
+                    context,
+                    AppRouter.ticketDetail,
+                    arguments: {
+                      'ticketId': t.id,
+                      'serviceName': t.serviceName,
+                      'ticket': t,
+                    },
+                  );
                 },
               );
             },

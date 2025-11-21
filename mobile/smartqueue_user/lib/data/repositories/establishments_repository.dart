@@ -45,4 +45,10 @@ class EstablishmentsRepository {
       rethrow;
     }
   }
+
+  Future<Establishment> byId(int id) async {
+    final res = await _client.dio.get(AppConfig.establishmentById(id));
+    final data = res.data is Map && res.data['data'] != null ? res.data['data'] : res.data;
+    return Establishment.fromJson((data as Map).cast<String, dynamic>());
+  }
 }

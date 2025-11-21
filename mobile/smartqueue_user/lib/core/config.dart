@@ -31,6 +31,7 @@ class AppConfig {
   static const activeTickets = '/tickets/active';
   static const historyTickets = '/tickets/history';
   static String ticketById(int id) => '/tickets/$id';
+  static String ticketCancel(int id) => '/tickets/$id/cancel';
 
   // Notifications (auth)
   static const notifications = '/notifications';

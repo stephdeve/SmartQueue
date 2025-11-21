@@ -56,6 +56,7 @@ class _AppShellState extends State<AppShell> {
           builder: (_) => RealtimeScreen(
             ticketId: m['ticketId'] as int,
             serviceName: m['serviceName'] as String,
+            initialTicket: m['ticket'] as dynamic,
           ),
         );
       default:

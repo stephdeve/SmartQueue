@@ -61,6 +61,7 @@ dependencies:
 
   # Utils
   intl: ^0.20.2 # J'ai ajouté une version par défaut pour intl
+  share_plus: ^7.2.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

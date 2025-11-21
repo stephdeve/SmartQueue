@@ -120,6 +120,7 @@ class TakeTicketScreen extends ConsumerWidget {
                         arguments: {
                           'ticketId': ticket.id,
                           'serviceName': serviceName,
+                          'ticket': ticket,
                         },
                       ),
                       icon: const Icon(Icons.timer_outlined),

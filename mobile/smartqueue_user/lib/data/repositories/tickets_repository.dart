@@ -61,4 +61,22 @@ class TicketsRepository {
     final data = res.data is Map && res.data['data'] != null ? res.data['data'] : res.data;
     return Ticket.fromJson((data as Map).cast<String, dynamic>());
   }
+
+  Future<void> cancel(int id) async {
+    try {
+      await _client.dio.post(AppConfig.ticketCancel(id));
+    } on DioException catch (_) {
+      // Fallback on DELETE if cancel route not available
+      try {
+        await _client.dio.delete(AppConfig.ticketById(id));
+      } on DioException catch (e2) {
+        String msg = 'Annulation impossible.';
+        final data = e2.response?.data;
+        if (data is Map && data['message'] is String) {
+          msg = data['message'] as String;
+        }
+        throw Exception(msg);
+      }
+    }
+  }
 }

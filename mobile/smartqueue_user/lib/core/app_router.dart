@@ -93,6 +93,8 @@ import 'package:smartqueue_user/features/service_detail/service_detail_screen.da
 import 'package:smartqueue_user/features/splash/splash_screen.dart';
 import 'package:smartqueue_user/features/ticket/take_ticket_screen.dart';
 import 'package:smartqueue_user/features/shell/app_shell.dart';
+import 'package:smartqueue_user/features/tickets/ticket_detail_screen.dart';
+import 'package:smartqueue_user/data/models/ticket.dart';
 
 class AppRouter {
   static const String splash = '/';
@@ -103,6 +105,7 @@ class AppRouter {
   static const String serviceDetail = '/service_detail';
   static const String takeTicket = '/ticket/take';
   static const String realtime = '/ticket/realtime';
+  static const String ticketDetail = '/ticket/detail';
   static const String history = '/history';
   static const String notifications = '/notifications';
   static const String profile = '/profile';
@@ -147,6 +150,16 @@ class AppRouter {
           builder: (_) => RealtimeScreen(
             ticketId: args['ticketId'] as int,
             serviceName: args['serviceName'] as String,
+            initialTicket: args['ticket'] as Ticket?,
+          ),
+        );
+      case ticketDetail:
+        final args = settings.arguments as Map<String, dynamic>;
+        return MaterialPageRoute(
+          builder: (_) => TicketDetailScreen(
+            ticketId: args['ticketId'] as int,
+            serviceName: args['serviceName'] as String?,
+            initialTicket: args['ticket'] as Ticket?,
           ),
         );
       case history:
