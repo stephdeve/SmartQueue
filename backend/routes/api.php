@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Admin\EstablishmentController as AdminEstablishment
 use App\Http\Controllers\Api\Admin\ServiceController as AdminServiceController;
 use App\Http\Controllers\Api\Admin\AgentController as AdminAgentController;
 use App\Http\Controllers\Api\Admin\StatsController as AdminStatsController;
+use App\Http\Controllers\Api\NotificationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -54,6 +55,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('tickets/history', [TicketController::class, 'history']);
     Route::get('tickets/{ticket}', [TicketController::class, 'show']);
     Route::patch('tickets/{ticket}', [TicketController::class, 'update']); // action=cancel
+
+    // Notifications utilisateur
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'read']); // ou PUT si vous préférez
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+    
 
     // Espace agent / admin (gestion des files en temps réel)
     Route::middleware('role:agent,admin')->group(function () {

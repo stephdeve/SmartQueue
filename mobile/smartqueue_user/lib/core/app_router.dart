@@ -97,6 +97,7 @@ import 'package:smartqueue_user/features/tickets/ticket_detail_screen.dart';
 import 'package:smartqueue_user/data/models/ticket.dart';
 
 class AppRouter {
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';

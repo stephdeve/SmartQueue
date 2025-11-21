@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smartqueue_user/core/app_theme.dart';
+import 'package:smartqueue_user/core/app_router.dart';
 import 'package:smartqueue_user/features/notifications/notifications_provider.dart';
+import 'package:smartqueue_user/data/api_client.dart';
+import 'package:smartqueue_user/data/repositories/notifications_repository.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -66,8 +69,19 @@ class NotificationsScreen extends ConsumerWidget {
                   ),
                   direction: DismissDirection.endToStart,
                   confirmDismiss: (direction) async {
-                    // TODO: Implement delete notification
-                    return false;
+                    try {
+                      final api = await ApiClient.create();
+                      final repo = NotificationsRepository(api);
+                      await repo.delete(notification.id);
+                      // Rafraîchir la liste après suppression
+                      ref.refresh(notificationsProvider);
+                      return true;
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Suppression impossible: ${e.toString().replaceFirst('Exception: ', '')}')),
+                      );
+                      return false;
+                    }
                   },
                   child: Card(
                     margin: const EdgeInsets.symmetric(
@@ -111,8 +125,37 @@ class NotificationsScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      onTap: () {
-                        // TODO: Handle notification tap
+                      onTap: () async {
+                        try {
+                          final api = await ApiClient.create();
+                          final repo = NotificationsRepository(api);
+                          await repo.markAsRead(notification.id);
+                        } catch (_) {}
+
+                        // Routage selon le type (rediriger vers Détail pour contourner l'API realtime instable)
+                        final type = notification.type ?? '';
+                        final ticketId = notification.ticketId;
+                        final serviceName = notification.serviceName ?? 'Service';
+
+                        if ((type == 'ticket_called' || type == 'ticket_updated') && ticketId != null) {
+                          if (!context.mounted) return;
+                          Navigator.pushNamed(
+                            context,
+                            AppRouter.ticketDetail,
+                            arguments: {
+                              'ticketId': ticketId,
+                              'serviceName': serviceName,
+                            },
+                          );
+                        } else {
+                          // Par défaut, rien de spécial
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Notification ouverte')),
+                          );
+                        }
+
+                        // rafraîchir l'état après ouverture
+                        ref.refresh(notificationsProvider);
                       },
                     ),
                   ),
