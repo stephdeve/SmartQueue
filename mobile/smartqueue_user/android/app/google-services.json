@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "608849931488",
+    "project_id": "test-eb10a",
+    "storage_bucket": "test-eb10a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:608849931488:android:2270129008e3521b93b485",
+        "android_client_info": {
+          "package_name": "com.example.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzHaBdfIXEtakOSo9d2_WlpNwRGgT4APk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:608849931488:android:bb64f784c673265493b485",
+        "android_client_info": {
+          "package_name": "com.example.quizapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzHaBdfIXEtakOSo9d2_WlpNwRGgT4APk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:608849931488:android:ad001b68620af1b893b485",
+        "android_client_info": {
+          "package_name": "com.smartqueue.user.smartqueue_user"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzHaBdfIXEtakOSo9d2_WlpNwRGgT4APk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

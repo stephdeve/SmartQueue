@@ -7,11 +7,22 @@ import 'package:smartqueue_user/services/push_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  await PushService.init();
+  // Start UI first to avoid white screen if Firebase is not configured
   runApp(const ProviderScope(child: MyApp()));
-  // Set up navigation when tapping notifications
-  await PushService.setupInteractedMessages();
+  // Initialize push in background, swallow errors
+  _initPushSafely();
+}
+
+Future<void> _initPushSafely() async {
+  try {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  } catch (_) {}
+  try {
+    await PushService.init();
+  } catch (_) {}
+  try {
+    await PushService.setupInteractedMessages();
+  } catch (_) {}
 }
 
 class MyApp extends StatelessWidget {
