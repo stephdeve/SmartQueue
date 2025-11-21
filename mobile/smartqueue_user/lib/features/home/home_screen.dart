@@ -1,61 +1,97 @@
+// features/home/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/establishment.dart';
-import '../../core/app_router.dart';
-import 'home_provider.dart';
+import 'package:smartqueue_user/core/app_theme.dart';
+import 'package:smartqueue_user/features/establishments/establishments_provider.dart';
+import 'package:smartqueue_user/features/establishments/widgets/establishment_card.dart';
 
-/// Accueil: établissements proches + badge d'affluence
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncEsts = ref.watch(nearbyEstablishmentsProvider);
+    final asyncEstablishments = ref.watch(nearbyEstablishmentsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Établissements proches')),
-      body: asyncEsts.when(
+      appBar: AppBar(
+        title: const Text('Établissements à proximité'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.refresh(nearbyEstablishmentsProvider),
+          ),
+        ],
+      ),
+      body: asyncEstablishments.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erreur: $e')),
-        data: (data) {
-          final ests = data.cast<Establishment>();
-          if (ests.isEmpty) return const Center(child: Text('Aucun établissement proche'));
-          return ListView.separated(
-            itemCount: ests.length,
-            separatorBuilder: (_, __) => const Divider(height: 0),
-            itemBuilder: (_, i) {
-              final e = ests[i];
-              final color = e.affluence == 'low'
-                  ? Colors.green
-                  : e.affluence == 'high'
-                      ? Colors.red
-                      : Colors.orange;
-              return ListTile(
-                leading: CircleAvatar(backgroundColor: color.withOpacity(.15), child: Icon(Icons.store, color: color)),
-                title: Text(e.name),
-                subtitle: Text(e.address ?? ''),
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(.1),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: color.withOpacity(.3)),
-                  ),
-                  child: Text('Affluence: ${e.affluence}', style: TextStyle(color: color)),
+        error: (error, _) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: AppTheme.errorColor, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                'Erreur de chargement',
+                style: AppTheme.heading2.copyWith(color: AppTheme.errorColor),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                  style: AppTheme.bodyMedium,
                 ),
-                onTap: () => Navigator.pushNamed(context, AppRouter.services, arguments: {
-                  'establishmentId': e.id,
-                  'establishmentName': e.name,
-                }),
-              );
-            },
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ref.refresh(nearbyEstablishmentsProvider),
+                child: const Text('Réessayer'),
+              ),
+            ],
+          ),
+        ),
+        data: (establishments) {
+          if (establishments.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.location_off, size: 64, color: AppTheme.textSecondary),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Aucun établissement à proximité',
+                    style: AppTheme.heading2,
+                  ),
+                  const SizedBox(height: 8),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Text(
+                      'Essayez d\'activer votre localisation ou d\'élargir la zone de recherche.',
+                      textAlign: TextAlign.center,
+                      style: AppTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () => ref.refresh(nearbyEstablishmentsProvider.future),
+            child: ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: establishments.length,
+              itemBuilder: (context, index) {
+                final establishment = establishments[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: EstablishmentCard(establishment: establishment),
+                );
+              },
+            ),
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.pushNamed(context, AppRouter.qr),
-        icon: const Icon(Icons.qr_code_scanner),
-        label: const Text('Scanner'),
       ),
     );
   }

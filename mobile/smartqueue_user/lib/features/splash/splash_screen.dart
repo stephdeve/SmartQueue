@@ -24,7 +24,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (token == null) {
       Navigator.pushReplacementNamed(context, AppRouter.login);
     } else {
-      Navigator.pushReplacementNamed(context, AppRouter.homeList);
+      Navigator.pushReplacementNamed(context, AppRouter.home);
     }
   }
 

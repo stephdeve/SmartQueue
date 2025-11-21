@@ -5,6 +5,8 @@ class Ticket {
   final int serviceId;
   final int? position;
   final int? etaMinutes;
+  final String? serviceName;
+  final DateTime? updatedAt;
 
   Ticket({
     required this.id,
@@ -13,14 +15,27 @@ class Ticket {
     required this.serviceId,
     this.position,
     this.etaMinutes,
+    this.serviceName,
+    this.updatedAt,
   });
 
   factory Ticket.fromJson(Map<String, dynamic> j) => Ticket(
-        id: j['id'] as int,
-        ticketNumber: j['ticket_number'] as String,
-        status: j['status'] as String,
-        serviceId: j['service_id'] as int,
-        position: j['position'] as int?,
-        etaMinutes: j['eta_minutes'] as int?,
+        id: _toInt(j['id']),
+        ticketNumber: _toString(j['ticket_number'] ?? j['ticketNumber'] ?? j['number'] ?? j['code'] ?? ''),
+        status: (j['status'] as String?) ?? 'waiting',
+        serviceId: _toInt(j['service_id'] ?? j['serviceId']),
+        position: _toIntOrNull(j['position']),
+        etaMinutes: _toIntOrNull(j['eta_minutes'] ?? j['etaMinutes']),
+        serviceName: (j['service_name'] as String?) ?? (j['serviceName'] as String?),
+        updatedAt: _parseDate(j['updated_at'] ?? j['updatedAt']),
       );
+
+  static int _toInt(Object? v) => int.tryParse(v?.toString() ?? '') ?? -1;
+  static int? _toIntOrNull(Object? v) => v == null ? null : int.tryParse(v.toString());
+  static String _toString(Object? v) => v?.toString() ?? '';
+  static DateTime? _parseDate(Object? v) {
+    if (v == null) return null;
+    if (v is String) return DateTime.tryParse(v);
+    return null;
+  }
 }

@@ -14,10 +14,12 @@ class ServiceModel {
   });
 
   factory ServiceModel.fromJson(Map<String, dynamic> j) => ServiceModel(
-        id: j['id'] as int,
-        name: j['name'] as String,
-        status: j['status'] as String,
-        avgServiceTimeMinutes: (j['avg_service_time_minutes'] as int?) ?? 10,
-        establishmentId: j['establishment_id'] as int,
+        id: _toInt(j['id']),
+        name: (j['name'] as String?) ?? (j['title'] as String?) ?? 'Service',
+        status: (j['status'] as String?) ?? 'open',
+        avgServiceTimeMinutes: _toInt(j['avg_service_time_minutes'] ?? j['avgTime'] ?? 10),
+        establishmentId: _toInt(j['establishment_id'] ?? j['establishmentId']),
       );
+
+  static int _toInt(Object? v) => int.tryParse(v?.toString() ?? '') ?? 0;
 }

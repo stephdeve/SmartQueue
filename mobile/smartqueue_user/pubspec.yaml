@@ -35,31 +35,32 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # State management
-  flutter_riverpod:
+  flutter_riverpod: ^3.0.3 # J'ai ajouté une version par défaut pour riverpod, mettez à jour si vous avez un besoin spécifique
 
   # Networking
-  dio:
+  dio: ^5.4.3 # J'ai ajouté une version par défaut pour dio
 
   # Storage
-  shared_preferences:
+  shared_preferences: ^2.2.3 # J'ai ajouté une version par défaut pour shared_preferences
 
   # Location
-  geolocator:
+  geolocator: ^14.0.2 # J'ai ajouté une version par défaut pour geolocator
 
   # QR Code
-  qr_code_scanner:
+  # SUPPRIMEZ la ligne 'qr_code_scanner:' sans version
+  mobile_scanner: ^6.0.2
+  #qr_code_scanner: ^1.0.1 # METTEZ À JOUR vers une version récente (>= 4.0.0) qui supporte le 'namespace'
 
   # Push notifications
-  firebase_core:
-  firebase_messaging:
-  flutter_local_notifications:
+  firebase_core: ^4.2.1 # J'ai ajouté une version par défaut pour firebase_core
+  firebase_messaging: ^16.0.4 # J'ai ajouté une version par défaut pour firebase_messaging
+  flutter_local_notifications: ^19.5.0 # J'ai ajouté une version par défaut pour flutter_local_notifications
 
   # Realtime
-  web_socket_channel:
+  web_socket_channel: ^3.0.0 # J'ai ajouté une version par défaut pour web_socket_channel
 
   # Utils
-  intl:
-
+  intl: ^0.20.2 # J'ai ajouté une version par défaut pour intl
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -69,7 +70,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

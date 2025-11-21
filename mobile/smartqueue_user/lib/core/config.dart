@@ -3,13 +3,13 @@ class AppConfig {
   // Base API Laravel. Adapter selon votre backend (10.0.2.2 = localhost Android emulator)
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000/api',
+    defaultValue: 'http://192.168.100.56:8000/api',
   );
 
   // URL WebSocket (ex: ws://10.0.2.2:6001). Adapter à votre stack temps réel
   static const String wsUrl = String.fromEnvironment(
     'WS_URL',
-    defaultValue: 'ws://10.0.2.2:6001',
+    defaultValue: 'ws://192.168.100.56:6001',
   );
 
   // Auth
@@ -31,4 +31,7 @@ class AppConfig {
   static const activeTickets = '/tickets/active';
   static const historyTickets = '/tickets/history';
   static String ticketById(int id) => '/tickets/$id';
+
+  // Notifications (auth)
+  static const notifications = '/notifications';
 }

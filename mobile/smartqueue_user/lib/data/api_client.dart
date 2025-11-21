@@ -13,6 +13,9 @@ class ApiClient {
         baseUrl: AppConfig.apiBaseUrl,
         connectTimeout: const Duration(seconds: 8),
         receiveTimeout: const Duration(seconds: 8),
+        headers: {
+          'Accept': 'application/json',
+        },
       ),
     );
 
@@ -27,6 +30,14 @@ class ApiClient {
         return handler.next(options);
       },
     ));
+
+    assert(() {
+      dio.interceptors.add(LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+      ));
+      return true;
+    }());
 
     return ApiClient._(dio);
   }
