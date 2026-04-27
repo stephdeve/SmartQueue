@@ -19,6 +19,7 @@ import {
 } from "../utils/distance";
 import "../../global.css";
 import axiosClient from "../api/axiosClient";
+import { ticketsApi } from "../api/ticketsApi";
 
 interface ActiveTicketCardProps {
   onPress?: () => void;
@@ -148,12 +149,13 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
       async () => {
         try {
           if (activeTicket?.id) {
-            await axiosClient.delete(`/tickets/${activeTicket.id}`);
+            await ticketsApi.cancelTicket(activeTicket.id);
           }
           clearActiveTicket();
           onCancel?.();
         } catch (error: any) {
-          showError("Erreur", "Impossible d'annuler le ticket");
+          const errorMsg = error?.response?.data?.message || error?.message || "Impossible d'annuler le ticket";
+          showError("Erreur", errorMsg);
         }
       },
       "Non"

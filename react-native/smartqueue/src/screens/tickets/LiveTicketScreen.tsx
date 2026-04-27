@@ -204,11 +204,12 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
         try {
           await cancelTicket(effectiveTicketId!);
           router.back();
-        } catch {
-          showError('Erreur', 'Impossible d\'annuler le ticket.');
+        } catch (error: any) {
+          const errorMsg = error?.response?.data?.message || error?.message || 'Impossible d\'annuler le ticket.';
+          showError('Erreur', errorMsg);
         }
       },
-      'Rester'
+      'Annuler'
     );
   };
 

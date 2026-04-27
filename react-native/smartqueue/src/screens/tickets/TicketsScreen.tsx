@@ -86,9 +86,10 @@ export const TicketsScreen: React.FC = () => {
       async () => {
         try {
           await cancelTicket(activeTicket.id);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error canceling ticket:', error);
-          showError('Erreur', 'Impossible d\'annuler le ticket. Veuillez réessayer.');
+          const errorMsg = error?.response?.data?.message || error?.message || 'Impossible d\'annuler le ticket. Veuillez réessayer.';
+          showError('Erreur', errorMsg);
         }
       },
       'Non'

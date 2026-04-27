@@ -14,10 +14,10 @@ class TicketPolicy
         return $ticket->user_id === $user->id || in_array($user->role, ['agent','admin'], true);
     }
 
-    // Mise à jour par l'utilisateur: uniquement pour annuler un ticket en attente
+    // Mise à jour par l'utilisateur: uniquement pour annuler un ticket en attente ou appelé
     public function update(User $user, Ticket $ticket): bool
     {
-        return $ticket->user_id === $user->id && $ticket->status === 'waiting';
+        return $ticket->user_id === $user->id && in_array($ticket->status, ['waiting', 'called']);
     }
 
     // Actions agent: appeler, marquer absent, rappeler
