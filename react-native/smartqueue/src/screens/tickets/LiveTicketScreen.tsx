@@ -459,7 +459,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
         >
           <TouchableOpacity 
             style={[styles.primaryButton, { shadowColor: colors.primary }]}
-            onPress={() => router.push('/navigation')}
+            onPress={() => router.push({ pathname: '/navigation' })}
             activeOpacity={0.8}
           >
             <LinearGradient
@@ -474,7 +474,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
           <View style={styles.secondaryButtons}>
             <TouchableOpacity 
               style={[styles.secondaryButton, { backgroundColor: colors.surface , borderColor: colors.border, borderWidth: 1}]}
-              onPress={() => router.push('/dashboard')}
+              onPress={() => router.push({ pathname: '/dashboard' })}
               activeOpacity={0.8}
             >
               <View style={[styles.secondaryButtonIcon, { backgroundColor: colors.success + '20' }]}>
