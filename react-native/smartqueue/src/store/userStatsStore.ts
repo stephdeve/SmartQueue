@@ -283,6 +283,7 @@ export const useUserStatsStore = create<UserStatsState>()(
       nextLevelXp: 100,
 
       recordTicketCreated: (ticket) => {
+        console.log('[UserStats] Recording ticket created:', ticket);
         const state = get();
         const now = new Date();
         const hour = now.getHours();
@@ -347,6 +348,8 @@ export const useUserStatsStore = create<UserStatsState>()(
           currentLevel: level,
           nextLevelXp,
         });
+
+        console.log('[UserStats] Updated after creation - Level:', level, 'XP:', xp, 'Tickets:', newStats.totalTicketsCreated);
 
         get().checkAndUnlockBadges();
       },
