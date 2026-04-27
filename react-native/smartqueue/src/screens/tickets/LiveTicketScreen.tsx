@@ -88,8 +88,8 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
   // User stats for gamification
   const { recordTicketCompleted, recordPresenceConfirmed, recordArrival } = useUserStatsStore();
 
-  // Countdown state
-  const [countdownSeconds, setCountdownSeconds] = useState(180);
+  // Countdown state - 10 minutes (600 seconds)
+  const [countdownSeconds, setCountdownSeconds] = useState(600);
   
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -149,7 +149,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
     try {
       const response = await axiosClient.post(`/tickets/${effectiveTicketId}/request-recall`);
       setRecalled();
-      setCountdownSeconds(response.data.countdown_seconds || 180);
+      setCountdownSeconds(response.data.countdown_seconds || 600);
     } catch (error: any) {
       showError('Erreur', error.response?.data?.error || 'Impossible d\'envoyer le rappel');
     }
@@ -363,7 +363,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
                       ? '🚨 Partez maintenant !'
                       : departureInfo.shouldLeaveSoon
                       ? `⏰ Partez dans ${Math.ceil(departureInfo.leaveIn)} min`
-                      : '✅ Timing optimal'}
+                      : ' Timing optimal'}
                   </Text>
                 </View>
                 <Text style={[styles.departureAlertText, { color: colors.textSecondary }]}>
@@ -508,9 +508,9 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
         hasRecalled={hasRecalled}
         onEnRoute={handleEnRoute}
         onRecall={handleRecall}
-        onDismiss={handleDismiss} onDefer={function (): void {
-          throw new Error("Function not implemented.");
-        } }      />
+        onDefer={handleDefer}
+        onDismiss={handleDismiss}
+      />
     </View>
   );
 };
