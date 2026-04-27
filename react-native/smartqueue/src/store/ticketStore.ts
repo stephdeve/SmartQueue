@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ticketsApi, Ticket, CreateTicketData } from '../api/ticketsApi';
 import { shallow } from 'zustand/shallow';
+import { useUserStatsStore } from './userStatsStore';
 
 // Types pour le store de tickets
 export interface TicketState {
@@ -164,10 +165,10 @@ export const useTicketStore = create<TicketState>()(
 
         try {
           const ticket = await ticketsApi.createTicket(data);
-          
+
           // Handle API response that may be wrapped in {data: {...}}
           const ticketData = (ticket as any)?.data || ticket;
-          
+
           set({
             activeTicket: ticketData,
             position: ticketData.position || 0,
@@ -177,6 +178,15 @@ export const useTicketStore = create<TicketState>()(
             isLoading: false,
             error: null,
             lastUpdate: new Date(),
+          });
+
+          // Record stats for gamification
+          const statsStore = useUserStatsStore.getState();
+          statsStore.recordTicketCreated({
+            service_id: ticketData.service_id,
+            establishment_id: ticketData.establishment_id,
+            lat: ticketData.establishment?.lat ? Number(ticketData.establishment.lat) : undefined,
+            lng: ticketData.establishment?.lng ? Number(ticketData.establishment.lng) : undefined,
           });
 
           return ticketData;
@@ -196,7 +206,7 @@ export const useTicketStore = create<TicketState>()(
 
         try {
           await ticketsApi.cancelTicket(ticketId);
-          
+
           // Effacer le ticket actif si c'est celui qu'on annule
           const { activeTicket } = get();
           if (activeTicket?.id === ticketId) {
@@ -209,6 +219,10 @@ export const useTicketStore = create<TicketState>()(
               lastUpdate: new Date(),
             });
           }
+
+          // Record cancellation in stats
+          const statsStore = useUserStatsStore.getState();
+          statsStore.recordTicketCancelled();
 
           set({ isLoading: false });
         } catch (error: any) {

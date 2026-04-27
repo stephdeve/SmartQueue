@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { useThemeColors } from "../../hooks/useThemeColors";
 import { useUserStatsStore, Badge } from "../../store/userStatsStore";
 import { LinearGradient } from "expo-linear-gradient";
@@ -186,9 +187,12 @@ export const DashboardScreen: React.FC = () => {
     loadStatsFromBackend,
   } = useUserStatsStore();
 
-  useEffect(() => {
-    loadStatsFromBackend();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[Dashboard] Screen focused - refreshing stats');
+      loadStatsFromBackend();
+    }, [loadStatsFromBackend])
+  );
 
   const rankTitle = getRankTitle();
   const xpProgress = Math.min(100, (xpPoints / nextLevelXp) * 100);

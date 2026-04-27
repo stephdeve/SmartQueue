@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 import { useTicket } from '../store/ticketStore';
+import { useUserStatsStore } from '../store/userStatsStore';
 import axiosClient from '../api/axiosClient';
 
 // Ensure Pusher is globally available for Laravel Echo
@@ -193,6 +194,12 @@ export const useTicketSocket = (ticketId: string | number | null) => {
               case 'served':
                 triggerNotification('Service terminé', data.message || 'Votre service est terminé');
                 triggerHapticFeedback('success');
+                // Record completed ticket for stats
+                const statsStore = useUserStatsStore.getState();
+                statsStore.recordTicketCompleted({
+                  id: Number(ticketId),
+                  eta_minutes: 0,
+                });
                 break;
             }
           }

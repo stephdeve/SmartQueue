@@ -1,136 +1,178 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/VQS-Virtual%20Queue%20System-0D2B55?style=for-the-badge&logoColor=white" alt="VQS"/>
+<img src="https://img.shields.io/badge/SmartQueue-Système%20de%20File%20d'Attente%20Intelligent-0D2B55?style=for-the-badge&logoColor=white" alt="SmartQueue"/>
 
-# VQS — Virtual Queue System
-### Système Intelligent de File d'Attente Virtuelle
+# SmartQueue
+### Système Intelligent de Gestion de Files d'Attente en Temps Réel
 
-**Temps Réel · SaaS · Multi-rôles (agent/admin/super_admin)**
+**Temps Réel · SaaS · Multi-plateforme · Multi-rôles**
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=flat-square&logo=flutter)](https://flutter.dev)
-[![React](https://img.shields.io/badge/React.js-18.x-61DAFB?style=flat-square&logo=react)](https://reactjs.org)
-[![Laravel](https://img.shields.io/badge/Laravel-11.x-FF2D20?style=flat-square&logo=laravel)](https://laravel.com)
-[![MySQL](https://img.shields.io/badge/MySQL-8.x-4479A1?style=flat-square&logo=mysql)](https://mysql.com)
-[![Redis](https://img.shields.io/badge/Redis-latest-DC382D?style=flat-square&logo=redis)](https://redis.io)
+[![React Native](https://img.shields.io/badge/React%20Native-0.81-61DAFB?style=flat-square&logo=react)](https://reactnative.dev)
+[![Expo](https://img.shields.io/badge/Expo-54.0-000020?style=flat-square&logo=expo)](https://expo.dev)
+[![React](https://img.shields.io/badge/React-18.2-61DAFB?style=flat-square&logo=react)](https://reactjs.org)
+[![Laravel](https://img.shields.io/badge/Laravel-12.x-FF2D20?style=flat-square&logo=laravel)](https://laravel.com)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=flat-square&logo=mysql)](https://mysql.com)
+[![Redis](https://img.shields.io/badge/Redis-7.x-DC382D?style=flat-square&logo=redis)](https://redis.io)
+[![Reverb](https://img.shields.io/badge/Laravel%20Reverb-WebSocket-FF2D20?style=flat-square&logo=laravel)](https://reverb.laravel.com)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker)](https://docker.com)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0--MVP-blue?style=flat-square)]()
-[![Status](https://img.shields.io/badge/Status-En%20développement-orange?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=flat-square)]()
+[![Status](https://img.shields.io/badge/Status-Production%20Ready-green?style=flat-square)]()
 
 ---
 
-> **VQS** permet à n'importe quel usager de prendre un ticket à distance, de suivre sa position en temps réel,  
-> et d'être alerté automatiquement quand son tour approche — sans rester une seconde dans la salle d'attente.
+> **SmartQueue** digitalise complètement l'expérience d'attente. Les usagers prennent leur ticket à distance,  
+> suivent leur position en temps réel, et sont notifiés automatiquement — fini les heures perdues dans les salles d'attente.
 
 ---
 
-## 🔄 État actuel du projet
+## 📋 Table des matières
 
-- **Monorepo** : un backend Laravel (API) + un front React (dashboard).
-- **Backend Laravel** : containerisé avec Docker, disponible sur `http://localhost:8000`.
-- **Base de données** : MySQL 8 + Redis via Docker Compose.
-- **Mobile Flutter** : prévu (à intégrer selon les besoins), non démarré dans ce dépôt.
-
----</div>
-
----
-
-## Table des matières
-
-- [Pourquoi VQS ?](#-pourquoi-vqs-)
-- [Fonctionnalités](#-fonctionnalités)
+- [Vue d'ensemble](#-vue-densemble)
 - [Architecture](#-architecture)
 - [Stack technique](#-stack-technique)
+- [Fonctionnalités](#-fonctionnalités-détaillées)
 - [Structure du projet](#-structure-du-projet)
 - [Démarrage rapide](#-démarrage-rapide)
 - [Configuration](#-configuration)
 - [API Reference](#-api-reference)
+- [WebSocket / Temps Réel](#-websocket--temps-réel)
 - [Modèle de données](#-modèle-de-données)
-- [Tests](#-tests)
+- [Sécurité](#-sécurité)
 - [Déploiement](#-déploiement)
+- [Tests](#-tests)
 - [Roadmap](#-roadmap)
-- [Contribuer](#-contribuer)
+- [Contribution](#-contribution)
 - [Licence](#-licence)
 
 ---
 
-## 💡 Pourquoi VQS ?
+## 🎯 Vue d'ensemble
 
-Dans les hôpitaux, mairies, banques et commerces, les files d'attente physiques volent chaque jour des millions d'heures aux gens. Certains se réveillent à 4h du matin juste pour décrocher le premier ticket d'une consultation médicale. Ce n'est pas une fatalité — c'est un problème d'ingénierie.
+SmartQueue est une plateforme SaaS complète de gestion de files d'attente virtuelles, conçue pour les établissements recevant du public (hôpitaux, mairies, banques, commerces, etc.).
 
-**VQS** est une plateforme SaaS complète qui digitalise entièrement ce processus. Elle s'adresse à trois types d'acteurs :
+### Trois acteurs principaux
 
-- **L'usager** qui veut prendre son ticket depuis son canapé et revenir exactement au bon moment.
-- **L'agent** qui veut gérer sa file sereinement depuis un tableau de bord clair.
-- **L'établissement** qui veut analyser ses flux, optimiser ses ressources et améliorer l'expérience de ses usagers.
-
-Et pour ceux qui n'ont pas de smartphone ? VQS propose également une borne physique, une notification SMS simple, et un écran d'affichage en salle — **personne n'est exclu**.
-
----
-
-## ✨ Fonctionnalités
-
-### Côté usager (App Flutter + Web React.js)
-
-- **Prise de ticket à distance** — réservation en ligne ou scan de QR code à l'entrée
-- **Suivi en temps réel** — position dans la file mise à jour à la seconde près via WebSocket
-- **Notifications intelligentes** — push (FCM) ou SMS (Twilio) déclenchées selon votre ETA géolocalisé
-- **Statut d'affluence** — indicateur vert / orange / rouge par établissement
-- **Suggestions d'horaires creux** — basées sur l'historique de fréquentation
-- **Carte géolocalisée** — établissements proches triés par distance et affluence
-- **Accessibilité multi-canal** — app mobile, web, borne physique, SMS simple
-
-### Côté agent (Dashboard Web React.js)
-
-- **Appel du ticket suivant** en un clic
-- **Gestion des absences** — rappel, suspension ou annulation de ticket
-- **File prioritaire dédiée** — VIP, urgences, personnes handicapées
-- **Ouverture / fermeture de guichet** à la volée
-- **Vue temps réel de la file** complète avec statuts
-
-### Côté administrateur établissement
-
-- **Création et paramétrage de files** — capacité, durée moyenne, priorités
-- **Tableau de bord analytique** — temps moyen, taux d'abandon, performance par guichet
-- **Export CSV et PDF** des rapports d'activité
-- **Gestion multi-services** — une plateforme pour tous les guichets
-
-### Côté super-administrateur (SaaS)
-
-- Gestion des établissements clients et de leurs abonnements
-- Monitoring global de la plateforme
-- Facturation et gestion des plans (Basic / Pro / Enterprise)
+| Rôle | Description | Interfaces |
+|------|-------------|------------|
+| **Usager** | Prend un ticket à distance, suit sa position, reçoit des notifications | App mobile (React Native), Web |
+| **Agent** | Gère la file en temps réel, appelle les tickets, gère les absences | Dashboard Web React |
+| **Administrateur** | Configure les services, consulte les statistiques, gère les agents | Dashboard Web React |
+| **Super Admin** | Gère les établissements clients, abonnements, monitoring SaaS | Dashboard Web React |
 
 ---
 
 ## 🏗 Architecture
 
-VQS est actuellement implémenté comme un **monorepo** :
+SmartQueue est architecturé comme un **monorepo** moderne avec trois composantes principales :
 
-- Un **backend Laravel** (API REST, authentification, rôles, multi-tenant, exports).
-- Un **front React** (dashboards agent/admin/super_admin) consommant l'API.
-- Une **BDD MySQL** et **Redis** via Docker Compose.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        SMARTQUEUE PLATFORM                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐   │
+│  │   MOBILE    │    │    WEB      │    │      API REST       │   │
+│  │  React Native│    │   React 18  │◄──►│    Laravel 12       │   │
+│  │   (Expo)    │    │   + Vite    │    │   + Sanctum Auth    │   │
+│  │             │    │             │    │                     │   │
+│  │ • Expo SDK  │    │ • Redux     │    │ • MySQL 8           │   │
+│  │ • Push Notif│    │ • Tailwind  │    │ • Redis             │   │
+│  │ • QR Scanner│    │ • Recharts  │    │ • Laravel Reverb    │   │
+│  │ • Maps      │    │ • shadcn/ui │    │ • Queues            │   │
+│  └──────┬──────┘    └──────┬──────┘    └──────────┬──────────┘   │
+│         │                  │                      │               │
+│         └──────────────────┴──────────────────────┘               │
+│                            │                                      │
+│                    ┌───────▼────────┐                           │
+│                    │  WebSocket       │                           │
+│                    │  Laravel Reverb  │                           │
+│                    │  Port 6001       │                           │
+│                    └─────────────────┘                           │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-Une évolution future vers une architecture microservices est possible, mais ce dépôt correspond à une version monolithique (MVP) destinée à itérer rapidement.
+### Communication temps réel (WebSocket)
 
-### Flux temps réel (WebSocket)
+Laravel Reverb fournit les canaux de diffusion temps réel :
+- **Canal privé ticket.{id}** : mises à jour individuelles d'un ticket
+- **Canal présence service.{id}** : état de la file pour agents et usagers
 
-Le temps réel peut être activé via le système de broadcasting (Laravel Echo). Chaque fois qu'un agent appelle un ticket, les clients connectés à un service peuvent recevoir une mise à jour sans rechargement.
+Les événements diffusés incluent : `TicketCalled`, `TicketUpdated`, `ServiceTicketEnqueued`, `ServiceStatsUpdated`, `UserEnRoute`.
 
 ---
 
 ## 🛠 Stack technique
 
-| Couche | Technologie | Rôle |
-|--------|------------|------|
-| Mobile | **Flutter 3.x** | Application mobile (prévue) |
-| Web front-end | **React.js 18 + Vite** | Dashboards agent/admin/super_admin |
-| API | **Laravel 11 + Sanctum** | Auth, rôles, API REST |
-| Temps réel | **Laravel Echo / Broadcasting** | Mises à jour temps réel (selon config) |
-| Base de données | **MySQL 8** | Stockage principal relationnel |
-| Cache / PubSub | **Redis** | Cache, queues, broadcasting (selon config) |
-| Conteneurisation | **Docker + Docker Compose** | Environnement local reproductible |
+| Couche | Technologie | Version | Rôle |
+|--------|-------------|---------|------|
+| **Mobile** | React Native + Expo | 0.81 / SDK 54 | Application cross-platform (iOS/Android) |
+| **Web Front** | React + Vite | 18.2 / 5.x | Dashboards agent/admin/super_admin |
+| **UI Library** | shadcn/ui + Radix | latest | Composants UI accessibles |
+| **State** | Redux Toolkit + Zustand | 2.x / 5.x | Gestion d'état global |
+| **API** | Laravel + Sanctum | 12.x | Authentification, API REST sécurisée |
+| **WebSocket** | Laravel Reverb | 1.6 | Serveur WebSocket temps réel |
+| **Base de données** | MySQL | 8.0 | Stockage relationnel principal |
+| **Cache/Queue** | Redis | 7.x | Cache, sessions, queues de jobs |
+| **Notifications** | Expo Notifications + Twilio | - | Push mobile et SMS |
+| **QR Codes** | simple-qrcode | 4.2 | Génération de QR codes dynamiques |
+| **PDF** | laravel-dompdf | 3.1 | Génération de rapports PDF |
+| **Docker** | Docker Compose | 3.8 | Orchestration conteneurs |
+
+---
+
+## ✨ Fonctionnalités détaillées
+
+### 👤 Espace Usager (Mobile + Web)
+
+| Fonctionnalité | Description |
+|----------------|-------------|
+| **Prise de ticket** | Réservation depuis l'app ou scan QR code en borne |
+| **Géolocalisation** | Carte des établissements proches, distance et temps estimé |
+| **Suivi temps réel** | Position dans la file, nombre d'attente, temps estimé |
+| **Notifications** | Push (FCM) + SMS quand le tour approche |
+| **Différé de position** | Échanger sa place avec le suivant (24h de grâce) |
+| **Historique** | Consultation des tickets passés |
+| **Préférences alertes** | Configuration des seuils de notification |
+| **Statut d'affluence** | Indicateur visuel vert/orange/rouge |
+| **Recommandations** | Suggestions d'horaires moins chargés |
+| **En route** | Signalement "en route" avec calcul ETA |
+
+### 🎧 Espace Agent (Dashboard Web)
+
+| Fonctionnalité | Description |
+|----------------|-------------|
+| **Appel suivant** | Bouton pour appeler le prochain ticket (priorité > ancienneté) |
+| **Gestion file** | Vue complète : waiting, called, absent, deferred |
+| **Marquer absent** | Défère automatiquement pendant 24h si possible |
+| **Rappel ticket** | Rappeler un ticket absent ou différé |
+| **Fermeture file** | Pause ou fermeture d'urgence d'un service |
+| **Guichets** | Ouverture/fermeture de guichet individuel |
+| **Dashboard temps réel** | Stats du jour, performance personnelle |
+
+### 🏢 Espace Admin Établissement (Dashboard Web)
+
+| Fonctionnalité | Description |
+|----------------|-------------|
+| **Gestion services** | CRUD services, capacité, horaires, durée moyenne |
+| **Gestion agents** | Affectation des agents aux services |
+| **Gestion guichets** | Configuration des comptoirs physiques |
+| **QR Codes** | Génération, affichage, téléchargement QR par service |
+| **Statistiques** | Temps moyen, taux d'absence, performance |
+| **Export rapports** | CSV et PDF des activités |
+| **Broadcast push** | Envoi de notifications à tous les usagers |
+| **Logs notifications** | Traçabilité des notifications envoyées |
+
+### 🌐 Espace Super Admin SaaS (Dashboard Web)
+
+| Fonctionnalité | Description |
+|----------------|-------------|
+| **Établissements** | Gestion multi-établissements clients |
+| **Abonnements** | Plans Basic/Pro/Enterprise, facturation |
+| **Monitoring** | Vue d'ensemble santé de la plateforme |
+| **Analytics globaux** | Stats agrégées cross-établissements |
 
 ---
 
@@ -139,23 +181,65 @@ Le temps réel peut être activé via le système de broadcasting (Laravel Echo)
 ```
 SmartQueue/
 │
-├── backend/                    # API Laravel
+├── backend/                          # API Laravel 12
 │   ├── app/
+│   │   ├── Events/                   # Événements WebSocket
+│   │   ├── Http/Controllers/Api/     # Contrôleurs API
+│   │   │   ├── Admin/               # Endpoints admin
+│   │   │   ├── Agent/               # Endpoints agent
+│   │   │   └── Saas/                # Endpoints super admin
+│   │   ├── Jobs/                    # Jobs async (notifications)
+│   │   ├── Models/                  # Modèles Eloquent
+│   │   ├── Notifications/           # Notifications personnalisées
+│   │   ├── Policies/                # Autorisations
+│   │   ├── Services/                # Logique métier (TicketService)
+│   │   └── OpenApi/                 # Documentation OpenAPI/Swagger
+│   ├── config/
 │   ├── database/
+│   │   ├── migrations/               # 30+ migrations
+│   │   └── seeders/                  # Seeders avec données de test
 │   ├── routes/
+│   │   └── api.php                   # Routes API REST complètes
 │   └── Dockerfile
 │
-├── frontend/                   # Dashboard React (Vite)
+├── frontend/                         # Dashboard React 18 + Vite
 │   ├── src/
-│   └── package.json
+│   │   ├── api/                      # Clients API
+│   │   ├── components/               # Composants réutilisables
+│   │   │   ├── layout/               # Layouts (AppLayout, AuthLayout)
+│   │   │   └── ui/                   # Composants shadcn/ui
+│   │   ├── hooks/                    # Custom hooks
+│   │   ├── pages/                    # Pages par rôle
+│   │   │   ├── admin/                # Agents, Services, Stats
+│   │   │   ├── agent/                # AgentDashboard
+│   │   │   ├── dashboard/            # Dashboards utilisateur
+│   │   │   ├── saas/                 # Super admin
+│   │   │   └── auth/                 # Login, Register
+│   │   ├── router/                   # Configuration React Router
+│   │   └── store/                    # Redux store
+│   ├── package.json
+│   └── Dockerfile
 │
-├── mobile/                     # Applications Flutter
-│   └── smartqueue_user/         # App mobile (usager)
-│       ├── lib/
-│       └── pubspec.yaml
+├── react-native/                     # App Mobile React Native + Expo
+│   └── smartqueue/
+│       ├── app/                      # Routes Expo Router
+│       │   ├── (tabs)/               # Navigation principale
+│       │   └── agent/                # Interface agent mobile
+│       ├── src/
+│       │   ├── api/                  # API client
+│       │   ├── components/           # Composants RN
+│       │   ├── hooks/                # Hooks personnalisés
+│       │   ├── screens/              # Écrans par feature
+│       │   │   ├── auth/             # Login, Register
+│       │   │   ├── explore/          # Carte, établissements
+│       │   │   ├── tickets/          # Gestion tickets
+│       │   │   └── profile/          # Profil, préférences
+│       │   ├── navigation/           # Configuration navigation
+│       │   └── store/                # Zustand store
+│       └── package.json
 │
-├── docker-compose.yml          # backend + mysql + redis
-└── README.md                   # Ce fichier
+├── docker-compose.yml                # Backend + Reverb + MySQL + Redis
+└── README.md                         # Ce fichier
 ```
 
 ---
@@ -164,316 +248,586 @@ SmartQueue/
 
 ### Prérequis
 
-Avant de commencer, assurez-vous d'avoir installé sur votre machine les outils suivants. Docker et Docker Compose sont les seuls vraiment indispensables pour lancer l'ensemble du projet en local.
-
 - [Docker](https://docs.docker.com/get-docker/) ≥ 24.x
 - [Docker Compose](https://docs.docker.com/compose/) ≥ 2.x
 - [Git](https://git-scm.com/)
-- (Optionnel) [Node.js 20](https://nodejs.org/) pour lancer le front React sans Docker
+- [Node.js](https://nodejs.org/) ≥ 20.x (pour le développement frontend)
+- [Expo CLI](https://docs.expo.dev/get-started/installation/) (pour le mobile)
 
-### Installation en 4 étapes
+### Installation complète
 
-**Étape 1 — Cloner le repository**
+**1. Cloner le repository**
 
 ```bash
-git clone https://github.com/votre-org/vqs.git
-cd vqs
+git clone https://github.com/votre-org/smartqueue.git
+cd SmartQueue
 ```
 
-**Étape 2 — Configurer les variables d'environnement**
-
-Les fichiers `.env.example` contiennent les paramètres nécessaires pour le développement local.
+**2. Configurer les variables d'environnement**
 
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
+cp react-native/smartqueue/.env.example react-native/smartqueue/.env
 ```
 
-**Étape 3 — Lancer le backend + DB (Docker)**
-
-Cette commande démarre le backend Laravel ainsi que ses dépendances (MySQL, Redis).
+**3. Lancer l'infrastructure (Backend + DB + Reverb)**
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
-> ⏱ Le premier lancement prend 3 à 5 minutes le temps de construire les images. Les suivants démarrent en quelques secondes.
+Services démarrés :
+| Service | Port | Description |
+|---------|------|-------------|
+| Backend API | `8080` | API Laravel |
+| Reverb WS | `6001` | Serveur WebSocket |
+| MySQL | `3306` | Base de données |
+| Redis | `6379` | Cache & queues |
 
-**Étape 4 — Lancer les migrations et les seeds**
+**4. Initialiser la base de données**
 
 ```bash
-docker compose exec backend php artisan migrate
-docker compose exec backend php artisan db:seed
+docker compose exec backend php artisan migrate --seed
 ```
 
-### Accès aux interfaces
-
-Une fois tous les conteneurs démarrés, les interfaces sont accessibles aux adresses suivantes :
-
-| Interface | URL | Description |
-|-----------|-----|-------------|
-| Backend API (Laravel) | http://localhost:8000 | API REST |
-| Frontend (Vite) | http://localhost:5173 | Dashboard web |
-
-Pour lancer le front en local :
+**5. Lancer le frontend (dans un nouveau terminal)**
 
 ```bash
-npm -C frontend i
-npm -C frontend run dev
+cd frontend
+npm install
+npm run dev
 ```
 
-Pour lancer l'app mobile (Flutter) :
+→ Dashboard accessible sur http://localhost:5173
+
+**6. Lancer l'app mobile (dans un nouveau terminal)**
 
 ```bash
-cd mobile/smartqueue_user
-flutter pub get
-flutter run
+cd react-native/smartqueue
+npm install
+npx expo start
 ```
+
+→ Scanner le QR code avec l'app Expo Go sur votre téléphone.
 
 ---
-
 ## ⚙ Configuration
 
-### Variables d'environnement
+### Variables d'environnement backend (`backend/.env`)
 
-Le tableau ci-dessous explique chaque variable d'environnement. La colonne "Requis" indique les variables sans lesquelles le service ne peut pas démarrer.
+| Variable | Description | Exemple |
+|----------|-------------|---------|
+| `APP_URL` | URL de l'application | `http://localhost:8000` |
+| `DB_CONNECTION` | Driver DB | `mysql` |
+| `DB_HOST` | Hôte MySQL | `db` (Docker) |
+| `DB_DATABASE` | Nom de la base | `smartqueue` |
+| `DB_USERNAME` | Utilisateur MySQL | `user` |
+| `DB_PASSWORD` | Mot de passe MySQL | `secret` |
+| `REDIS_HOST` | Hôte Redis | `redis` |
+| `REVERB_APP_KEY` | Clé app Reverb | `smartqueue_key` |
+| `REVERB_APP_SECRET` | Secret Reverb | `smartqueue_secret` |
+| `REVERB_HOST` | Hôte Reverb | `localhost` |
+| `REVERB_PORT` | Port Reverb | `6001` |
+| `SUPER_ADMIN_EMAIL` | Email super admin | `superadmin@example.com` |
+| `SUPER_ADMIN_PASSWORD` | Mot de passe | `password` |
 
-```env
-# Backend (backend/.env)
-APP_URL=http://localhost:8000
-DB_HOST=db
-REDIS_HOST=redis
+### Variables frontend (`frontend/.env`)
 
-# Frontend (frontend/.env)
-VITE_API_BASE_URL=http://localhost:8000
-```
+| Variable | Description | Exemple |
+|----------|-------------|---------|
+| `VITE_API_BASE_URL` | URL de l'API | `http://localhost:8080` |
+| `VITE_REVERB_APP_KEY` | Clé Reverb | `smartqueue_key` |
+| `VITE_REVERB_HOST` | Hôte Reverb | `localhost` |
+| `VITE_REVERB_PORT` | Port Reverb | `6001` |
 
 ---
 
 ## 📡 API Reference
 
-L'ensemble de l'API REST est documentée via Swagger et accessible à `/api-docs` une fois le projet lancé. Voici un aperçu des endpoints principaux.
+Documentation complète OpenAPI/Swagger disponible sur `/api/documentation` une fois le backend lancé.
 
-### Authentification
+### 🔐 Authentification
 
+| Méthode | Endpoint | Description | Auth |
+|---------|----------|-------------|------|
+| `POST` | `/api/auth/register` | Inscription usager | Non |
+| `POST` | `/api/auth/login` | Connexion (Sanctum token) | Non |
+| `POST` | `/api/auth/logout` | Déconnexion | Oui |
+| `POST` | `/api/auth/google` | Login OAuth Google | Non |
+| `POST` | `/api/auth/google/register` | Inscription OAuth Google | Non |
+| `POST` | `/api/auth/devices/register` | Enregistrer device FCM | Oui |
+
+### 🏢 Établissements & Services
+
+| Méthode | Endpoint | Description | Auth |
+|---------|----------|-------------|------|
+| `GET` | `/api/establishments` | Liste avec géolocalisation | Non |
+| `GET` | `/api/establishments/nearby` | Établissements proches | Non |
+| `GET` | `/api/establishments/search?q={query}` | Recherche | Non |
+| `GET` | `/api/establishments/{id}` | Détail établissement | Non |
+| `GET` | `/api/establishments/{id}/services` | Services de l'établissement | Non |
+| `GET` | `/api/services/{id}` | Détail service | Non |
+| `GET` | `/api/services/{id}/affluence` | Statut d'affluence | Non |
+| `GET` | `/api/services/{id}/recommendations` | Suggestions horaires | Non |
+
+### 🎫 Tickets (Usager)
+
+| Méthode | Endpoint | Description | Auth |
+|---------|----------|-------------|------|
+| `POST` | `/api/tickets` | Créer un ticket | Oui |
+| `GET` | `/api/tickets/me` | Mes tickets actifs | Oui |
+| `GET` | `/api/tickets/active` | Tickets actifs (alias) | Oui |
+| `GET` | `/api/tickets/history` | Historique | Oui |
+| `GET` | `/api/tickets/{ticket}` | Détail ticket | Oui |
+| `PATCH` | `/api/tickets/{ticket}` | Annuler ticket | Oui |
+
+### 🎧 Agent - Gestion des files
+
+| Méthode | Endpoint | Description | Rôle |
+|---------|----------|-------------|------|
+| `POST` | `/api/services/{service}/call-next` | Appeler prochain ticket | agent, admin |
+| `POST` | `/api/services/{service}/open` | Ouvrir service | agent, admin |
+| `POST` | `/api/services/{service}/close` | Fermer service | agent, admin |
+| `GET` | `/api/services/{service}/queue` | Vue complète file | agent, admin |
+| `POST` | `/api/tickets/{ticket}/mark-absent` | Marquer absent | agent, admin |
+| `POST` | `/api/tickets/{ticket}/recall` | Rappeler ticket | agent, admin |
+| `POST` | `/api/tickets/{ticket}/close` | Clôturer ticket | agent, admin |
+| `POST` | `/api/tickets/{ticket}/cancel` | Annuler (agent) | agent, admin |
+| `POST` | `/api/tickets/{ticket}/priority` | Changer priorité | agent, admin |
+| `POST` | `/api/tickets/{ticket}/defer` | Défer ticket | agent, admin |
+| `POST` | `/api/counters/{counter}/open` | Ouvrir guichet | agent, admin |
+| `POST` | `/api/counters/{counter}/close` | Fermer guichet | agent, admin |
+
+### 🏢 Admin - Gestion établissement
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `GET/POST` | `/api/admin/establishments` | CRUD établissements |
+| `GET/POST` | `/api/admin/services` | CRUD services |
+| `GET/POST` | `/api/admin/agents` | Gestion agents |
+| `GET/POST` | `/api/admin/counters` | Gestion guichets |
+| `GET` | `/api/admin/stats/overview` | Vue d'ensemble stats |
+| `GET` | `/api/admin/stats/services/{id}` | Stats par service |
+| `GET` | `/api/admin/tickets` | Liste tickets |
+| `GET` | `/api/admin/tickets/stats` | Stats tickets |
+| `POST` | `/api/admin/services/{id}/qr-code` | Générer QR code |
+| `GET` | `/api/admin/services/{id}/qr-code/download` | Télécharger QR |
+| `POST` | `/api/admin/push/broadcast` | Broadcast notification |
+| `GET` | `/api/admin/notification-logs` | Logs notifications |
+
+### 🌐 Super Admin SaaS
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `GET/POST` | `/api/saas/establishments` | Gestion multi-établissements |
+| `GET` | `/api/saas/subscriptions` | Liste abonnements |
+| `PUT` | `/api/saas/establishments/{id}/subscription` | Modifier abonnement |
+| `GET` | `/api/saas/monitoring/overview` | Monitoring plateforme |
+
+### 🔔 Notifications & Préférences
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `GET` | `/api/notifications` | Mes notifications |
+| `GET` | `/api/notifications/unread-count` | Compteur non lues |
+| `POST` | `/api/notifications/mark-all-read` | Tout marquer lu |
+| `POST` | `/api/notifications/{id}/read` | Marquer lu |
+| `GET/PUT` | `/api/notification-preferences` | Préférences notifs |
+| `GET/PUT` | `/api/user/alert-preferences` | Préférences alertes |
+
+---
+
+## 🔌 WebSocket / Temps Réel
+
+### Configuration Laravel Echo (Frontend)
+
+```typescript
+import Echo from 'laravel-echo';
+import Pusher from 'pusher-js';
+
+window.Pusher = Pusher;
+
+const echo = new Echo({
+  broadcaster: 'reverb',
+  key: import.meta.env.VITE_REVERB_APP_KEY,
+  wsHost: import.meta.env.VITE_REVERB_HOST,
+  wsPort: import.meta.env.VITE_REVERB_PORT,
+  wssPort: import.meta.env.VITE_REVERB_PORT,
+  forceTLS: false,
+  enabledTransports: ['ws', 'wss'],
+  authEndpoint: `${import.meta.env.VITE_API_BASE_URL}/api/broadcasting/auth`,
+  auth: {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  },
+});
 ```
-POST   /api/auth/register          Inscription d'un nouvel usager
-POST   /api/auth/login             Connexion (retourne JWT + refresh token)
-POST   /api/auth/refresh           Renouveler le token d'accès
-POST   /api/auth/logout            Déconnexion (invalide le refresh token)
-```
 
-### Files d'attente
+### Canaux et Événements
 
-```
-GET    /api/queues                 Lister les files d'un établissement
-POST   /api/queues                 Créer une nouvelle file (admin)
-GET    /api/queues/:id             Détail d'une file + position temps réel
-PATCH  /api/queues/:id/status      Ouvrir, mettre en pause ou fermer une file
-```
+| Canal | Type | Événements | Description |
+|-------|------|------------|-------------|
+| `ticket.{id}` | Privé | `TicketCalled`, `TicketUpdated` | Mise à jour individuelle ticket |
+| `service.{id}` | Présence | `ServiceTicketCalled`, `ServiceTicketEnqueued`, `ServiceTicketAbsent`, `ServiceStatsUpdated` | État global de la file |
 
-### Tickets
+### Exemple d'abonnement
 
-```
-POST   /api/tickets                Créer un ticket (rejoindre une file)
-GET    /api/tickets/:id            Statut et position d'un ticket
-PATCH  /api/tickets/:id/next       Appeler le ticket suivant (agent)
-PATCH  /api/tickets/:id/status     Mettre à jour le statut (présent, absent...)
-DELETE /api/tickets/:id            Annuler un ticket
-```
+```typescript
+// Abonnement aux updates d'un ticket
+const channel = echo.private(`ticket.${ticketId}`);
+channel.listen('TicketCalled', (e) => {
+  console.log('Ticket appelé:', e.ticket);
+});
 
-### Établissements & Géolocalisation
-
-```
-GET    /api/establishments         Lister les établissements proches
-       ?lat=5.35&lng=2.35&radius=5000
-GET    /api/establishments/:id     Détail + statut d'affluence en direct
-```
-
-### Analytics
-
-```
-GET    /api/analytics/queues       Statistiques par file (jour / semaine / mois)
-GET    /api/analytics/export       Export CSV ou PDF
-       ?format=pdf&from=2025-01-01&to=2025-01-31
-```
-
-### WebSocket Events
-
-Le client peut recevoir des événements temps réel via Laravel Echo (selon configuration) :
-
-```javascript
-// Exemple (pseudo-code) d'abonnement à un channel
-Echo.channel('service.123')
-  .listen('TicketCalled', (e) => {
-    // e.ticket
-  })
-  .listen('QueueUpdated', (e) => {
-    // e.service
-  })
+// Abonnement au canal de service (agents)
+const presenceChannel = echo.join(`service.${serviceId}`);
+presenceChannel.listen('ServiceStatsUpdated', (e) => {
+  console.log('Stats mises à jour:', e);
+});
 ```
 
 ---
 
 ## 🗄 Modèle de données
 
-Les tables principales du schéma MySQL et leurs relations essentielles sont décrites ci-dessous. Chaque identifiant est un UUID v4 pour garantir l'absence de collision entre établissements.
+### Schéma relationnel
 
 ```sql
--- Un usager peut avoir plusieurs tickets (un par service)
-users (id UUID PK, name, email UNIQUE, phone, role ENUM, fcm_token, created_at)
+-- Utilisateurs (usagers, agents, admins, super_admin)
+users (
+  id BIGINT PK AUTO_INCREMENT,
+  name VARCHAR(255),
+  email VARCHAR(255) UNIQUE,
+  phone VARCHAR(20),
+  password VARCHAR(255),
+  role ENUM('user','agent','admin','super_admin') DEFAULT 'user',
+  establishment_id BIGINT NULL FK,
+  google_id VARCHAR(255) NULL,
+  avatar VARCHAR(255) NULL,
+  status ENUM('active','inactive') DEFAULT 'active',
+  pending_subscription JSON NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
 
--- Un établissement regroupe plusieurs services
-establishments (id UUID PK, name, address, lat, lng, plan ENUM, admin_id FK)
+-- Établissements clients
+establishments (
+  id BIGINT PK AUTO_INCREMENT,
+  name VARCHAR(255),
+  address TEXT,
+  category VARCHAR(50) NULL,
+  lat DECIMAL(10,8) NULL,
+  lng DECIMAL(11,8) NULL,
+  open_at TIME NULL,
+  close_at TIME NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
 
--- Un service appartient à un établissement et possède une ou plusieurs files
-services (id UUID PK, name, avg_duration_min, max_capacity, establishment_id FK)
+-- Services (files d'attente)
+services (
+  id BIGINT PK AUTO_INCREMENT,
+  establishment_id BIGINT FK,
+  name VARCHAR(255),
+  avg_service_time_minutes INT DEFAULT 5,
+  capacity INT NULL,
+  status ENUM('open','closed','paused') DEFAULT 'closed',
+  priority_support BOOLEAN DEFAULT FALSE,
+  qr_code_token VARCHAR(255) NULL,
+  qr_code_url TEXT NULL,
+  qr_generated_at TIMESTAMP NULL,
+  opening_time TIME NULL,
+  closing_time TIME NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
 
--- Une file est ouverte sur un service à un instant donné
-queues (id UUID PK, service_id FK, status ENUM, current_number, avg_wait_min, opened_at, closed_at)
+-- Guichets physiques
+counters (
+  id BIGINT PK AUTO_INCREMENT,
+  establishment_id BIGINT FK,
+  name VARCHAR(255),
+  status ENUM('open','closed') DEFAULT 'closed',
+  agent_id BIGINT NULL FK,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
 
--- Un ticket lie un usager à une file à un instant précis
-tickets (id UUID PK, number, qr_code, status ENUM, position,
-         user_id FK, queue_id FK, created_at, called_at, closed_at, lat, lng)
+-- Tickets
+tickets (
+  id BIGINT PK AUTO_INCREMENT,
+  user_id BIGINT FK,
+  service_id BIGINT FK,
+  counter_id BIGINT NULL FK,
+  number VARCHAR(50),
+  status ENUM('waiting','called','absent','closed','canceled','expired') DEFAULT 'waiting',
+  priority ENUM('normal','high','vip') DEFAULT 'normal',
+  position INT,
+  source ENUM('app','qr_scan') DEFAULT 'app',
+  valid_date DATE,
+  called_at TIMESTAMP NULL,
+  closed_at TIMESTAMP NULL,
+  absent_at TIMESTAMP NULL,
+  deferred_at TIMESTAMP NULL,
+  deferral_count INT DEFAULT 0,
+  is_swapped BOOLEAN DEFAULT FALSE,
+  swapped_with_ticket_id BIGINT NULL,
+  original_called_at TIMESTAMP NULL,
+  grace_period_expires_at TIMESTAMP NULL,
+  has_recalled BOOLEAN DEFAULT FALSE,
+  en_route_at TIMESTAMP NULL,
+  estimated_travel_minutes INT NULL,
+  last_distance_m INT NULL,
+  last_seen_at TIMESTAMP NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
 
--- Traçabilité de toutes les notifications envoyées
-notifications (id PK, user_id FK, ticket_id FK, channel ENUM, content, sent_at)
+-- Abonnements SaaS
+subscriptions (
+  id BIGINT PK AUTO_INCREMENT,
+  establishment_id BIGINT FK,
+  plan ENUM('basic','pro','enterprise') DEFAULT 'basic',
+  starts_at TIMESTAMP,
+  ends_at TIMESTAMP,
+  is_active BOOLEAN DEFAULT TRUE,
+  payment_method VARCHAR(50) NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
 
--- Statistiques agrégées par file et par jour (pour l'analytics)
-queue_stats (id PK, queue_id FK, date, total_tickets, avg_wait_min, abandon_rate)
+-- Logs notifications envoyées
+notification_logs (
+  id BIGINT PK AUTO_INCREMENT,
+  user_id BIGINT FK,
+  ticket_id BIGINT NULL FK,
+  channel ENUM('push','sms','email'),
+  status ENUM('pending','sent','failed'),
+  content TEXT,
+  sent_at TIMESTAMP NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
+
+-- Préférences notifications
+notification_preferences (
+  id BIGINT PK AUTO_INCREMENT,
+  user_id BIGINT FK,
+  push_enabled BOOLEAN DEFAULT TRUE,
+  sms_enabled BOOLEAN DEFAULT FALSE,
+  email_enabled BOOLEAN DEFAULT TRUE,
+  notify_when_called BOOLEAN DEFAULT TRUE,
+  notify_when_absent BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
+
+-- Analytics events
+analytics_events (
+  id BIGINT PK AUTO_INCREMENT,
+  type VARCHAR(50),
+  service_id BIGINT FK,
+  ticket_id BIGINT NULL FK,
+  user_id BIGINT NULL FK,
+  metadata JSON NULL,
+  created_at TIMESTAMP
+);
 ```
 
-### Statuts d'un ticket
-
-Un ticket traverse les états suivants au fil de son cycle de vie :
+### Cycle de vie d'un ticket
 
 ```
-waiting → called → present → processed
-                ↘ absent → (rappelé → called) ou cancelled
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+│ WAITING │───►│ CALLED  │───►│ ABSENT  │───►│ CLOSED  │
+│ (file)  │    │(appelé) │    │(absent) │    │(terminé)│
+└────┬────┘    └────┬────┘    └────┬────┘    └─────────┘
+     │              │              │
+     │ cancel       │ defer        │ recall
+     ▼              │ (24h)        │
+┌─────────┐         │              ▼
+│ CANCELED│         │         ┌─────────┐
+│(annulé) │◄────────┴─────────│ CALLED  │
+└─────────┘                      │(rappelé)│
+                                 └─────────┘
 ```
 
 ---
 
-## 🧪 Tests
+## 🔒 Sécurité
 
-### Lancer les tests
+### Authentification
 
-```bash
-# Tests backend (Laravel)
-docker compose exec backend php artisan test
+- **Laravel Sanctum** : Tokens API stateless
+- **OAuth Google** : Authentification sociale
+- **Middleware rôles** : `role:agent,admin`, `role:super_admin`
+- **Policies** : Vérification des permissions par ressource
 
-# Build frontend (React)
-npm -C frontend run build
-```
+### Autorisation
 
-### Couverture de code
+| Rôle | Permissions |
+|------|-------------|
+| `user` | CRUD ses propres tickets, notifications |
+| `agent` | Gérer les files assignées, appeler tickets |
+| `admin` | CRUD établissement, services, agents, stats |
+| `super_admin` | Gestion SaaS, tous les établissements |
 
-```bash
-# Rapport de couverture Laravel
-docker compose exec backend php artisan test --coverage
-```
+### Broadcast sécurisé
 
-L'objectif de couverture cible est **70% minimum** sur l'ensemble des services. Les chemins critiques (création de ticket, appel WebSocket, envoi de notification) visent **90%**.
+- Canal `ticket.{id}` : vérification propriétaire du ticket
+- Canal `service.{id}` : agents/admins ou usagers avec ticket actif
 
 ---
 
 ## 🚢 Déploiement
 
-### Environnement de production
-
-Pour un déploiement en production, un fichier `docker-compose.prod.yml` peut être ajouté/adapter selon votre infrastructure (volumes, reverse-proxy, CI/CD, etc.).
+### Production avec Docker
 
 ```bash
-# Déploiement production
-docker compose -f docker-compose.prod.yml up -d --build
-```
+# Générer la clé APP_KEY
+docker compose exec backend php artisan key:generate
 
-### Variables à changer absolument en production
-
-Avant tout déploiement en production, vérifiez impérativement ces points.
-
-```bash
-APP_KEY=<générer avec : php artisan key:generate>
-DB_PASSWORD=<mot de passe fort>
+# Mettre à jour .env pour production
 APP_ENV=production
 APP_DEBUG=false
+APP_URL=https://api.smartqueue.example.com
+
+# Migrer la base
+docker compose exec backend php artisan migrate --force
+
+# Optimiser Laravel
+docker compose exec backend php artisan optimize
+docker compose exec backend php artisan config:cache
+docker compose exec backend php artisan route:cache
 ```
 
-### Checklist de déploiement
+### Variables essentielles production
 
-- [ ] Variables d'environnement de production configurées
-- [ ] HTTPS activé (certificat SSL via Let's Encrypt ou équivalent)
-- [ ] Migrations exécutées sur la base de production
-- [ ] Tests de charge passés (objectif : 10 000 utilisateurs simultanés)
-- [ ] Monitoring activé (logs centralisés recommandés)
-- [ ] Sauvegardes MySQL automatiques configurées
-- [ ] Rate limiting activé sur l'API
+```env
+APP_KEY=base64:...          # Générée avec key:generate
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://api.domain.com
+
+DB_HOST=...                 # DB production
+DB_PASSWORD=...             # Mot de passe fort
+
+REVERB_HOST=reverb.domain.com
+REVERB_PORT=443
+REVERB_SCHEME=https
+
+# Throttling
+RATE_LIMIT_PER_MINUTE=60
+```
+
+### Checklist déploiement
+
+- [ ] Clé APP_KEY générée et unique
+- [ ] HTTPS activé avec certificats valides
+- [ ] Variables d'environnement configurées
+- [ ] Base de données migrée
+- [ ] Redis configuré et accessible
+- [ ] Rate limiting activé
+- [ ] Logs configurés (stderr pour Docker)
+- [ ] Sauvegardes automatiques configurées
+- [ ] Monitoring en place (healthchecks)
 
 ---
 
-## 🗺 Roadmap
+## 🧪 Tests
 
-Ce tableau présente l'évolution prévue du projet selon les phases de développement. Les fonctionnalités marquées ✅ sont disponibles dans la version actuelle, 🔄 sont en cours, et 📋 sont planifiées.
-
-| Statut | Fonctionnalité | Version cible |
-|--------|---------------|--------------|
-| 🔄 | Auth Service complet (JWT, rôles, OAuth2) | v1.0 MVP |
-| 🔄 | Queue Service + Ticket Service | v1.0 MVP |
-| 🔄 | WebSocket temps réel | v1.0 MVP |
-| 🔄 | App Flutter v1 | v1.0 MVP |
-| 🔄 | Interface React.js usager + agent | v1.0 MVP |
-| 📋 | Notifications (FCM / SMS) | v1.0 MVP |
-| 📋 | Géolocalisation et calcul ETA | v1.1 |
-| 📋 | Analytics Service + exports PDF/CSV | v1.1 |
-| 📋 | Borne physique (tablette kiosque) | v1.2 |
-| 📋 | Module prédictif Machine Learning (affluence) | v2.0 |
-| 📋 | Intégration IoT (écrans connectés, bornes intelligentes) | v2.0 |
-| 📋 | Marketplace d'extensions tierces | v3.0 |
-| 📋 | Intégration Smart City | v3.0 |
-
----
-
-## 🤝 Contribuer
-
-Les contributions sont les bienvenues ! Voici comment participer au projet de façon organisée.
-
-**Avant de commencer**, prenez connaissance de la structure du projet et des conventions de code. Chaque microservice suit ses propres conventions de nommage (camelCase pour Node.js, snake_case pour Laravel), documentées dans les README individuels de chaque service.
+### Backend (Laravel)
 
 ```bash
-# 1. Forker le projet, puis cloner votre fork
-git clone https://github.com/votre-username/vqs.git
+# Lancer tous les tests
+docker compose exec backend php artisan test
 
-# 2. Créer une branche descriptive
-git checkout -b feature/geolocation-eta-calculation
-# ou
-git checkout -b fix/websocket-reconnection-bug
+# Avec couverture
+docker compose exec backend php artisan test --coverage
 
-# 3. Développer avec des commits atomiques et bien nommés
-git commit -m "feat(geo): add ETA calculation based on Haversine formula"
-
-# 4. Pousser et ouvrir une Pull Request vers main
-git push origin feature/geolocation-eta-calculation
+# Tests spécifiques
+docker compose exec backend php artisan test --filter=TicketTest
 ```
 
-**Conventions de commit** — ce projet suit [Conventional Commits](https://www.conventionalcommits.org/) :
-`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`
+### Frontend (React)
 
-**Avant de soumettre une PR**, assurez-vous que les tests passent, que le code est formatté (ESLint pour Node.js, PHP CS Fixer pour Laravel), et que la documentation est à jour si nécessaire.
+```bash
+cd frontend
+npm run build        # Vérifier le build
+npm run lint         # ESLint
+```
+
+### Mobile (React Native)
+
+```bash
+cd react-native/smartqueue
+npm run lint         # ESLint
+npx tsc --noEmit     # Type checking
+```
+
+---
+
+## 📈 Roadmap
+
+| Statut | Fonctionnalité | Version |
+|--------|----------------|---------|
+| ✅ | Authentification complète (Sanctum, OAuth) | v1.0 |
+| ✅ | Gestion des tickets temps réel | v1.0 |
+| ✅ | Dashboard Agent & Admin | v1.0 |
+| ✅ | Notifications Push & SMS | v1.0 |
+| ✅ | QR Code scanning | v1.0 |
+| ✅ | Déféré de position | v1.0 |
+| ✅ | Analytics & exports | v1.0 |
+| 🔄 | Borne physique (kiosk mode) | v1.1 |
+| 📋 | ML prédiction d'affluence | v2.0 |
+| 📋 | Intégrations calendriers | v2.0 |
+| 📋 | App iOS/Android native build | v2.0 |
+
+---
+
+## 🤝 Contribution
+
+Les contributions sont les bienvenues !
+
+```bash
+# 1. Fork et clone
+git clone https://github.com/votre-username/smartqueue.git
+
+# 2. Branche feature
+git checkout -b feature/nouvelle-fonctionnalite
+
+# 3. Commits conventionnels
+git commit -m "feat(tickets): ajout du système de priorité dynamique"
+git commit -m "fix(ws): correction reconnexion WebSocket"
+git commit -m "docs(api): mise à jour endpoints notifications"
+
+# 4. Push et PR
+git push origin feature/nouvelle-fonctionnalite
+```
+
+Conventions : [Conventional Commits](https://www.conventionalcommits.org/)
+- `feat:` nouvelle fonctionnalité
+- `fix:` correction bug
+- `docs:` documentation
+- `refactor:` refactoring
+- `test:` tests
 
 ---
 
 ## 📄 Licence
 
-Ce projet est distribué sous licence **MIT**. Voir le fichier [LICENSE](LICENSE) pour les détails.
+Distribué sous licence **MIT**. Voir [LICENSE](LICENSE).
 
-Le modèle économique **Open-Core** signifie que le noyau (gestion de file de base, tickets, interface usager) est et restera open source. Les modules avancés (analytics poussés, ML prédictif, intégrations IoT) feront l'objet d'une offre commerciale séparée.
+**Modèle Open-Core** : Le noyau (gestion de file, tickets, interface usager) reste open source. Les modules avancés (analytics ML, intégrations tierces) peuvent faire l'objet d'une offre commerciale.
 
 ---
 
 <div align="center">
 
-**VQS — Parce que le temps de chacun a de la valeur.**
+**SmartQueue — Parce que le temps de chacun a de la valeur.**
 
-Fait avec ❤️ · Rapport de bug ? [Ouvrir une issue](https://github.com/votre-org/vqs/issues) · Documentation complète : [docs/](docs/)
+Built with ❤️ using Laravel, React, and React Native
 
 </div>
