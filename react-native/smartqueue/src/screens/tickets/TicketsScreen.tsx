@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTicket } from '../../store/ticketStore';
 import { useCustomAlert } from '../../hooks/useCustomAlert';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { useSimpleNotification } from '../../hooks/useSimpleNotification';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
@@ -34,9 +35,24 @@ export const TicketsScreen: React.FC = () => {
     isInitialized,
   } = useTicket();
   const { AlertComponent, showWarning, showError } = useCustomAlert();
+  const { notifyTicketCreated } = useSimpleNotification();
   
   const [refreshing, setRefreshing] = useState(false);
   const fadeAnim = new Animated.Value(0);
+
+  // Notify when active ticket is detected
+  const hasNotifiedRef = React.useRef(false);
+  useEffect(() => {
+    if (hasActiveTicket && activeTicket && !hasNotifiedRef.current) {
+      notifyTicketCreated(
+        activeTicket.number,
+        activeTicket.establishment?.name || 'Établissement'
+      );
+      hasNotifiedRef.current = true;
+    } else if (!hasActiveTicket) {
+      hasNotifiedRef.current = false;
+    }
+  }, [hasActiveTicket, activeTicket, notifyTicketCreated]);
 
   // Debug log
   useEffect(() => {

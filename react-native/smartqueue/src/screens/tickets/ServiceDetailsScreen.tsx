@@ -19,6 +19,7 @@ import { establishmentsApi, Establishment } from '../../api/establishmentsApi';
 import { ticketsApi } from '../../api/ticketsApi';
 import { useAuth } from '../../store/authStore';
 import { useTicket } from '../../store/ticketStore';
+import { useSimpleNotification } from '../../hooks/useSimpleNotification';
 import { useDistanceTracking } from '../../hooks/useDistanceTracking';
 import { useCustomAlert } from '../../hooks/useCustomAlert';
 import { formatDistance, formatTravelTime } from '../../utils/distance';
@@ -60,6 +61,13 @@ export const ServiceDetailsScreen: React.FC = () => {
   const [selectedServiceId, setSelectedServiceId] = useState<number | null>(serviceId || null);
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
+  
+  // Notifications
+  const { notifyTicketCreated, notifyCrowdLevelChange } = useSimpleNotification();
+  
+  // Track crowd level changes for notifications
+  const previousCrowdLevelRef = React.useRef<string | null>(null);
+  const previousPeopleCountRef = React.useRef<number>(0);
 
   // Distance tracking
   const { distanceInfo, hasPermission: hasLocationPermission } = useDistanceTracking({
@@ -97,6 +105,27 @@ export const ServiceDetailsScreen: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Monitor crowd level changes
+  useEffect(() => {
+    if (!establishment) return;
+    
+    const currentCrowdLevel = establishment.crowd_level || null;
+    const currentPeopleCount = establishment.total_people_waiting || 0;
+    
+    if (previousCrowdLevelRef.current && 
+        previousCrowdLevelRef.current !== currentCrowdLevel) {
+      notifyCrowdLevelChange(
+        establishment.name,
+        previousCrowdLevelRef.current,
+        currentCrowdLevel || 'moderate',
+        currentPeopleCount
+      );
+    }
+    
+    previousCrowdLevelRef.current = currentCrowdLevel;
+    previousPeopleCountRef.current = currentPeopleCount;
+  }, [establishment?.crowd_level, establishment?.total_people_waiting, establishment?.name, notifyCrowdLevelChange]);
 
   const handleJoinQueue = async () => {
     if (!isAuthenticated) {
@@ -154,6 +183,12 @@ export const ServiceDetailsScreen: React.FC = () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { useTicketStore } = require('../../store/ticketStore');
       useTicketStore.getState().setActiveTicket(ticketData);
+
+      // Send notification
+      notifyTicketCreated(
+        ticketData.number,
+        ticketData.establishment?.name || establishment?.name || 'Établissement'
+      );
 
       router.push({
         pathname: '/(tabs)/live-ticket',

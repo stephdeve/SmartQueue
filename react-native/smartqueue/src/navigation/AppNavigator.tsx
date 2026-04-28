@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useAuth } from '../store/authStore';
 import { useSettings } from '../store/settingsStore';
 import { Theme } from '../theme';
@@ -42,10 +43,57 @@ export const AppNavigator: React.FC = () => {
   const { onboardingCompleted, isFirstLaunch } = useSettings();
   const [isInitializing, setIsInitializing] = useState(true);
 
+  // Request notification permissions
+  const requestNotificationPermissions = async () => {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        console.log('Notification permissions not granted');
+      }
+    } catch (error) {
+      console.error('Error requesting notification permissions:', error);
+    }
+  };
+
+  // Configure notification behavior
+  useEffect(() => {
+    // Set notification handler
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+
+    // Listen for notifications received while app is foregrounded
+    const subscription = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notification received in foreground:', notification);
+    });
+
+    // Listen for notification response (user taps notification)
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification tapped:', response);
+      // Could navigate to specific screen here
+    });
+
+    return () => {
+      subscription.remove();
+      responseSubscription.remove();
+    };
+  }, []);
+
   // Initialiser l'application
   useEffect(() => {
     const initializeApp = async () => {
       try {
+        // Request notification permissions
+        await requestNotificationPermissions();
         // Vérifier l'authentification
         await checkAuth();
       } catch (error) {

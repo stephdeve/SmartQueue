@@ -139,4 +139,34 @@ class OnboardingController extends Controller
             'counters' => $counters,
         ]);
     }
+
+    /**
+     * Sync user stats from frontend
+     */
+    public function syncUserStats(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            abort(401, 'Unauthenticated');
+        }
+
+        $validated = $request->validate([
+            'totalTicketsCreated' => 'integer|min:0',
+            'perfectTimingCount' => 'integer|min:0',
+            'quickResponseCount' => 'integer|min:0',
+            'weekendTickets' => 'integer|min:0',
+            'currentXp' => 'integer|min:0',
+            'currentLevel' => 'integer|min:1',
+        ]);
+
+        // Save to user meta/stats table or user profile
+        $user->stats_data = json_encode($validated);
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Stats synchronized successfully',
+            'stats' => $validated,
+        ]);
+    }
 }

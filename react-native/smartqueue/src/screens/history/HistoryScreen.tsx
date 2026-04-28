@@ -22,7 +22,7 @@ type HistoryNavigationProp = NativeStackNavigationProp<TabParamList, 'History'>;
 
 // Types pour les filtres
 type FilterType = 'weekly' | 'monthly' | 'custom';
-type StatusFilter = 'all' | 'active' | 'waiting' | 'called' | 'completed' | 'cancelled' | 'expired';
+type StatusFilter = 'all' | 'active' | 'waiting' | 'called' | 'completed' | 'cancelled' | 'expired' | 'served' | 'closed' | 'absent' | 'created';
 
 interface FilterOption {
   id: FilterType;
@@ -54,6 +54,7 @@ export const HistoryScreen: React.FC = () => {
   // Fetch fresh ticket data on mount to avoid showing stale data from other users
   useEffect(() => {
     fetchActiveTicket().catch(err => console.error('Error fetching active ticket:', err));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refs pour éviter les boucles de dépendances
@@ -82,15 +83,19 @@ export const HistoryScreen: React.FC = () => {
     },
   ];
 
-  // Status filter options
+  // Status filter options - tous les statuts possibles
   const statusOptions: StatusOption[] = [
     { id: 'all', label: 'Tous', color: '#6B7280' },
     { id: 'active', label: 'Actifs', color: '#2563EB' },
+    { id: 'created', label: 'Créés', color: '#8B5CF6' },
     { id: 'waiting', label: 'En attente', color: '#F59E0B' },
     { id: 'called', label: 'Appelés', color: '#10B981' },
+    { id: 'served', label: 'Servis', color: '#059669' },
     { id: 'completed', label: 'Terminés', color: '#059669' },
+    { id: 'closed', label: 'Fermés', color: '#6B7280' },
     { id: 'cancelled', label: 'Annulés', color: '#EF4444' },
-    { id: 'expired', label: 'Expirés', color: '#6B7280' },
+    { id: 'expired', label: 'Expirés', color: '#9CA3AF' },
+    { id: 'absent', label: 'Absents', color: '#DC2626' },
   ];
 
   // Obtenir les dates selon le filtre
@@ -227,24 +232,45 @@ export const HistoryScreen: React.FC = () => {
     setExpandedTickets(newExpanded);
   };
 
-  // Obtenir le texte du statut
+  // Obtenir le texte du statut en français
   const getStatusText = (status: string) => {
+    const statusMap: Record<string, string> = {
+      'closed': 'Fermé',
+      'served': 'Servi',
+      'cancelled': 'Annulé',
+      'canceled': 'Annulé',
+      'expired': 'Expiré',
+      'absent': 'Absent',
+      'called': 'Appelé',
+      'waiting': 'En attente',
+      'created': 'Créé',
+      'pending': 'En attente',
+      'completed': 'Terminé',
+    };
+    return statusMap[status] || status;
+  };
+
+  // Obtenir la couleur selon le statut
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case 'closed':
       case 'served':
-        return 'Done';
+      case 'completed':
+        return { bg: colors.success + '20', text: colors.success }; // Vert
       case 'cancelled':
-        return 'Cancelled';
+      case 'canceled':
       case 'expired':
-        return 'Expired';
       case 'absent':
-        return 'Absent';
+        return { bg: colors.danger + '20', text: colors.danger }; // Rouge
       case 'called':
-        return 'Called';
+        return { bg: colors.primary + '20', text: colors.primary }; // Bleu
       case 'waiting':
-        return 'Waiting';
+      case 'created':
+      case 'pending':
+        return { bg: colors.warning + '20', text: colors.warning }; // Orange
+      case 'closed':
+        return { bg: colors.textTertiary + '20', text: colors.textSecondary }; // Gris
       default:
-        return status;
+        return { bg: colors.warning + '20', text: colors.warning };
     }
   };
 
@@ -567,16 +593,12 @@ export const HistoryScreen: React.FC = () => {
                     paddingVertical: 4,
                     borderRadius: 999,
                     marginBottom: 8,
-                    backgroundColor: ticket.status === 'served' || ticket.status === 'closed' 
-                      ? colors.success + '20'
-                      : (ticket.status as string) === 'cancelled' ? colors.danger + '20' : colors.warning + '20'
+                    backgroundColor: getStatusColor(ticket.status).bg,
                   }}>
                     <Text style={{
                       fontSize: 12,
                       fontWeight: 'bold',
-                      color: ticket.status === 'served' || ticket.status === 'closed' 
-                        ? colors.success
-                        : (ticket.status as string) === 'cancelled' ? colors.danger : colors.warning
+                      color: getStatusColor(ticket.status).text,
                     }}>
                       {getStatusText(ticket.status)}
                     </Text>
@@ -592,18 +614,18 @@ export const HistoryScreen: React.FC = () => {
               {isExpanded && (
                 <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.separator, gap: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: colors.textTertiary }}>Ticket Number</Text>
+                    <Text style={{ color: colors.textTertiary }}>Numéro du Ticket</Text>
                     <Text style={{ color: colors.textPrimary, fontWeight: 'bold' }}>{ticket.number}</Text>
                   </View>
                   {waitTime && (
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: colors.textTertiary }}>Wait Duration</Text>
+                      <Text style={{ color: colors.textTertiary }}>Durée d&apos;attente</Text>
                       <Text style={{ color: colors.textPrimary, fontWeight: 'bold' }}>{waitTime}</Text>
                     </View>
                   )}
                   {ticket.counter_id && (
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: colors.textTertiary }}>Counter</Text>
+                      <Text style={{ color: colors.textTertiary }}>Guichet</Text>
                       <Text style={{ color: colors.textPrimary, fontWeight: 'bold' }}>{ticket.counter_id}</Text>
                     </View>
                   )}
