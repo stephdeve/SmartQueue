@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { useThemeColors } from '../../src/hooks/useThemeColors';
+import { useAuth } from '../../src/store/authStore';
 import axiosClient from '../../src/api/axiosClient';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -16,15 +17,23 @@ type Ticket = {
 
 export default function CalledTickets() {
   const colors = useThemeColors();
+  const { user } = useAuth();
   const params = useLocalSearchParams<{ serviceId: string }>();
-  const serviceId = params.serviceId;
+  
+  // Get serviceId from URL params or fallback to first assigned service
+  const assignedServices = (user as any)?.services || [];
+  const serviceId = params.serviceId || (assignedServices.length > 0 ? assignedServices[0].id.toString() : undefined);
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
-    if (!serviceId) return;
+    if (!serviceId) {
+      console.log('[CalledTickets] No serviceId available');
+      setIsLoading(false);
+      return;
+    }
     try {
       const response = await axiosClient.get('/agent/tickets', {
         params: {
