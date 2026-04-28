@@ -22,6 +22,7 @@ import { router } from "expo-router";
 import "../../../global.css";
 import { useTicket } from "../../store/ticketStore";
 import { useDistanceTracking } from "../../hooks/useDistanceTracking";
+import { useSimpleNotification } from "../../hooks/useSimpleNotification";
 import { Coordinates } from "../../utils/distance";
 import { ActiveTicketCard } from "../../components/ActiveTicketCard";
 import { useExploreCache } from "../../store/exploreCacheStore";
@@ -67,6 +68,10 @@ export const ExploreScreen: React.FC = () => {
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [showSortModal, setShowSortModal] = useState(false);
   const { setCachedData, shouldUseCache, cachedEstablishments, forceRefresh } = useExploreCache();
+
+  // Simple notifications
+  const { notifyCrowdLevelChange, notifyEstablishmentOpen } = useSimpleNotification();
+  const notifiedEstablishmentsRef = useRef<Set<string>>(new Set());
 
   // Get establishment coordinates from active ticket for navigation
   const establishmentCoords = React.useMemo(() => {
@@ -290,6 +295,43 @@ useEffect(() => {
   useEffect(() => {
     loadEstablishments(false); // false = permettre l'utilisation du cache
   }, [location?.latitude, location?.longitude, searchQuery, loadEstablishments]);
+
+  // Notify for nearby low crowd establishments
+  useEffect(() => {
+    if (!location || establishments.length === 0) return;
+
+    // Find nearby establishments with low crowd level
+    const nearbyLowCrowd = establishments.filter(est => {
+      if (est.crowd_level !== 'low') return false;
+      if (notifiedEstablishmentsRef.current.has(`crowd_${est.id}`)) return false;
+      
+      const dist = calculateDistance(est);
+      return dist < 1; // Within 1km
+    });
+
+    // Notify for first nearby low crowd establishment
+    if (nearbyLowCrowd.length > 0) {
+      const est = nearbyLowCrowd[0];
+      notifyCrowdLevelChange(est.name, 'high', 'low', est.people_waiting ?? 0);
+      notifiedEstablishmentsRef.current.add(`crowd_${est.id}`);
+    }
+
+    // Find newly opened establishments
+    const newlyOpened = establishments.filter(est => {
+      if (est.open_now !== true) return false;
+      if (notifiedEstablishmentsRef.current.has(`open_${est.id}`)) return false;
+      
+      const dist = calculateDistance(est);
+      return dist < 2; // Within 2km
+    });
+
+    // Notify for first newly opened establishment
+    if (newlyOpened.length > 0) {
+      const est = newlyOpened[0];
+      notifyEstablishmentOpen(est.name);
+      notifiedEstablishmentsRef.current.add(`open_${est.id}`);
+    }
+  }, [establishments, location, calculateDistance, notifyCrowdLevelChange, notifyEstablishmentOpen]);
 
   // Calculer la distance depuis la position de l'utilisateur
   const calculateDistance = useCallback((est: Establishment) => {

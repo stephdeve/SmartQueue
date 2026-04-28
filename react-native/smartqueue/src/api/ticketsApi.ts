@@ -67,6 +67,14 @@ export interface TicketStats {
   avg_wait_time: number;
   success_rate: number;
   favorite_establishments: Establishment[];
+  saved_stats?: {
+    totalTicketsCreated?: number;
+    perfectTimingCount?: number;
+    quickResponseCount?: number;
+    weekendTickets?: number;
+    currentXp?: number;
+    currentLevel?: number;
+  };
 }
 
 // Fonctions API pour les tickets
@@ -211,6 +219,18 @@ export const ticketsApi = {
   getTicketStats: async (): Promise<TicketStats> => {
     const response = await axiosClient.get('/tickets/stats');
     return response.data;
+  },
+
+  // Sync user stats to backend
+  syncUserStats: async (stats: {
+    totalTicketsCreated: number;
+    perfectTimingCount: number;
+    quickResponseCount: number;
+    weekendTickets: number;
+    currentXp: number;
+    currentLevel: number;
+  }): Promise<void> => {
+    await axiosClient.post('/user/stats', stats);
   },
 
   // Obtenir les tickets récents

@@ -1,25 +1,25 @@
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ticketsApi, TicketStats } from '../api/ticketsApi';
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ticketsApi, TicketStats } from "../api/ticketsApi";
 
 // Badge types
-export type BadgeType = 
-  | 'FIRST_TICKET'           // Premier ticket pris
-  | 'REGULAR_USER'           // 10 tickets
-  | 'QUEUE_MASTER'           // 50 tickets
-  | 'QUEUE_LEGEND'           // 100 tickets
-  | 'TIME_SAVER_BRONZE'      // 1h économisée
-  | 'TIME_SAVER_SILVER'      // 5h économisée
-  | 'TIME_SAVER_GOLD'        // 10h économisée
-  | 'TIME_SAVER_PLATINUM'    // 24h économisée
-  | 'EARLY_BIRD'             // 5 tickets avant 8h
-  | 'NIGHT_OWL'              // 5 tickets après 18h
-  | 'MULTI_SERVICE'          // 5 services différents
-  | 'LOYAL_CUSTOMER'         // 10x même établissement
-  | 'QUICK_RESPONSE'         // Confirmé présence < 2min
-  | 'PERFECT_TIMING'         // Arrivé pile au bon moment
-  | 'WEEKEND_WARRIOR';       // 3 tickets weekend
+export type BadgeType =
+  | "FIRST_TICKET" // Premier ticket pris
+  | "REGULAR_USER" // 10 tickets
+  | "QUEUE_MASTER" // 50 tickets
+  | "QUEUE_LEGEND" // 100 tickets
+  | "TIME_SAVER_BRONZE" // 1h économisée
+  | "TIME_SAVER_SILVER" // 5h économisée
+  | "TIME_SAVER_GOLD" // 10h économisée
+  | "TIME_SAVER_PLATINUM" // 24h économisée
+  | "EARLY_BIRD" // 5 tickets avant 8h
+  | "NIGHT_OWL" // 5 tickets après 18h
+  | "MULTI_SERVICE" // 5 services différents
+  | "LOYAL_CUSTOMER" // 10x même établissement
+  | "QUICK_RESPONSE" // Confirmé présence < 2min
+  | "PERFECT_TIMING" // Arrivé pile au bon moment
+  | "WEEKEND_WARRIOR"; // 3 tickets weekend
 
 export interface Badge {
   type: BadgeType;
@@ -35,31 +35,31 @@ export interface Badge {
 export interface UserStats {
   // Time saved (calculated vs traditional queue waiting)
   totalTimeSavedMinutes: number;
-  
+
   // Distance traveled
   totalDistanceKm: number;
-  
+
   // Tickets
   totalTicketsCreated: number;
   totalTicketsCompleted: number;
   totalTicketsCancelled: number;
-  
+
   // Establishments & Services
   uniqueEstablishmentsVisited: number[];
   uniqueServicesUsed: number[];
   favoriteEstablishmentId?: number;
-  
+
   // Timing patterns
   earlyBirdCount: number; // Tickets before 8am
   nightOwlCount: number; // Tickets after 6pm
   weekendTickets: number;
   perfectTimingCount: number; // Arrived exactly on time
-  
+
   // Engagement
   perfectResponseCount: number; // Confirmed presence quickly
   streakDays: number; // Consecutive days using app
   lastUsedDate?: Date;
-  
+
   // History for charts
   weeklyActivity: number[]; // Last 7 days ticket count
   monthlyStats: {
@@ -74,18 +74,27 @@ interface UserStatsState extends UserStats {
   isLoading: boolean;
   error: string | null;
   badges: Badge[];
-  
+
   // Computed
   currentLevel: number;
   xpPoints: number;
   nextLevelXp: number;
-  
+
   // Actions
-  recordTicketCreated: (ticket: { service_id: number; establishment_id: number; lat?: number; lng?: number }) => void;
-  recordTicketCompleted: (ticket: { id: number; eta_minutes: number; wait_time_actual?: number }) => void;
+  recordTicketCreated: (ticket: {
+    service_id: number;
+    establishment_id: number;
+    lat?: number;
+    lng?: number;
+  }) => void;
+  recordTicketCompleted: (ticket: {
+    id: number;
+    eta_minutes: number;
+    wait_time_actual?: number;
+  }) => void;
   recordTicketCancelled: () => void;
   recordPresenceConfirmed: (responseTimeSeconds: number) => void;
-  recordArrival: (accuracy: 'early' | 'perfect' | 'late') => void;
+  recordArrival: (accuracy: "early" | "perfect" | "late") => void;
   recordDistanceTraveled: (km: number) => void;
   checkAndUnlockBadges: () => void;
   loadStatsFromBackend: () => Promise<void>;
@@ -94,125 +103,125 @@ interface UserStatsState extends UserStats {
 }
 
 // Badge definitions
-const BADGE_DEFINITIONS: Omit<Badge, 'progress' | 'unlockedAt'>[] = [
+const BADGE_DEFINITIONS: Omit<Badge, "progress" | "unlockedAt">[] = [
   {
-    type: 'FIRST_TICKET',
-    name: 'Premier Pas',
-    description: 'Votre premier ticket SmartQueue',
-    icon: 'footsteps',
-    color: '#10B981',
+    type: "FIRST_TICKET",
+    name: "Premier Pas",
+    description: "Votre premier ticket SmartQueue",
+    icon: "footsteps",
+    color: "#10B981",
     maxProgress: 1,
   },
   {
-    type: 'REGULAR_USER',
-    name: 'Utilisateur Régulier',
-    description: '10 tickets créés',
-    icon: 'calendar',
-    color: '#3B82F6',
+    type: "REGULAR_USER",
+    name: "Utilisateur Régulier",
+    description: "10 tickets créés",
+    icon: "calendar",
+    color: "#3B82F6",
     maxProgress: 10,
   },
   {
-    type: 'QUEUE_MASTER',
-    name: 'Maître de File',
-    description: '50 tickets créés',
-    icon: 'trophy',
-    color: '#8B5CF6',
+    type: "QUEUE_MASTER",
+    name: "Maître de File",
+    description: "50 tickets créés",
+    icon: "trophy",
+    color: "#8B5CF6",
     maxProgress: 50,
   },
   {
-    type: 'QUEUE_LEGEND',
-    name: 'Légende des Files',
-    description: '100 tickets créés',
-    icon: 'crown',
-    color: '#F59E0B',
+    type: "QUEUE_LEGEND",
+    name: "Légende des Files",
+    description: "100 tickets créés",
+    icon: "crown",
+    color: "#F59E0B",
     maxProgress: 100,
   },
   {
-    type: 'TIME_SAVER_BRONZE',
-    name: 'Économiste Bronze',
-    description: '1 heure économisée',
-    icon: 'hourglass',
-    color: '#CD7F32',
+    type: "TIME_SAVER_BRONZE",
+    name: "Économiste Bronze",
+    description: "1 heure économisée",
+    icon: "hourglass",
+    color: "#CD7F32",
     maxProgress: 60,
   },
   {
-    type: 'TIME_SAVER_SILVER',
-    name: 'Économiste Argent',
-    description: '5 heures économisées',
-    icon: 'hourglass',
-    color: '#C0C0C0',
+    type: "TIME_SAVER_SILVER",
+    name: "Économiste Argent",
+    description: "5 heures économisées",
+    icon: "hourglass",
+    color: "#C0C0C0",
     maxProgress: 300,
   },
   {
-    type: 'TIME_SAVER_GOLD',
-    name: 'Économiste Or',
-    description: '10 heures économisées',
-    icon: 'hourglass',
-    color: '#FFD700',
+    type: "TIME_SAVER_GOLD",
+    name: "Économiste Or",
+    description: "10 heures économisées",
+    icon: "hourglass",
+    color: "#FFD700",
     maxProgress: 600,
   },
   {
-    type: 'TIME_SAVER_PLATINUM',
-    name: 'Économiste Platine',
-    description: '24 heures économisées',
-    icon: 'hourglass',
-    color: '#E5E4E2',
+    type: "TIME_SAVER_PLATINUM",
+    name: "Économiste Platine",
+    description: "24 heures économisées",
+    icon: "hourglass",
+    color: "#E5E4E2",
     maxProgress: 1440,
   },
   {
-    type: 'EARLY_BIRD',
-    name: 'Lève-tôt',
-    description: '5 tickets avant 8h',
-    icon: 'sunny',
-    color: '#F97316',
+    type: "EARLY_BIRD",
+    name: "Lève-tôt",
+    description: "5 tickets avant 8h",
+    icon: "sunny",
+    color: "#F97316",
     maxProgress: 5,
   },
   {
-    type: 'NIGHT_OWL',
-    name: 'Couche-tard',
-    description: '5 tickets après 18h',
-    icon: 'moon',
-    color: '#6366F1',
+    type: "NIGHT_OWL",
+    name: "Couche-tard",
+    description: "5 tickets après 18h",
+    icon: "moon",
+    color: "#6366F1",
     maxProgress: 5,
   },
   {
-    type: 'MULTI_SERVICE',
-    name: 'Multi-Services',
-    description: '5 services différents utilisés',
-    icon: 'apps',
-    color: '#14B8A6',
+    type: "MULTI_SERVICE",
+    name: "Multi-Services",
+    description: "5 services différents utilisés",
+    icon: "apps",
+    color: "#14B8A6",
     maxProgress: 5,
   },
   {
-    type: 'LOYAL_CUSTOMER',
-    name: 'Client Fidèle',
-    description: '10 visites au même établissement',
-    icon: 'heart',
-    color: '#EC4899',
+    type: "LOYAL_CUSTOMER",
+    name: "Client Fidèle",
+    description: "10 visites au même établissement",
+    icon: "heart",
+    color: "#EC4899",
     maxProgress: 10,
   },
   {
-    type: 'QUICK_RESPONSE',
-    name: 'Réactif',
-    description: 'Confirmé présence en moins de 2 min',
-    icon: 'flash',
-    color: '#06B6D4',
+    type: "QUICK_RESPONSE",
+    name: "Réactif",
+    description: "Confirmé présence en moins de 2 min",
+    icon: "flash",
+    color: "#06B6D4",
     maxProgress: 5,
   },
   {
-    type: 'PERFECT_TIMING',
-    name: 'Timing Parfait',
-    description: 'Arrivé pile au bon moment',
-    icon: 'time',
-    color: '#84CC16',
+    type: "PERFECT_TIMING",
+    name: "Timing Parfait",
+    description: "Arrivé pile au bon moment",
+    icon: "time",
+    color: "#84CC16",
     maxProgress: 10,
   },
   {
-    type: 'WEEKEND_WARRIOR',
-    name: 'Guerrier du Weekend',
-    description: '3 tickets le weekend',
-    icon: 'game-controller',
-    color: '#A855F7',
+    type: "WEEKEND_WARRIOR",
+    name: "Guerrier du Weekend",
+    description: "3 tickets le weekend",
+    icon: "game-controller",
+    color: "#A855F7",
     maxProgress: 3,
   },
 ];
@@ -233,24 +242,24 @@ const calculateXP = (stats: UserStats): number => {
 const calculateLevel = (xp: number): { level: number; nextLevelXp: number } => {
   let level = 1;
   let required = 100;
-  
+
   while (xp >= required && level < 50) {
     xp -= required;
     level++;
     required = Math.floor(required * 1.2);
   }
-  
+
   return { level, nextLevelXp: required };
 };
 
 // Get rank title
 const getRankTitle = (level: number): string => {
-  if (level < 5) return 'Débutant';
-  if (level < 10) return 'Habitué';
-  if (level < 15) return 'Expert';
-  if (level < 20) return 'Maître';
-  if (level < 30) return 'Légende';
-  return 'Immortel';
+  if (level < 5) return "Débutant";
+  if (level < 10) return "Habitué";
+  if (level < 15) return "Expert";
+  if (level < 20) return "Maître";
+  if (level < 30) return "Légende";
+  return "Immortel";
 };
 
 const initialStats: UserStats = {
@@ -277,13 +286,13 @@ export const useUserStatsStore = create<UserStatsState>()(
       ...initialStats,
       isLoading: false,
       error: null,
-      badges: BADGE_DEFINITIONS.map(b => ({ ...b, progress: 0 })),
+      badges: BADGE_DEFINITIONS.map((b) => ({ ...b, progress: 0 })),
       currentLevel: 1,
       xpPoints: 0,
       nextLevelXp: 100,
 
       recordTicketCreated: (ticket) => {
-        console.log('[UserStats] Recording ticket created:', ticket);
+        console.log("[UserStats] Recording ticket created:", ticket);
         const state = get();
         const now = new Date();
         const hour = now.getHours();
@@ -306,7 +315,7 @@ export const useUserStatsStore = create<UserStatsState>()(
         // Update unique establishments/services
         const uniqueEstablishments = new Set(state.uniqueEstablishmentsVisited);
         uniqueEstablishments.add(ticket.establishment_id);
-        
+
         const uniqueServices = new Set(state.uniqueServicesUsed);
         uniqueServices.add(ticket.service_id);
 
@@ -314,11 +323,11 @@ export const useUserStatsStore = create<UserStatsState>()(
         const today = now.toDateString();
         const lastDate = state.lastUsedDate?.toDateString();
         let streakDays = state.streakDays;
-        
+
         if (lastDate !== today) {
           const yesterday = new Date();
           yesterday.setDate(yesterday.getDate() - 1);
-          
+
           if (lastDate === yesterday.toDateString()) {
             streakDays++;
           } else {
@@ -349,17 +358,27 @@ export const useUserStatsStore = create<UserStatsState>()(
           nextLevelXp,
         });
 
-        console.log('[UserStats] Updated after creation - Level:', level, 'XP:', xp, 'Tickets:', newStats.totalTicketsCreated);
+        console.log(
+          "[UserStats] Updated after creation - Level:",
+          level,
+          "XP:",
+          xp,
+          "Tickets:",
+          newStats.totalTicketsCreated,
+        );
 
         get().checkAndUnlockBadges();
       },
 
       recordTicketCompleted: (ticket) => {
         const state = get();
-        
+
         // Estimate time saved: traditional wait (position * avg 5 min) vs actual
         const estimatedTraditionalWait = ticket.eta_minutes * 1.5; // Usually longer
-        const timeSaved = Math.max(0, estimatedTraditionalWait - (ticket.wait_time_actual || 0));
+        const timeSaved = Math.max(
+          0,
+          estimatedTraditionalWait - (ticket.wait_time_actual || 0),
+        );
 
         const newStats = {
           ...state,
@@ -390,8 +409,9 @@ export const useUserStatsStore = create<UserStatsState>()(
       recordPresenceConfirmed: (responseTimeSeconds) => {
         const state = get();
         let perfectResponseCount = state.perfectResponseCount;
-        
-        if (responseTimeSeconds < 120) { // Less than 2 minutes
+
+        if (responseTimeSeconds < 120) {
+          // Less than 2 minutes
           perfectResponseCount++;
         }
 
@@ -406,8 +426,8 @@ export const useUserStatsStore = create<UserStatsState>()(
 
       recordArrival: (accuracy) => {
         const state = get();
-        
-        if (accuracy === 'perfect') {
+
+        if (accuracy === "perfect") {
           set({
             perfectTimingCount: state.perfectTimingCount + 1,
           });
@@ -424,53 +444,63 @@ export const useUserStatsStore = create<UserStatsState>()(
 
       checkAndUnlockBadges: () => {
         const state = get();
-        const newBadges = state.badges.map(badge => {
+        const newBadges = state.badges.map((badge) => {
           let progress = 0;
 
           switch (badge.type) {
-            case 'FIRST_TICKET':
+            case "FIRST_TICKET":
               progress = Math.min(badge.maxProgress, state.totalTicketsCreated);
               break;
-            case 'REGULAR_USER':
+            case "REGULAR_USER":
               progress = Math.min(badge.maxProgress, state.totalTicketsCreated);
               break;
-            case 'QUEUE_MASTER':
+            case "QUEUE_MASTER":
               progress = Math.min(badge.maxProgress, state.totalTicketsCreated);
               break;
-            case 'QUEUE_LEGEND':
+            case "QUEUE_LEGEND":
               progress = Math.min(badge.maxProgress, state.totalTicketsCreated);
               break;
-            case 'TIME_SAVER_BRONZE':
-            case 'TIME_SAVER_SILVER':
-            case 'TIME_SAVER_GOLD':
-            case 'TIME_SAVER_PLATINUM':
-              progress = Math.min(badge.maxProgress, state.totalTimeSavedMinutes);
+            case "TIME_SAVER_BRONZE":
+            case "TIME_SAVER_SILVER":
+            case "TIME_SAVER_GOLD":
+            case "TIME_SAVER_PLATINUM":
+              progress = Math.min(
+                badge.maxProgress,
+                state.totalTimeSavedMinutes,
+              );
               break;
-            case 'EARLY_BIRD':
+            case "EARLY_BIRD":
               progress = Math.min(badge.maxProgress, state.earlyBirdCount);
               break;
-            case 'NIGHT_OWL':
+            case "NIGHT_OWL":
               progress = Math.min(badge.maxProgress, state.nightOwlCount);
               break;
-            case 'MULTI_SERVICE':
-              progress = Math.min(badge.maxProgress, state.uniqueServicesUsed.length);
+            case "MULTI_SERVICE":
+              progress = Math.min(
+                badge.maxProgress,
+                state.uniqueServicesUsed.length,
+              );
               break;
-            case 'LOYAL_CUSTOMER':
+            case "LOYAL_CUSTOMER":
               // Count max visits to single establishment
               progress = badge.progress; // Simplified
               break;
-            case 'QUICK_RESPONSE':
-              progress = Math.min(badge.maxProgress, state.perfectResponseCount);
+            case "QUICK_RESPONSE":
+              progress = Math.min(
+                badge.maxProgress,
+                state.perfectResponseCount,
+              );
               break;
-            case 'PERFECT_TIMING':
+            case "PERFECT_TIMING":
               progress = Math.min(badge.maxProgress, state.perfectTimingCount);
               break;
-            case 'WEEKEND_WARRIOR':
+            case "WEEKEND_WARRIOR":
               progress = Math.min(badge.maxProgress, state.weekendTickets);
               break;
           }
 
-          const isNewlyUnlocked = progress >= badge.maxProgress && !badge.unlockedAt;
+          const isNewlyUnlocked =
+            progress >= badge.maxProgress && !badge.unlockedAt;
 
           return {
             ...badge,
@@ -486,18 +516,78 @@ export const useUserStatsStore = create<UserStatsState>()(
         set({ isLoading: true, error: null });
         try {
           const stats = await ticketsApi.getTicketStats();
-          // Merge with local stats
+          const state = get();
+
+          // Merge backend stats with local stats (take max of both)
+          const mergedTotalTickets = Math.max(
+            state.totalTicketsCreated,
+            stats.total_tickets || 0,
+          );
+
+          // Also merge saved_stats from backend if available
+          const savedStats = stats.saved_stats || {};
+          const mergedXp = Math.max(state.xpPoints, savedStats.currentXp || 0);
+          const mergedLevel = Math.max(
+            state.currentLevel,
+            savedStats.currentLevel || 1,
+          );
+          const mergedPerfectTiming = Math.max(
+            state.perfectTimingCount,
+            savedStats.perfectTimingCount || 0,
+          );
+          const mergedQuickResponse = Math.max(
+            state.perfectResponseCount,
+            savedStats.quickResponseCount || 0,
+          );
+          const mergedWeekend = Math.max(
+            state.weekendTickets,
+            savedStats.weekendTickets || 0,
+          );
+
           set({
             isLoading: false,
-            totalTicketsCreated: stats.total_tickets,
+            totalTicketsCreated: mergedTotalTickets,
+            xpPoints: mergedXp,
+            currentLevel: mergedLevel,
+            perfectTimingCount: mergedPerfectTiming,
+            perfectResponseCount: mergedQuickResponse,
+            weekendTickets: mergedWeekend,
+            error: null,
           });
+
+          // Recalculate badges based on merged data
+          get().checkAndUnlockBadges();
+
+          console.log(
+            "[userStatsStore] Loaded and merged stats from backend:",
+            {
+              totalTickets: mergedTotalTickets,
+              xp: mergedXp,
+              level: mergedLevel,
+            },
+          );
         } catch (error) {
-          set({ isLoading: false, error: 'Failed to load stats' });
+          console.error("[userStatsStore] Failed to load stats:", error);
+          set({ isLoading: false, error: "Failed to load stats" });
         }
       },
 
       syncStatsToBackend: async () => {
-        // Future: sync to backend
+        const state = get();
+        try {
+          await ticketsApi.syncUserStats({
+            totalTicketsCreated: state.totalTicketsCreated,
+            perfectTimingCount: state.perfectTimingCount,
+            quickResponseCount: state.perfectResponseCount,
+            weekendTickets: state.weekendTickets,
+            currentXp: state.xpPoints,
+            currentLevel: state.currentLevel,
+          });
+          console.log("[userStatsStore] Synced stats to backend successfully");
+        } catch (error) {
+          console.error("[userStatsStore] Failed to sync stats:", error);
+          // Don't set error state - sync is not critical
+        }
       },
 
       getRankTitle: () => {

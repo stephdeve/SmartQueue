@@ -344,7 +344,7 @@ export const ProfileScreen: React.FC = () => {
           {/* Member Badge */}
           <View style={styles.memberBadge}>
             <Ionicons name="shield-checkmark" size={12} color={colors.primary} />
-            <Text style={[styles.memberText, { color: '#FFFFFF' }]}>Member since {getMemberSince()}</Text>
+            <Text style={[styles.memberText, { color: '#FFFFFF' }]}>Membre depuis {getMemberSince()}</Text>
           </View>
         </View>
       </LinearGradient>

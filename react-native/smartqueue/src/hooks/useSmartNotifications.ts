@@ -21,7 +21,9 @@ export type SmartAlertType =
   | 'LEAVE_SOON'     // Partez dans X min
   | 'ARRIVING_SOON'  // Vous arrivez dans 2 min
   | 'ARRIVED'        // Vous êtes arrivé
-  | 'CALLED';        // C'est votre tour
+  | 'CALLED'         // C'est votre tour
+  | 'ALMOST_THERE'   // 5 personnes avant vous
+  | 'TEN_MIN_WARNING'; // Votre tour dans ~10 min
 
 export interface SmartAlert {
   type: SmartAlertType;
@@ -244,6 +246,44 @@ export const useSmartNotifications = (options: UseSmartNotificationsOptions = {}
       return;
     }
 
+    // HIGH: 5 people ahead (prepare to leave)
+    if (position <= 5 && position > 0 && !isCalled && !alertsSentRef.current.has('ALMOST_THERE')) {
+      const travelTime = distanceInfo?.travelTimes[preferredTransportMode] || 0;
+      const shouldLeaveNow = travelTime >= etaMinutes;
+      
+      sendNotification({
+        type: 'ALMOST_THERE',
+        title: '⚠️ 5 personnes avant vous',
+        body: shouldLeaveNow 
+          ? `Préparez-vous ! Il reste ${position} personnes. Temps de trajet: ${formatTravelTime(travelTime)} min.`
+          : `Préparez-vous ! Il reste ${position} personnes avant votre tour.`,
+        urgency: 'high',
+        timestamp: new Date(),
+        data: {
+          position,
+          travelTimeMinutes: travelTime,
+          etaMinutes,
+        },
+      });
+      return;
+    }
+
+    // MEDIUM: 10 minutes warning (ETA based)
+    if (etaMinutes <= 10 && etaMinutes > 5 && !alertsSentRef.current.has('TEN_MIN_WARNING')) {
+      sendNotification({
+        type: 'TEN_MIN_WARNING',
+        title: '⏱️ Votre tour approche',
+        body: `Environ ${etaMinutes} min d'attente restantes. Position: ${position}ème. Préparez-vous à partir !`,
+        urgency: 'medium',
+        timestamp: new Date(),
+        data: {
+          etaMinutes,
+          position,
+        },
+      });
+      return;
+    }
+
     // CRITICAL: Called (it's your turn)
     if (isCalled && !alertsSentRef.current.has('CALLED')) {
       sendNotification({
@@ -269,6 +309,7 @@ export const useSmartNotifications = (options: UseSmartNotificationsOptions = {}
     activeTicket,
     getDepartureInfo,
     sendNotification,
+    preferredTransportMode,
   ]);
 
   // Calculate progress percentage for journey
