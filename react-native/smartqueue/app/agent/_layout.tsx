@@ -164,6 +164,12 @@ export default function AgentTabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="stats"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

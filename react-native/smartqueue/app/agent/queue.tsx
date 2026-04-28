@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl, ScrollView, Dimensions, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
@@ -33,12 +33,15 @@ export default function AgentQueue() {
   const counterId = params.counterId;
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
   const [currentTicket, setCurrentTicket] = useState<Ticket | null>(null);
   const [stats, setStats] = useState<ServiceStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<string>('open');
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchData = async () => {
     if (!serviceId) return;
@@ -54,6 +57,7 @@ export default function AgentQueue() {
         .sort((a: Ticket, b: Ticket) => a.position - b.position);
 
       setTickets(waitingTickets);
+      setFilteredTickets(waitingTickets);
       setStats({
         waiting: statsRes.data?.waiting || statsRes.data?.people || 0,
         processed: statsRes.data?.processed || 0,
@@ -77,6 +81,37 @@ export default function AgentQueue() {
       fetchData();
     }, [serviceId])
   );
+
+  // Filter tickets based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredTickets(tickets);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = tickets.filter(t => 
+        t.number.toLowerCase().includes(query) ||
+        t.position.toString().includes(query)
+      );
+      setFilteredTickets(filtered);
+    }
+  }, [searchQuery, tickets]);
+
+  // Timer for elapsed time since ticket was called
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (currentTicket?.called_at) {
+      const updateElapsed = () => {
+        const called = new Date(currentTicket.called_at!);
+        const now = new Date();
+        setElapsedTime(Math.floor((now.getTime() - called.getTime()) / 1000));
+      };
+      updateElapsed();
+      interval = setInterval(updateElapsed, 1000);
+    } else {
+      setElapsedTime(0);
+    }
+    return () => clearInterval(interval);
+  }, [currentTicket]);
 
   const callNext = async () => {
     if (!serviceId) return;
@@ -179,14 +214,14 @@ export default function AgentQueue() {
   };
 
   const renderTicket = ({ item, index }: { item: Ticket; index: number }) => {
-    const getPriorityColor = () => {
+    const getPriorityConfig = () => {
       switch (item.priority) {
-        case 'vip': return '#FFD60A';
-        case 'high': return '#FF9500';
-        default: return '#6B7280';
+        case 'vip': return { color: '#FFD60A', bgColor: '#FFD60A20', label: 'VIP', icon: 'star' };
+        case 'high': return { color: '#FF9500', bgColor: '#FF950020', label: 'PRIORITAIRE', icon: 'alert-circle' };
+        default: return { color: '#22C55E', bgColor: '#22C55E20', label: 'NORMAL', icon: 'person' };
       }
     };
-    
+
     const formatTime = (dateStr: string) => {
       if (!dateStr) return '--:--';
       try {
@@ -197,60 +232,68 @@ export default function AgentQueue() {
         return '--:--';
       }
     };
-    
+
     const getWaitTime = () => {
-      if (!item.created_at) return null;
+      if (!item.created_at) return '--';
       try {
         const created = new Date(item.created_at);
-        if (isNaN(created.getTime())) return null;
+        if (isNaN(created.getTime())) return '--';
         const now = new Date();
         const diffMs = now.getTime() - created.getTime();
         const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 1) return 'À l\'instant';
         if (diffMins < 60) return `${diffMins} min`;
         const hours = Math.floor(diffMins / 60);
         const mins = diffMins % 60;
         return `${hours}h${mins.toString().padStart(2, '0')}`;
       } catch {
-        return null;
+        return '--';
       }
     };
-    
+
+    const priority = getPriorityConfig();
     const waitTime = getWaitTime();
-    
+    const createdTime = formatTime(item.created_at);
+
     return (
-      <View style={[styles.ticketCard, { backgroundColor: colors.surface }]}>
-        {/* Left: Position number */}
-        <View style={[styles.positionBadge, { backgroundColor: colors.primary }]}>
-          <Text style={styles.positionNumber}>{index + 1}</Text>
+      <View style={[styles.ticketCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth:0.5,  }]}>
+        {/* Left: Rank Icon */}
+        <View style={[styles.ticketIconContainer, { backgroundColor: priority.bgColor }]}>
+          <Text style={[styles.ticketIconRank, { color: priority.color }]}>{index + 1}</Text>
         </View>
-        <View style={styles.ticketDetails}>
-          <Text style={[styles.ticketPosition, { color: colors.textPrimary }]}>Position {item.position}</Text>
-          <View style={[styles.priorityBadge, 
-            item.priority === 'high' && { backgroundColor: '#FF9500' },
-            item.priority === 'vip' && { backgroundColor: '#FFD60A' },
-            item.priority === 'normal' && { backgroundColor: colors.textSecondary }
-          ]}>
-            <Text style={styles.priorityText}>{item.priority?.toUpperCase()}</Text>
-          </View>
-          <View style={styles.ticketMeta}>
-            <View style={styles.metaItem}>
-              <Ionicons name="time-outline" size={12} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                {formatTime(item.created_at)}
+
+        {/* Center: Main Info */}
+        <View style={styles.ticketContent}>
+          {/* Row 1: Ticket Number + Priority Badge */}
+          <View style={styles.ticketTitleRow}>
+            <Text style={[styles.ticketTitle, { color: colors.textPrimary }]}>
+              {item.number}
+            </Text>
+            <View style={[styles.ticketBadge, { backgroundColor: priority.bgColor }]}>
+              <Ionicons name={priority.icon as any} size={10} color={priority.color} />
+              <Text style={[styles.ticketBadgeText, { color: priority.color }]}>
+                {priority.label}
               </Text>
             </View>
-            {waitTime && (
-              <View style={styles.waitTimeBadge}>
-                <Text style={styles.waitTimeText}>⏱ {waitTime}</Text>
-              </View>
-            )}
           </View>
-        </View>
-        
-        {/* Right: Position indicator */}
-        <View style={styles.positionIndicator}>
-          <Text style={[styles.positionLabelText, { color: colors.textSecondary }]}>Pos.</Text>
-          <Text style={[styles.positionValueText, { color: colors.text }]}>{item.position}</Text>
+
+          {/* Row 2: Time info */}
+          <View style={styles.ticketInfoRow}>
+            <Ionicons name="time-outline" size={12} color={colors.textSecondary} />
+            <Text style={[styles.ticketInfoText, { color: colors.textSecondary }]}>
+              Pris à {createdTime}
+            </Text>
+          </View>
+
+          {/* Row 3: Wait time badge */}
+          <View style={styles.ticketBadgesRow}>
+            <View style={[styles.ticketWaitBadge, { backgroundColor: colors.primary + '15' }]}>
+              <Ionicons name="hourglass-outline" size={12} color={colors.primary} />
+              <Text style={[styles.ticketWaitText, { color: colors.primary }]}>
+                Attente: {waitTime}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
     );
@@ -271,7 +314,7 @@ export default function AgentQueue() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>File d'attente</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>File d&apos;attente</Text>
         <TouchableOpacity 
           style={[styles.statusToggle, { backgroundColor: serviceStatus === 'open' ? '#22C55E' : '#EF4444' }]}
           onPress={toggleService}
@@ -310,6 +353,11 @@ export default function AgentQueue() {
             <View>
               <Text style={styles.currentTicketLabel}>Ticket en cours</Text>
               <Text style={styles.currentTicketNumber}>{currentTicket.number}</Text>
+              {elapsedTime > 0 && (
+                <Text style={styles.elapsedTime}>
+                  Appelé depuis {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')}
+                </Text>
+              )}
             </View>
           </View>
           <View style={styles.currentTicketActions}>
@@ -357,9 +405,31 @@ export default function AgentQueue() {
 
       {/* Queue List */}
       <View style={styles.queueSection}>
-        <Text style={[styles.queueTitle, { color: colors.textPrimary }]}>Prochains dans la file</Text>
+        <View style={styles.queueHeader}>
+          <Text style={[styles.queueTitle, { color: colors.textPrimary }]}>
+            Prochains dans la file ({filteredTickets.length})
+          </Text>
+        </View>
+        
+        {/* Search Bar */}
+        <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Ionicons name="search" size={20} color={colors.textSecondary} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.textPrimary }]}
+            placeholder="Rechercher un numéro..."
+            placeholderTextColor={colors.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+
         <FlatList
-          data={tickets.slice(0, 10)}
+          data={filteredTickets.slice(0, 10)}
           renderItem={renderTicket}
           keyExtractor={(item) => item.id.toString()}
           refreshControl={
@@ -368,7 +438,7 @@ export default function AgentQueue() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="checkmark-circle-outline" size={64} color={colors.textSecondary} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>File vide</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>File vide</Text>
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Aucun ticket en attente</Text>
             </View>
           }
@@ -476,6 +546,12 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
   },
+  elapsedTime: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 4,
+  },
   currentTicketActions: {
     flexDirection: 'row',
     gap: 8,
@@ -538,6 +614,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    padding: 0,
+  },
   queueTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -551,89 +643,80 @@ const styles = StyleSheet.create({
   ticketCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 14,
     borderRadius: 16,
     marginBottom: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 2,
   },
-  positionBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  ticketIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-      marginRight:10,
+    marginRight: 14,
   },
-  positionNumber: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
+  ticketIconRank: {
+    fontSize: 20,
+    fontWeight: '800',
   },
   ticketContent: {
     flex: 1,
-    marginLeft: 12,
+    justifyContent: 'center',
   },
-  ticketHeader: {
+  ticketTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     marginBottom: 6,
   },
-  ticketNumberText: {
-    fontSize: 18,
+  ticketTitle: {
+    fontSize: 17,
     fontWeight: '700',
+    flex: 1,
   },
-  priorityBadge: {
+  ticketBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 15,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 10,
-    gap: 3,
+    borderRadius: 6,
+    gap: 4,
+    marginLeft: 8,
   },
-  priorityText: {
-    color: 'white',
+  ticketBadgeText: {
     fontSize: 9,
     fontWeight: '700',
   },
-  ticketMeta: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  metaItem: {
+  ticketInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    marginTop: 2,
   },
-  metaText: {
-    fontSize: 12,
+  ticketInfoText: {
+    fontSize: 13,
+    marginLeft: 5,
   },
-  waitTimeBadge: {
-    backgroundColor: '#F59E0B20',
-    paddingHorizontal: 15,
-    paddingVertical: 3,
-    borderRadius: 10,
+  ticketBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
   },
-  waitTimeText: {
+  ticketWaitBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 5,
+  },
+  ticketWaitText: {
     fontSize: 11,
-    color: '#F59E0B',
     fontWeight: '600',
-  },
-  positionIndicator: {
-    alignItems: 'center',
-    paddingHorizontal: 15,
-  },
-  positionLabelText: {
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  positionValueText: {
-    fontSize: 18,
-    fontWeight: '700',
   },
   emptyState: {
     alignItems: 'center',

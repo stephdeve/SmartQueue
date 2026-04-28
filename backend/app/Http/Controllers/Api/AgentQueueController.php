@@ -39,6 +39,7 @@ class AgentQueueController extends Controller
                     'status' => $t->status,
                     'priority' => $t->priority,
                     'position' => $t->position,
+                    'created_at' => $t->created_at->toDateTimeString(),
                     'called_at' => optional($t->called_at)->toDateTimeString(),
                     'absent_at' => optional($t->absent_at)->toDateTimeString(),
                     'user' => $t->user ? [

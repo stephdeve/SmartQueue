@@ -34,6 +34,7 @@ export default function AgentHome() {
   const [selectedCounter, setSelectedCounter] = useState<Counter | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isTogglingCounter, setIsTogglingCounter] = useState(false);
 
   // Time-based greeting
   const getGreeting = () => {
@@ -102,6 +103,34 @@ export default function AgentHome() {
 
   const navigateToProfile = () => {
     router.push('/agent/profile');
+  };
+
+  const navigateToStats = () => {
+    router.push('/agent/stats');
+  };
+
+  const toggleCounter = async (counter: Counter) => {
+    if (isTogglingCounter) return;
+    setIsTogglingCounter(true);
+    try {
+      const isOpening = counter.status !== 'open';
+      const endpoint = isOpening ? `/counters/${counter.id}/open` : `/counters/${counter.id}/close`;
+      await axiosClient.post(endpoint);
+      
+      // Update local state
+      setCounters(prev => prev.map(c => 
+        c.id === counter.id 
+          ? { ...c, status: isOpening ? 'open' : 'closed' }
+          : c
+      ));
+      if (selectedCounter?.id === counter.id) {
+        setSelectedCounter({ ...counter, status: isOpening ? 'open' : 'closed' });
+      }
+    } catch (error: any) {
+      showError('Erreur', error?.response?.data?.message || 'Impossible de modifier le statut du guichet');
+    } finally {
+      setIsTogglingCounter(false);
+    }
   };
 
   const navigateToQueue = () => {
@@ -215,20 +244,31 @@ export default function AgentHome() {
             showsHorizontalScrollIndicator={false}
             keyExtractor={(item) => item.id.toString()}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.counterCard,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
-                  selectedCounter?.id === item.id && { borderColor: colors.primary, borderWidth: 2 }
-                ]}
-                onPress={() => setSelectedCounter(item)}
-              >
-                <Ionicons name="desktop-outline" size={20} color={colors.primary} />
-                <Text style={[styles.counterName, { color: colors.textPrimary }]}>{item.name}</Text>
-                <View style={[styles.counterStatus, { backgroundColor: item.status === 'open' ? '#4CAF50' : '#9E9E9E' }]}>
-                  <Text style={styles.counterStatusText}>{item.status === 'open' ? 'Ouvert' : 'Fermé'}</Text>
-                </View>
-              </TouchableOpacity>
+              <View style={[
+                styles.counterCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+                selectedCounter?.id === item.id && { borderColor: colors.primary, borderWidth: 2 }
+              ]}>
+                <TouchableOpacity
+                  style={styles.counterContent}
+                  onPress={() => setSelectedCounter(item)}
+                >
+                  <Ionicons name="desktop-outline" size={20} color={colors.primary} />
+                  <Text style={[styles.counterName, { color: colors.textPrimary }]}>{item.name}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.counterToggle, { 
+                    backgroundColor: item.status === 'open' ? '#4CAF50' : '#9E9E9E',
+                    opacity: isTogglingCounter ? 0.6 : 1
+                  }]}
+                  onPress={() => toggleCounter(item)}
+                  disabled={isTogglingCounter}
+                >
+                  <Text style={styles.counterStatusText}>
+                    {item.status === 'open' ? 'Ouvert' : 'Fermé'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
             style={styles.countersList}
           />
@@ -245,7 +285,17 @@ export default function AgentHome() {
           activeOpacity={0.7}
         >
           <Ionicons name="list" size={24} color="white" />
-          <Text style={[styles.actionButtonText]}>Gérer la file d'attente</Text>
+          <Text style={[styles.actionButtonText]}>Gérer la file d&apos;attente</Text>
+          <Ionicons name="chevron-forward" size={20} color="white" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: '#8B5CF6' }]}
+          onPress={navigateToStats}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="stats-chart" size={24} color="white" />
+          <Text style={[styles.actionButtonText]}>Voir les statistiques</Text>
           <Ionicons name="chevron-forward" size={20} color="white" />
         </TouchableOpacity>
 
@@ -404,21 +454,26 @@ const styles = StyleSheet.create({
   counterCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 12,
     borderRadius: 12,
     marginRight: 12,
     borderWidth: 1,
     gap: 8,
   },
+  counterContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
   counterName: {
     fontSize: 14,
     fontWeight: '500',
   },
-  counterStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+  counterToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   counterStatusText: {
     color: 'white',
