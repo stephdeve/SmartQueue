@@ -14,7 +14,7 @@ import MapView, { Marker, Polyline, PROVIDER_DEFAULT, Region } from "react-nativ
 import { useGeolocation } from "../../hooks/useGeolocation";
 import { useCustomAlert } from "../../hooks/useCustomAlert";
 import { establishmentsApi, Establishment } from "../../api/establishmentsApi";
-import { Colors, Theme } from "../../theme";
+import {  Theme } from "../../theme";
 import { useThemeColors } from "../../hooks/useThemeColors";
 import { Badge } from "../../components/ui/Badge";
 import { Ionicons } from "@expo/vector-icons";
@@ -39,7 +39,7 @@ export const ExploreScreen: React.FC = () => {
   const { location, getCurrentPosition } = useGeolocation();
   const [placeName, setPlaceName] = useState<string | null>(null);
   const { hasActiveTicket, activeTicket, fetchActiveTicket, isInitialized } = useTicket();
-  const { AlertComponent, showError, showInfo } = useCustomAlert();
+  const { AlertComponent, showError } = useCustomAlert();
 
   // Debug log
   useEffect(() => {
@@ -296,6 +296,28 @@ useEffect(() => {
     loadEstablishments(false); // false = permettre l'utilisation du cache
   }, [location?.latitude, location?.longitude, searchQuery, loadEstablishments]);
 
+  // Calculer la distance depuis la position de l'utilisateur
+  const calculateDistance = useCallback((est: Establishment) => {
+    if (!location) return Infinity;
+    // Check for null/undefined/invalid coordinates
+    if (est.lat == null || est.lng == null) return Infinity;
+    const estLat = Number(est.lat);
+    const estLng = Number(est.lng);
+    if (isNaN(estLat) || isNaN(estLng) || estLat === 0 && estLng === 0) return Infinity;
+
+    const R = 6371; // Rayon de la Terre en km
+    const dLat = (estLat - location.latitude) * (Math.PI / 180);
+    const dLng = (estLng - location.longitude) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(location.latitude * (Math.PI / 180)) *
+        Math.cos(estLat * (Math.PI / 180)) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }, [location]);
+
   // Notify for nearby low crowd establishments
   useEffect(() => {
     if (!location || establishments.length === 0) return;
@@ -332,28 +354,6 @@ useEffect(() => {
       notifiedEstablishmentsRef.current.add(`open_${est.id}`);
     }
   }, [establishments, location, calculateDistance, notifyCrowdLevelChange, notifyEstablishmentOpen]);
-
-  // Calculer la distance depuis la position de l'utilisateur
-  const calculateDistance = useCallback((est: Establishment) => {
-    if (!location) return Infinity;
-    // Check for null/undefined/invalid coordinates
-    if (est.lat == null || est.lng == null) return Infinity;
-    const estLat = Number(est.lat);
-    const estLng = Number(est.lng);
-    if (isNaN(estLat) || isNaN(estLng) || estLat === 0 && estLng === 0) return Infinity;
-
-    const R = 6371; // Rayon de la Terre en km
-    const dLat = (estLat - location.latitude) * (Math.PI / 180);
-    const dLng = (estLng - location.longitude) * (Math.PI / 180);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(location.latitude * (Math.PI / 180)) *
-        Math.cos(estLat * (Math.PI / 180)) *
-        Math.sin(dLng / 2) *
-        Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }, [location]);
 
   // Fonction de tri
   const sortEstablishments = useCallback((estList: Establishment[]) => {
@@ -670,7 +670,7 @@ useEffect(() => {
           >
             <Ionicons name="grid-outline" size={16} color={selectedFilter === "all" ? '#FFFFFF' : colors.textSecondary} />
             <Text style={{
-              marginLeft: 8,
+              marginLeft: 4,
               fontWeight: '500',
               color: selectedFilter === "all" ? '#FFFFFF' : colors.textSecondary,
             }}>
@@ -699,7 +699,7 @@ useEffect(() => {
               }}
             >
               <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
-              <Text style={{ marginLeft: 8, fontWeight: '500', color: colors.textSecondary }} numberOfLines={1}>
+              <Text style={{ marginLeft: 4, fontWeight: '500', color: colors.textSecondary }} numberOfLines={1}>
                 {est.name}
               </Text>
             </TouchableOpacity>

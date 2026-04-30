@@ -260,9 +260,16 @@ export const ServiceDetailsScreen: React.FC = () => {
             resizeMode="cover"
           />
           <View style={{ position: 'absolute', left: 0, right: 0, top: 0, paddingTop: 48, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', zIndex: 10 }}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.3)' }}
-              onPress={() => router.back()}
+              onPress={() => {
+                // If coming from ExploreScreen (not from QR scan), go back to explore tab
+                if (!fromQr && establishmentId) {
+                  router.replace('/');
+                } else {
+                  router.back();
+                }
+              }}
             >
               <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>

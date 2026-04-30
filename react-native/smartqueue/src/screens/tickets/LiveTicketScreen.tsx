@@ -13,12 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useTicket } from '../../store/ticketStore';
-import { useTicketSocket } from '../../hooks/useTicketSocket';
 import { useDistanceTracking } from '../../hooks/useDistanceTracking';
 import { useSmartNotifications } from '../../hooks/useSmartNotifications';
 import { useUserStatsStore } from '../../store/userStatsStore';
 import { formatDistance, formatTravelTime } from '../../utils/distance';
-import { CalledTicketOverlay } from '../../components/CalledTicketOverlay';
 import { useCustomAlert } from '../../hooks/useCustomAlert';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import axiosClient from '../../api/axiosClient';
@@ -62,9 +60,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
     return activeTicket?.id || null;
   }, [ticketId, activeTicket?.id]);
 
-  // WebSocket connection
-  useTicketSocket(effectiveTicketId?.toString() || null);
-  
+  // WebSocket is now connected at tab layout level - removed duplicate
   // Check if establishment has valid coordinates
   const hasValidCoordinates = activeTicket?.establishment && 
     (activeTicket.establishment as any)?.lat !== null && 
@@ -215,11 +211,6 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
     );
   };
 
-  const getOrdinal = (n: number): string => {
-    if (n === 1) return '1er';
-    return `${n}ème`;
-  };
-
   const getStatusColor = () => {
     if (isCalled) return [colors.danger, colors.danger];
     if (position <= 3) return [colors.warning, colors.warning];
@@ -236,18 +227,30 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
         style={styles.headerGradient}
       >
         <View style={styles.headerContent}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-            onPress={() => router.back()}
+            onPress={() => {
+              // Try to go back, if not possible go to tickets tab
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/tickets');
+              }
+            }}
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
           <View style={styles.headerTitleContainer}>
             <Text style={[styles.headerTitle, { color: '#FFFFFF' }]}>Ma File</Text>
-            <View style={[styles.liveBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <View style={[styles.liveDot, { backgroundColor: colors.danger }]} />
-              <Text style={[styles.liveText, { color: '#FFFFFF' }]}>LIVE</Text>
+            <View style={[styles.liveBadge, { backgroundColor: isCalled ? colors.danger + '40' : 'rgba(255,255,255,0.25)' }]}>
+              <View style={[styles.liveDot, { backgroundColor: isCalled ? '#FFFFFF' : colors.success }]} />
+              <Text style={[styles.liveText, { color: '#FFFFFF' }]}>{isCalled ? 'APPELÉ' : 'LIVE'}</Text>
+              {isCalled && (
+                <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                  <Ionicons name="notifications" size={12} color="#FFFFFF" style={{ marginLeft: 4 }} />
+                </Animated.View>
+              )}
             </View>
           </View>
           
@@ -271,15 +274,28 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
             },
           ]}
         >
-          {/* Status Banner */}
+          {/* Status Banner - Modern Design */}
           <LinearGradient
             colors={getStatusColor() as [string, string]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
             style={styles.statusBanner}
           >
-            <Ionicons name="time-outline" size={20} color="#FFFFFF" />
+            <View style={styles.statusIconContainer}>
+              <Ionicons
+                name={isCalled ? 'notifications' : position <= 3 ? 'walk' : 'time-outline'}
+                size={22}
+                color="#FFFFFF"
+              />
+            </View>
             <Text style={[styles.statusText, { color: '#FFFFFF' }]}>
               {isCalled ? 'C\'est votre tour !' : position <= 3 ? 'Bientôt votre tour' : 'En attente'}
             </Text>
+            {isCalled && (
+              <View style={styles.urgentPill}>
+                <Text style={styles.urgentPillText}>URGENT</Text>
+              </View>
+            )}
           </LinearGradient>
 
           {/* Ticket Info */}
@@ -292,13 +308,27 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
               <Text style={[styles.ticketNumber, { color: colors.textSecondary }]}>{activeTicket?.number || `TKT-${effectiveTicketId}`}</Text>
             </View>
 
-            {/* Position Display */}
+            {/* Position Display - Modern Badge Design */}
             <View style={styles.positionContainer}>
-              <Text style={[styles.positionLabel, { color: colors.textTertiary }]}>Votre position</Text>
-              <Animated.View style={{ transform: [{ scale: positionAnim }] }}>
-                <Text style={[styles.positionNumber, { color: colors.textPrimary }]}>{getOrdinal(position)}</Text>
-              </Animated.View>
-              <Text style={[styles.positionSubtitle, { color: colors.textTertiary }]}>dans la file</Text>
+              <View style={[styles.positionBadge, { backgroundColor: colors.primary + '15' }]}>
+                <Animated.View style={{ transform: [{ scale: positionAnim }] }}>
+                  <Text style={[styles.positionNumber, { color: colors.primary }]}>{position}</Text>
+                </Animated.View>
+                <Text style={[styles.positionSuffix, { color: colors.primary }]}>
+                  {position === 1 ? 'er' : 'ème'}
+                </Text>
+              </View>
+              <Text style={[styles.positionLabel, { color: colors.textTertiary }]}>
+                position dans la file
+              </Text>
+              {position <= 3 && (
+                <View style={[styles.urgentBadge, { backgroundColor: colors.warning + '20' }]}>
+                  <Ionicons name="flash" size={12} color={colors.warning} />
+                  <Text style={[styles.urgentBadgeText, { color: colors.warning }]}>
+                    {position === 1 ? "C'est bientôt votre tour !" : 'Approchez-vous du guichet'}
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Divider */}
@@ -502,18 +532,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
         </Animated.View>
       </ScrollView>
 
-      {/* Called Ticket Overlay */}
-      <CalledTicketOverlay
-        visible={isCalled}
-        counterNumber={counterNumber || undefined}
-        distanceInfo={distanceInfo}
-        countdownSeconds={countdownSeconds}
-        hasRecalled={hasRecalled}
-        onEnRoute={handleEnRoute}
-        onRecall={handleRecall}
-        onDefer={handleDefer}
-        onDismiss={handleDismiss}
-      />
+      {/* Called Ticket Overlay is now handled globally in (tabs)/_layout.tsx */}
     </View>
   );
 };
@@ -543,27 +562,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 10,
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   liveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 6,
+    marginRight: 8,
   },
   liveText: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
   },
   placeholder: {
     width: 40,
@@ -588,12 +612,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    gap: 12,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  statusIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statusText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0,0,0,0.15)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  urgentPill: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 4,
+  },
+  urgentPillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   ticketContent: {
     padding: 24,
@@ -615,21 +667,46 @@ const styles = StyleSheet.create({
   positionContainer: {
     alignItems: 'center',
     marginBottom: 24,
+    paddingTop: 8,
+  },
+  positionBadge: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    paddingVertical: 20,
+    borderRadius: 28,
+    marginBottom: 12,
   },
   positionLabel: {
     fontSize: 14,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+    textTransform: 'lowercase',
   },
   positionNumber: {
-    fontSize: 72,
+    fontSize: 64,
     fontWeight: '800',
-    lineHeight: 80,
+    lineHeight: 64,
   },
-  positionSubtitle: {
-    fontSize: 14,
-    marginTop: 4,
+  positionSuffix: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginTop: 8,
+    marginLeft: 2,
+  },
+  urgentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  urgentBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   divider: {
     height: 1,

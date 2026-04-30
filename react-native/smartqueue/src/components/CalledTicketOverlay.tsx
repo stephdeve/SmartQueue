@@ -22,7 +22,7 @@ interface CalledTicketOverlayProps {
   isSwapped?: boolean; // If ticket was already swapped/deferred
   gracePeriodExpiresAt?: string | null;
   onEnRoute: () => void;
-  onRecall: () => void;
+  onRecall: () => Promise<void>;
   onDefer: () => void; // New callback for defer action
   onDismiss: () => void;
 }
@@ -41,9 +41,9 @@ export const CalledTicketOverlay: React.FC<CalledTicketOverlayProps> = ({
   onDismiss,
 }) => {
   const colors = useThemeColors();
-  const isDark = !!colors.dark?.background;
   const [timeRemaining, setTimeRemaining] = useState(countdownSeconds);
   const [isExpired, setIsExpired] = useState(false);
+  const [isRecallLoading, setIsRecallLoading] = useState(false);
   const flashAnim = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -131,12 +131,14 @@ export const CalledTicketOverlay: React.FC<CalledTicketOverlayProps> = ({
   };
 
   // Handle "Recall me" button
-  const handleRecall = () => {
-    if (hasRecalled) return;
+  const handleRecall = async () => {
+    if (hasRecalled || isRecallLoading) return;
+    setIsRecallLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    onRecall();
+    await onRecall();
     // Reset countdown after recall
     setTimeRemaining(countdownSeconds);
+    setIsRecallLoading(false);
   };
 
   // Handle "Defer" button - swap position with next person
@@ -160,8 +162,9 @@ export const CalledTicketOverlay: React.FC<CalledTicketOverlayProps> = ({
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={false}
+      transparent={true}
       statusBarTranslucent
+      onRequestClose={() => {}} // Prevent back button dismiss on Android
     >
       <View style={{ flex: 1, backgroundColor: colors.danger }}>
         {/* Header */}
@@ -173,7 +176,7 @@ export const CalledTicketOverlay: React.FC<CalledTicketOverlayProps> = ({
           </Animated.View>
           
           <Text className="text-white text-3xl font-bold text-center mb-2">
-            C'est votre tour !
+            C&apos;est votre tour !
           </Text>
           
           {counterNumber && (
@@ -216,7 +219,7 @@ export const CalledTicketOverlay: React.FC<CalledTicketOverlayProps> = ({
               <Ionicons name="location" size={20} color="#FFFFFF" />
               <Text className="text-white font-bold ml-2">Distance actuelle</Text>
             </View>
-            <View className="flex-row justify-around">
+            <View className="flex-row mt-4 justify-around">
               <View className="items-center">
                 <Ionicons name="navigate" size={18} color="#FFFFFF" />
                 <Text className="text-white font-bold mt-1">
@@ -251,38 +254,48 @@ export const CalledTicketOverlay: React.FC<CalledTicketOverlayProps> = ({
               </TouchableOpacity>
             </Animated.View>
 
-            {/* "Defer" button - swap position with next person */}
+            {/* "Defer" button - swap position with next person - FILLED style */}
             <TouchableOpacity
-              className="h-16 rounded-2xl flex-row items-center justify-center border-2 border-white mb-4"
-              style={{ backgroundColor: 'transparent' }}
+              className="h-16 rounded-2xl flex-row items-center justify-center mb-4"
+              style={{
+                backgroundColor: isSwapped ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.25)',
+              }}
               onPress={handleDefer}
+              disabled={isSwapped}
               activeOpacity={0.8}
             >
-              <Ionicons name="swap-horizontal" size={24} color="#FFFFFF" />
-              <Text className="text-white font-bold text-lg ml-2">
-                Laisser passer
+              <Ionicons
+                name={isSwapped ? "checkmark-circle" : "swap-horizontal"}
+                size={24}
+                color={isSwapped ? "rgba(255,255,255,0.5)" : "#FFFFFF"}
+              />
+              <Text
+                className="font-bold text-lg ml-2"
+                style={{ color: isSwapped ? 'rgba(255,255,255,0.5)' : '#FFFFFF' }}
+              >
+                {isSwapped ? 'Déjà différé' : 'Laisser passer'}
               </Text>
             </TouchableOpacity>
 
-            {/* "Recall me" button */}
+            {/* "Recall me" button - OUTLINE style */}
             <TouchableOpacity
-              className="h-16 rounded-2xl flex-row items-center justify-center border-2"
+              className="h-16 rounded-2xl flex-row items-center justify-center border-2 mb-4"
               style={{
-                backgroundColor: hasRecalled ? 'rgba(255,255,255,0.1)' : 'transparent',
+                backgroundColor: hasRecalled ? 'rgba(0,0,0,0.3)' : 'transparent',
                 borderColor: hasRecalled ? 'rgba(255,255,255,0.3)' : '#FFFFFF',
               }}
               onPress={handleRecall}
-              disabled={hasRecalled}
+              disabled={hasRecalled || isRecallLoading}
               activeOpacity={0.8}
             >
-              <Ionicons 
-                name={hasRecalled ? "checkmark-circle" : "refresh"} 
-                size={24} 
-                color={hasRecalled ? "rgba(255,255,255,0.5)" : "#FFFFFF"} 
+              <Ionicons
+                name={hasRecalled ? "checkmark-circle" : "refresh"}
+                size={24}
+                color={hasRecalled ? "rgba(255,255,255,0.6)" : "#FFFFFF"}
               />
-              <Text 
+              <Text
                 className="font-bold text-lg ml-2"
-                style={{ color: hasRecalled ? 'rgba(255,255,255,0.5)' : '#FFFFFF' }}
+                style={{ color: hasRecalled ? 'rgba(255,255,255,0.6)' : '#FFFFFF' }}
               >
                 {hasRecalled ? 'Rappel déjà utilisé' : 'Me rappeler'}
               </Text>
@@ -295,12 +308,6 @@ export const CalledTicketOverlay: React.FC<CalledTicketOverlayProps> = ({
               </Text>
             )}
 
-            {/* Swapped notice */}
-            {isSwapped && (
-              <Text className="text-white/80 text-center text-sm mt-2">
-                Ticket déjà différé une fois. Vous ne pouvez plus déférer.
-              </Text>
-            )}
 
             {/* Info text */}
             <Text className="text-white/60 text-center text-sm mt-4">

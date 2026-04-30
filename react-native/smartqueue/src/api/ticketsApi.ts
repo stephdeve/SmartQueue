@@ -8,7 +8,7 @@ export interface Ticket {
   service_id: number;
   counter_id?: number;
   number: string;
-  status: 'created' | 'waiting' | 'called' | 'served' | 'closed' | 'absent' | 'expired';
+  status: 'created' | 'waiting' | 'called' | 'served' | 'closed' | 'absent' | 'expired' | 'dismissed';
   priority: number;
   position: number;
   eta_minutes: number;

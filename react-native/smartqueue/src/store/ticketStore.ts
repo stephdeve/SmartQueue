@@ -18,6 +18,9 @@ export interface TicketState {
   // Rappel (seconde chance)
   hasRecalled: boolean;
   countdownExpiry: Date | null;
+  
+  // Defer (laisser passer)
+  hasDeferred: boolean;
   counterNumber: string | null;
   
   // État de connexion WebSocket
@@ -51,6 +54,10 @@ export interface TicketState {
   setRecalled: () => void;
   resetRecall: () => void;
   setCountdownExpiry: (expiry: Date | null) => void;
+  
+  // Defer actions
+  setDeferred: () => void;
+  resetDeferred: () => void;
 }
 
 // Store de tickets avec Zustand
@@ -67,6 +74,7 @@ export const useTicketStore = create<TicketState>()(
       hasRecalled: false,
       countdownExpiry: null,
       counterNumber: null,
+      hasDeferred: false,
       isConnected: false,
       lastUpdate: null,
       isLoading: false,
@@ -400,6 +408,15 @@ export const useTicketStore = create<TicketState>()(
       setCountdownExpiry: (expiry: Date | null) => {
         set({ countdownExpiry: expiry });
       },
+
+      // Defer actions
+      setDeferred: () => {
+        set({ hasDeferred: true });
+      },
+
+      resetDeferred: () => {
+        set({ hasDeferred: false });
+      },
     }),
     {
       name: 'ticket-storage',
@@ -424,6 +441,7 @@ export const useTicket = () => {
   const isAlmostThere = useTicketStore((state) => state.isAlmostThere);
   const isCalled = useTicketStore((state) => state.isCalled);
   const hasRecalled = useTicketStore((state) => state.hasRecalled);
+  const hasDeferred = useTicketStore((state) => state.hasDeferred);
   const countdownExpiry = useTicketStore((state) => state.countdownExpiry);
   const counterNumber = useTicketStore((state) => state.counterNumber);
   const isConnected = useTicketStore((state) => state.isConnected);
@@ -444,6 +462,7 @@ export const useTicket = () => {
     isAlmostThere,
     isCalled,
     hasRecalled,
+    hasDeferred,
     countdownExpiry,
     counterNumber,
     isConnected,
@@ -472,6 +491,8 @@ export const useTicket = () => {
     setRecalled: actions.setRecalled,
     resetRecall: actions.resetRecall,
     setCountdownExpiry: actions.setCountdownExpiry,
+    setDeferred: actions.setDeferred,
+    resetDeferred: actions.resetDeferred,
     
     // Computed properties (reactive because they depend on reactive state)
     hasActiveTicket: activeTicket !== null,
