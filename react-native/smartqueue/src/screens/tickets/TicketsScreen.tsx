@@ -140,9 +140,15 @@ export const TicketsScreen: React.FC = () => {
   };
 
   const getStatusText = () => {
-    if (isCalled) return 'APPELÉ';
-    if (isAlmostThere) return 'BIENTÔT VOTRE TOUR';
-    return 'EN ATTENTE';
+    if (isCalled) return 'Appelé';
+    if (isAlmostThere) return 'Bientôt votre tour';
+    return 'En attente';
+  };
+
+  const getStatusIcon = () => {
+    if (isCalled) return 'notifications';
+    if (isAlmostThere) return 'walk';
+    return 'time-outline';
   };
 
   // Rendu du ticket actif
@@ -176,20 +182,45 @@ export const TicketsScreen: React.FC = () => {
 
     return (
       <Animated.View style={[styles.activeTicketCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
-        {/* Status Banner */}
+        {/* Status Banner - Modern Design */}
         <LinearGradient
           colors={getStatusColor() as [string, string]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
           style={styles.statusBanner}
         >
-          <Ionicons name="time-outline" size={16} color="#FFFFFF" />
+          <View style={[styles.statusIconContainer, isCalled && styles.pulseIcon]}>
+            <Ionicons name={getStatusIcon()} size={18} color="#FFFFFF" />
+          </View>
           <Text style={styles.statusText}>{getStatusText()}</Text>
+          {isCalled && (
+            <View style={styles.liveIndicator}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+          )}
         </LinearGradient>
 
         <View style={styles.ticketContent}>
-          {/* Position */}
+          {/* Position - Modern Badge Design */}
           <View style={styles.positionSection}>
-            <Text style={[styles.positionNumber, { color: colors.textPrimary }]}>{position}</Text>
-            <Text style={[styles.positionLabel, { color: colors.textTertiary }]}>ème position</Text>
+            <View style={[styles.positionBadge, { backgroundColor: colors.primary + '15' }]}>
+              <Text style={[styles.positionNumber, { color: colors.primary }]}>{position}</Text>
+              <Text style={[styles.positionSuffix, { color: colors.primary }]}>
+                {position === 1 ? 'er' : 'ème'}
+              </Text>
+            </View>
+            <Text style={[styles.positionLabel, { color: colors.textTertiary }]}>
+              position dans la file
+            </Text>
+            {position <= 3 && (
+              <View style={[styles.urgentBadge, { backgroundColor: colors.warning + '20' }]}>
+                <Ionicons name="flash" size={12} color={colors.warning} />
+                <Text style={[styles.urgentText, { color: colors.warning }]}>
+                  {position === 1 ? 'C\'est bientôt votre tour !' : 'Approchez-vous du guichet'}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Ticket Info */}
@@ -511,13 +542,53 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    gap: 10,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  statusIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pulseIcon: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
   },
   statusText: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.15)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 6,
+    gap: 4,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+  },
+  liveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   ticketContent: {
     padding: 24,
@@ -525,16 +596,46 @@ const styles = StyleSheet.create({
   positionSection: {
     alignItems: 'center',
     marginBottom: 24,
+    paddingTop: 8,
+  },
+  positionBadge: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 24,
+    marginBottom: 12,
   },
   positionNumber: {
-    fontSize: 72,
+    fontSize: 56,
     fontWeight: '800',
-    lineHeight: 80,
+    lineHeight: 56,
+  },
+  positionSuffix: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 8,
+    marginLeft: 2,
   },
   positionLabel: {
     fontSize: 14,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontWeight: '500',
+    textTransform: 'lowercase',
+    letterSpacing: 0.5,
+  },
+  urgentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  urgentText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   ticketInfo: {
     gap: 16,

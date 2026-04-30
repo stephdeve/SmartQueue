@@ -670,7 +670,7 @@ useEffect(() => {
           >
             <Ionicons name="grid-outline" size={16} color={selectedFilter === "all" ? '#FFFFFF' : colors.textSecondary} />
             <Text style={{
-              marginLeft: 8,
+              marginLeft: 4,
               fontWeight: '500',
               color: selectedFilter === "all" ? '#FFFFFF' : colors.textSecondary,
             }}>
@@ -699,7 +699,7 @@ useEffect(() => {
               }}
             >
               <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
-              <Text style={{ marginLeft: 8, fontWeight: '500', color: colors.textSecondary }} numberOfLines={1}>
+              <Text style={{ marginLeft: 4, fontWeight: '500', color: colors.textSecondary }} numberOfLines={1}>
                 {est.name}
               </Text>
             </TouchableOpacity>

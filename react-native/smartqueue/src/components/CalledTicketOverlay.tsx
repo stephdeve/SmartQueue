@@ -162,6 +162,7 @@ export const CalledTicketOverlay: React.FC<CalledTicketOverlayProps> = ({
       animationType="slide"
       transparent={false}
       statusBarTranslucent
+      onRequestClose={() => {}} // Prevent back button dismiss on Android
     >
       <View style={{ flex: 1, backgroundColor: colors.danger }}>
         {/* Header */}

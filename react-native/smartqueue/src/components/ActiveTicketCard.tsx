@@ -201,81 +201,8 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
 
   if (!activeTicket) return null;
 
-  // Called state - dramatic transformation
-  if (isCalled) {
-    return (
-      <>
-        {AlertComponent}
-        <Animated.View
-          style={[styles.calledContainer, { transform: [{ scale: pulseAnim }] }]}
-        >
-        <View style={styles.calledContent}>
-          <Animated.View
-            style={[styles.calledIcon, { transform: [{ scale: pulseAnim }] }]}
-          >
-            <Ionicons name="notifications" size={48} color="white" />
-          </Animated.View>
-
-          <Text style={styles.calledTitle}>C&apos;EST VOTRE TOUR</Text>
-
-          {counterNumber && (
-            <View style={styles.counterBadge}>
-              <Text style={styles.counterText}>Guichet {counterNumber}</Text>
-            </View>
-          )}
-
-          <Text style={styles.calledSubtext}>Présentez-vous au guichet</Text>
-        </View>
-
-        <View
-          className="flex-wrap flex-col justify-between gap-2"
-          style={styles.calledActions}
-        >
-          <TouchableOpacity
-            className="w-full"
-            style={styles.confirmButton}
-            onPress={handleConfirmPresence}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
-            <Text style={styles.confirmButtonText}>
-              Je confirme ma présence
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.recallButton}
-            onPress={handleRecall}
-            disabled={hasRecalled}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={hasRecalled ? "checkmark-done" : "refresh"}
-              size={20}
-              color="white"
-            />
-            <Text style={styles.recallButtonText}>
-              {hasRecalled ? "Rappel envoyé" : "Me rappeler"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.cancelButtonSmall}
-            onPress={handleCancel}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="close-circle"
-              size={16}
-              color="rgba(255,255,255,0.7)"
-            />
-            <Text style={styles.cancelButtonText}>Annuler</Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    </>
-    );
-  }
+  // Called state is now handled by global CalledTicketOverlay in tab layout
+  // When ticket is called, the overlay takes over the entire screen
 
   // Normal state
   return (
