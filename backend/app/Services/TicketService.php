@@ -16,11 +16,25 @@ use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Database\QueryException;
 
 class TicketService
 {
     private const ACTIVE_STATUSES = ['waiting','called','absent'];
+
+    /**
+     * Broadcast event safely - logs error but doesn't crash on failure
+     */
+    private function broadcastSafely(callable $broadcastFn): void
+    {
+        try {
+            $broadcastFn();
+        } catch (\Exception $e) {
+            Log::warning('Broadcast failed: ' . $e->getMessage());
+            // Continue execution - don't let broadcast failures crash the API
+        }
+    }
 
     public function recomputePositions(Service $service): void
     {
@@ -35,14 +49,14 @@ class TicketService
         foreach ($waiting as $t) {
             if ((int) $t->position !== $pos) {
                 Ticket::query()->where('id', $t->id)->update(['position' => $pos]);
-                event(new TicketUpdated($t->id, ['position' => $pos]));
-                event(new UserTicketUpdated($t->user_id, ['ticket_id' => $t->id, 'position' => $pos]));
+                $this->broadcastSafely(fn() => event(new TicketUpdated($t->id, ['position' => $pos])));
+                $this->broadcastSafely(fn() => event(new UserTicketUpdated($t->user_id, ['ticket_id' => $t->id, 'position' => $pos])));
             }
             $pos++;
         }
 
         $waitingCount = $pos - 1;
-        event(new ServiceStatsUpdated($service->id, ['waiting_count' => $waitingCount]));
+        $this->broadcastSafely(fn() => event(new ServiceStatsUpdated($service->id, ['waiting_count' => $waitingCount])));
     }
 
     /**
@@ -122,26 +136,27 @@ class TicketService
                     ]);
 
             // Broadcast mise à jour initiale
-            event(new TicketUpdated($ticket->id, [
+            $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
                 'status' => $ticket->status,
                 'position' => $ticket->position,
-            ]));
+            ])));
 
-            event(new UserTicketUpdated($user->id, [
+            $this->broadcastSafely(fn() => event(new UserTicketUpdated($user->id, [
                 'ticket_id' => $ticket->id,
                 'service_id' => $service->id,
                 'status' => $ticket->status,
+                'number' => $ticket->number,
                 'position' => $ticket->position,
-            ]));
+            ])));
 
             // Diffusion sur le canal de présence du service: nouveau ticket en file
-            event(new ServiceTicketEnqueued($service->id, [
+            $this->broadcastSafely(fn() => event(new ServiceTicketEnqueued($service->id, [
                 'ticket' => [
                     'id' => $ticket->id,
                     'number' => $ticket->number,
                     'priority' => $ticket->priority,
                 ]
-            ]));
+            ])));
 
             // Mise à jour des stats de file
             $this->recomputePositions($service);
@@ -206,26 +221,27 @@ class TicketService
             ]);
 
             // Broadcast mise à jour initiale
-            event(new TicketUpdated($ticket->id, [
+            $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
                 'status' => $ticket->status,
                 'position' => $ticket->position,
-            ]));
+            ])));
 
-            event(new UserTicketUpdated($user->id, [
+            $this->broadcastSafely(fn() => event(new UserTicketUpdated($user->id, [
                 'ticket_id' => $ticket->id,
                 'service_id' => $service->id,
                 'status' => $ticket->status,
+                'number' => $ticket->number,
                 'position' => $ticket->position,
-            ]));
+            ])));
 
             // Diffusion sur le canal de présence du service
-            event(new ServiceTicketEnqueued($service->id, [
+            $this->broadcastSafely(fn() => event(new ServiceTicketEnqueued($service->id, [
                 'ticket' => [
                     'id' => $ticket->id,
                     'number' => $ticket->number,
                     'priority' => $ticket->priority,
                 ]
-            ]));
+            ])));
 
             $this->recomputePositions($service);
 
@@ -275,32 +291,32 @@ class TicketService
             $ticket->save();
 
             // Diffusion: ticket appelé
-            event(new TicketCalled($ticket->id, [
+            $this->broadcastSafely(fn() => event(new TicketCalled($ticket->id, [
                 'number' => $ticket->number,
                 'counter_id' => $ticket->counter_id,
                 'service_id' => $service->id,
-            ]));
-            event(new TicketUpdated($ticket->id, [
+            ])));
+            $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
                 'status' => $ticket->status,
-            ]));
+            ])));
 
             if ($ticket->user) {
-                event(new UserTicketUpdated($ticket->user->id, [
+                $this->broadcastSafely(fn() => event(new UserTicketUpdated($ticket->user->id, [
                     'ticket_id' => $ticket->id,
                     'service_id' => $service->id,
                     'status' => $ticket->status,
                     'number' => $ticket->number,
                     'counter_id' => $ticket->counter_id,
-                ]));
+                ])));
             }
 
             // Diffusion service: ticket appelé
-            event(new ServiceTicketCalled($service->id, [
+            $this->broadcastSafely(fn() => event(new ServiceTicketCalled($service->id, [
                 'ticket' => [
                     'id' => $ticket->id,
                     'number' => $ticket->number,
                 ]
-            ]));
+            ])));
 
             // Notifications push & SMS (asynchrones via queue)
             if ($ticket->user) {
@@ -333,14 +349,14 @@ class TicketService
         $ticket->absent_at = Carbon::now();
         $ticket->save();
 
-        event(new TicketUpdated($ticket->id, ['status' => $ticket->status]));
+        $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, ['status' => $ticket->status])));
 
         if ($ticket->user) {
-            event(new UserTicketUpdated($ticket->user->id, [
+            $this->broadcastSafely(fn() => event(new UserTicketUpdated($ticket->user->id, [
                 'ticket_id' => $ticket->id,
                 'service_id' => $ticket->service_id,
                 'status' => $ticket->status,
-            ]));
+            ])));
             
             // Send push notification for absent
             dispatch(new SendPushNotification($ticket->user->id, 'Ticket marqué absent', 'Vous avez été marqué absent pour le ticket '.$ticket->number, [
@@ -351,12 +367,12 @@ class TicketService
         }
 
         // Diffusion service: ticket marqué absent
-        event(new ServiceTicketAbsent($ticket->service_id, [
+        $this->broadcastSafely(fn() => event(new ServiceTicketAbsent($ticket->service_id, [
             'ticket' => [
                 'id' => $ticket->id,
                 'number' => $ticket->number,
             ]
-        ]));
+        ])));
 
         if ($ticket->user && !empty($ticket->user->phone)) {
             dispatch(new SendSmsNotification($ticket->user->phone, 'Vous avez été marqué absent pour le ticket '.$ticket->number));
@@ -452,36 +468,36 @@ class TicketService
             }
 
             // Événements
-            event(new TicketUpdated($ticket->id, [
+            $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
                 'status' => 'waiting',
                 'position' => $ticket->position,
                 'is_swapped' => true,
                 'deferred_at' => $ticket->deferred_at,
-            ]));
-            event(new TicketUpdated($nextTicket->id, [
+            ])));
+            $this->broadcastSafely(fn() => event(new TicketUpdated($nextTicket->id, [
                 'status' => 'called',
                 'position' => $nextTicket->position,
                 'is_swapped' => true,
-            ]));
+            ])));
 
             if ($ticket->user) {
-                event(new UserTicketUpdated($ticket->user->id, [
+                $this->broadcastSafely(fn() => event(new UserTicketUpdated($ticket->user->id, [
                     'ticket_id' => $ticket->id,
                     'service_id' => $service->id,
                     'status' => 'waiting',
                     'position' => $ticket->position,
                     'deferred' => true,
-                ]));
+                ])));
             }
 
             if ($nextTicket->user) {
-                event(new UserTicketUpdated($nextTicket->user->id, [
+                $this->broadcastSafely(fn() => event(new UserTicketUpdated($nextTicket->user->id, [
                     'ticket_id' => $nextTicket->id,
                     'service_id' => $service->id,
                     'status' => 'called',
                     'position' => $nextTicket->position,
                     'swapped' => true,
-                ]));
+                ])));
             }
 
             return $ticket->fresh();
@@ -529,14 +545,14 @@ class TicketService
     {
         $ticket->status = 'canceled';
         $ticket->save();
-        event(new TicketUpdated($ticket->id, ['status' => $ticket->status]));
+        $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, ['status' => $ticket->status])));
 
         if ($ticket->user) {
-            event(new UserTicketUpdated($ticket->user->id, [
+            $this->broadcastSafely(fn() => event(new UserTicketUpdated($ticket->user->id, [
                 'ticket_id' => $ticket->id,
                 'service_id' => $ticket->service_id,
                 'status' => $ticket->status,
-            ]));
+            ])));
         }
         $this->recomputePositions($ticket->service);
         return $ticket->fresh();
@@ -552,26 +568,26 @@ class TicketService
         $ticket->status = 'called';
         $ticket->called_at = Carbon::now();
         $ticket->save();
-        event(new TicketCalled($ticket->id, [
+        $this->broadcastSafely(fn() => event(new TicketCalled($ticket->id, [
             'number' => $ticket->number,
             'counter_id' => $ticket->counter_id,
             'service_id' => $ticket->service_id,
-        ]));
-        event(new ServiceTicketCalled($ticket->service_id, [
+        ])));
+        $this->broadcastSafely(fn() => event(new ServiceTicketCalled($ticket->service_id, [
             'ticket' => [
                 'id' => $ticket->id,
                 'number' => $ticket->number,
             ]
-        ]));
+        ])));
 
         if ($ticket->user) {
-            event(new UserTicketUpdated($ticket->user->id, [
+            $this->broadcastSafely(fn() => event(new UserTicketUpdated($ticket->user->id, [
                 'ticket_id' => $ticket->id,
                 'service_id' => $ticket->service_id,
                 'status' => $ticket->status,
                 'number' => $ticket->number,
                 'counter_id' => $ticket->counter_id,
-            ]));
+            ])));
             
             // Send push notification for recall
             dispatch(new SendPushNotification($ticket->user->id, 'Rappel - Votre ticket est appelé', 'Présentez-vous au guichet pour le ticket '.$ticket->number, [
