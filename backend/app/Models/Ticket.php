@@ -16,6 +16,7 @@ class Ticket extends Model
         'deferred_at', 'deferral_count', 'is_swapped', 'swapped_with_ticket_id',
         'original_called_at', 'grace_period_expires_at',
         'source', 'valid_date',
+        'eta_minutes', 'last_lat', 'last_lng',
     ];
 
     // Casting automatique des dates/horaires

@@ -13,7 +13,7 @@ import axiosClient from '../api/axiosClient';
 interface PositionUpdateEvent {
   ticket_id: number;
   position: number;
-  eta_min: number;
+  eta_minutes: number;
   queue_length: number;
 }
 
@@ -137,7 +137,7 @@ export const useTicketSocket = (ticketId: string | number | null) => {
         .listen('.ticket.position_updated', (data: PositionUpdateEvent) => {
           console.log('Position update received:', data);
           if (data.ticket_id === Number(ticketId)) {
-            updatePosition(data.position, data.eta_min);
+            updatePosition(data.position, data.eta_minutes);
             setLastUpdate(new Date());
           }
         })
@@ -176,7 +176,7 @@ export const useTicketSocket = (ticketId: string | number | null) => {
           }
           // Handle position changes
           if (data.position) {
-            updatePosition(data.position, data.eta_min || 0);
+            updatePosition(data.position, data.eta_minutes || 0);
           }
         })
         .listen('.ticket.status_changed', (data: TicketStatusEvent) => {

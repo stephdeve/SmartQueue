@@ -6,12 +6,17 @@ use App\Jobs\SendPushNotification;
 use App\Jobs\SendSmsNotification;
 use App\Models\NotificationPreference;
 use App\Models\Ticket;
+use App\Services\TicketService;
 use Illuminate\Support\Carbon;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
 class TicketsNotifyApproaching extends Command
 {
+    public function __construct(
+        private TicketService $ticketService,
+    ) {
+        parent::__construct();
+    }
     /**
      * The name and signature of the console command.
      *
@@ -73,7 +78,7 @@ class TicketsNotifyApproaching extends Command
             );
 
             $shouldByPosition = $ticket->position <= (int) $prefs->notify_before_positions;
-            $etaMinutes = $this->estimateEtaMinutesForTicket($ticket);
+            $etaMinutes = $this->ticketService->estimateWaitTime($ticket->service, $ticket);
             $shouldByEta = $etaMinutes !== null && $etaMinutes <= (int) $prefs->notify_before_minutes;
 
             if (!$shouldByPosition && !$shouldByEta) {
@@ -144,50 +149,5 @@ class TicketsNotifyApproaching extends Command
         if ($persist) {
             $prefs->save();
         }
-    }
-
-    private function estimateEtaMinutesForTicket(Ticket $ticket): ?int
-    {
-        if ($ticket->position === null) {
-            return null;
-        }
-
-        $avgMinutes = $this->estimateAvgServiceTimeMinutes($ticket->service_id, (int) $ticket->service->avg_service_time_minutes);
-        if ($avgMinutes <= 0) {
-            return null;
-        }
-
-        $ahead = max(0, ((int) $ticket->position) - 1);
-        return (int) max(0, $ahead * $avgMinutes);
-    }
-
-    private function estimateAvgServiceTimeMinutes(int $serviceId, int $fallback): int
-    {
-        // Strategy C: A by default (service.avg_service_time_minutes), but B if enough samples.
-        $rows = DB::table('tickets')
-            ->where('service_id', $serviceId)
-            ->whereNotNull('closed_at')
-            ->whereNotNull('called_at')
-            ->where('closed_at', '>=', now()->subDay())
-            ->select(['called_at', 'closed_at'])
-            ->limit(300)
-            ->get();
-
-        $sum = 0;
-        $n = 0;
-        foreach ($rows as $r) {
-            $called = Carbon::parse($r->called_at);
-            $closed = Carbon::parse($r->closed_at);
-            if ($closed->greaterThan($called)) {
-                $sum += $closed->diffInMinutes($called);
-                $n++;
-            }
-        }
-
-        if ($n >= 10) {
-            return (int) max(1, (int) round($sum / $n));
-        }
-
-        return (int) max(1, $fallback);
     }
 }

@@ -17,6 +17,7 @@ class AgentTicketActionController extends Controller
 
         $ticket->status = 'closed';
         $ticket->closed_at = now();
+        $ticket->eta_minutes = null;
         $ticket->save();
 
         $svc->recomputePositions($ticket->service);

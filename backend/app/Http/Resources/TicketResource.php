@@ -15,26 +15,22 @@ class TicketResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        // Estimation simple de l'ETA (minutes): position * avg_service_time
-        $avg = $this->service->avg_service_time_minutes ?? null;
-        $pos = $this->position ?? null;
-        $eta = ($avg !== null && $pos !== null) ? (int) max(0, $avg * $pos) : null;
+        // Use persisted eta_minutes (computed with dynamic strategy) when available,
+        // fallback to static calculation: (position - 1) * avg_service_time
+        $persistedEta = $this->eta_minutes ?? null;
+        if ($persistedEta !== null) {
+            $eta = (int) $persistedEta;
+        } else {
+            $avg = $this->service->avg_service_time_minutes ?? null;
+            $pos = $this->position ?? null;
+            $eta = ($avg !== null && $pos !== null) ? (int) max(0, ($pos - 1) * $avg) : null;
+        }
 
         // Queue length = nombre de personnes en attente dans ce service
         $queueLength = Ticket::query()
             ->where('service_id', $this->service_id)
             ->whereIn('status', ['waiting', 'called'])
             ->count();
-
-        // Debug: log establishment coordinates
-        if ($this->service && $this->service->establishment) {
-            \Log::info('[TicketResource] Establishment coords:', [
-                'id' => $this->service->establishment->id,
-                'name' => $this->service->establishment->name,
-                'lat' => $this->service->establishment->lat,
-                'lng' => $this->service->establishment->lng,
-            ]);
-        }
 
         return [
             'id' => $this->id,

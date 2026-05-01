@@ -47,10 +47,23 @@ class TicketService
 
         $pos = 1;
         foreach ($waiting as $t) {
-            if ((int) $t->position !== $pos) {
-                Ticket::query()->where('id', $t->id)->update(['position' => $pos]);
-                $this->broadcastSafely(fn() => event(new TicketUpdated($t->id, ['position' => $pos])));
-                $this->broadcastSafely(fn() => event(new UserTicketUpdated($t->user_id, ['ticket_id' => $t->id, 'position' => $pos])));
+            $eta = $this->estimateWaitTime($service, new Ticket(['position' => $pos]));
+            $changed = (int) $t->position !== $pos;
+
+            if ($changed) {
+                Ticket::query()->where('id', $t->id)->update([
+                    'position' => $pos,
+                    'eta_minutes' => $eta,
+                ]);
+                $this->broadcastSafely(fn() => event(new TicketUpdated($t->id, [
+                    'position' => $pos,
+                    'eta_minutes' => $eta,
+                ])));
+                $this->broadcastSafely(fn() => event(new UserTicketUpdated($t->user_id, [
+                    'ticket_id' => $t->id,
+                    'position' => $pos,
+                    'eta_minutes' => $eta,
+                ])));
             }
             $pos++;
         }
@@ -135,10 +148,15 @@ class TicketService
                         'last_seen_at' => Carbon::now(),
                     ]);
 
+            // Calculate initial ETA and persist it
+            $eta = $this->estimateWaitTime($service, $ticket);
+            $ticket->update(['eta_minutes' => $eta]);
+
             // Broadcast mise à jour initiale
             $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
                 'status' => $ticket->status,
                 'position' => $ticket->position,
+                'eta_minutes' => $eta,
             ])));
 
             $this->broadcastSafely(fn() => event(new UserTicketUpdated($user->id, [
@@ -147,6 +165,7 @@ class TicketService
                 'status' => $ticket->status,
                 'number' => $ticket->number,
                 'position' => $ticket->position,
+                'eta_minutes' => $eta,
             ])));
 
             // Diffusion sur le canal de présence du service: nouveau ticket en file
@@ -220,10 +239,15 @@ class TicketService
                 'last_seen_at' => Carbon::now(),
             ]);
 
+            // Calculate initial ETA and persist it
+            $eta = $this->estimateWaitTime($service, $ticket);
+            $ticket->update(['eta_minutes' => $eta]);
+
             // Broadcast mise à jour initiale
             $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
                 'status' => $ticket->status,
                 'position' => $ticket->position,
+                'eta_minutes' => $eta,
             ])));
 
             $this->broadcastSafely(fn() => event(new UserTicketUpdated($user->id, [
@@ -232,6 +256,7 @@ class TicketService
                 'status' => $ticket->status,
                 'number' => $ticket->number,
                 'position' => $ticket->position,
+                'eta_minutes' => $eta,
             ])));
 
             // Diffusion sur le canal de présence du service
@@ -251,14 +276,47 @@ class TicketService
 
     /**
      * Estime le temps d'attente pour un ticket donné.
+     * Strategy: dynamic (24h history) if enough samples, else static (configured avg).
      */
     public function estimateWaitTime(Service $service, Ticket $ticket): int
     {
-        // Position - 1 * temps moyen de service
         $waitingAhead = max(0, ($ticket->position ?? 1) - 1);
-        $avgTime = $service->avg_service_time_minutes ?? 5;
-        
+        $avgTime = $this->estimateAvgServiceTimeMinutes($service->id, $service->avg_service_time_minutes ?? 5);
+
         return (int) ($waitingAhead * $avgTime);
+    }
+
+    /**
+     * Calculate average service time from last 24h of closed tickets.
+     * Returns dynamic average if >= 10 samples, else falls back to configured value.
+     */
+    private function estimateAvgServiceTimeMinutes(int $serviceId, int $fallback): int
+    {
+        $rows = DB::table('tickets')
+            ->where('service_id', $serviceId)
+            ->whereNotNull('closed_at')
+            ->whereNotNull('called_at')
+            ->where('closed_at', '>=', now()->subDay())
+            ->select(['called_at', 'closed_at'])
+            ->limit(300)
+            ->get();
+
+        $sum = 0;
+        $n = 0;
+        foreach ($rows as $r) {
+            $called = Carbon::parse($r->called_at);
+            $closed = Carbon::parse($r->closed_at);
+            if ($closed->greaterThan($called)) {
+                $sum += $closed->diffInMinutes($called);
+                $n++;
+            }
+        }
+
+        if ($n >= 10) {
+            return (int) max(1, (int) round($sum / $n));
+        }
+
+        return (int) max(1, $fallback);
     }
 
     /**
@@ -288,6 +346,7 @@ class TicketService
                 $ticket->counter_id = $counterId;
             }
             $ticket->called_at = Carbon::now();
+            $ticket->eta_minutes = 0; // Called = no more waiting
             $ticket->save();
 
             // Diffusion: ticket appelé
@@ -298,6 +357,7 @@ class TicketService
             ])));
             $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
                 'status' => $ticket->status,
+                'eta_minutes' => 0,
             ])));
 
             if ($ticket->user) {
@@ -307,6 +367,7 @@ class TicketService
                     'status' => $ticket->status,
                     'number' => $ticket->number,
                     'counter_id' => $ticket->counter_id,
+                    'eta_minutes' => 0,
                 ])));
             }
 
@@ -347,15 +408,20 @@ class TicketService
 
         $ticket->status = 'absent';
         $ticket->absent_at = Carbon::now();
+        $ticket->eta_minutes = null; // No longer in queue
         $ticket->save();
 
-        $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, ['status' => $ticket->status])));
+        $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
+            'status' => $ticket->status,
+            'eta_minutes' => null,
+        ])));
 
         if ($ticket->user) {
             $this->broadcastSafely(fn() => event(new UserTicketUpdated($ticket->user->id, [
                 'ticket_id' => $ticket->id,
                 'service_id' => $ticket->service_id,
                 'status' => $ticket->status,
+                'eta_minutes' => null,
             ])));
             
             // Send push notification for absent
@@ -438,6 +504,7 @@ class TicketService
             $ticket->grace_period_expires_at = Carbon::parse($ticket->original_called_at)->addHours(24);
             $ticket->called_at = null;
             $ticket->counter_id = null;
+            $ticket->eta_minutes = $this->estimateWaitTime($service, $ticket);
             $ticket->save();
 
             // Le ticket suivant est appelé à la place
@@ -446,6 +513,7 @@ class TicketService
             $nextTicket->called_at = Carbon::now();
             $nextTicket->is_swapped = true;
             $nextTicket->swapped_with_ticket_id = $ticket->id;
+            $nextTicket->eta_minutes = 0;
             $nextTicket->save();
 
             // Notifications
@@ -471,12 +539,14 @@ class TicketService
             $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
                 'status' => 'waiting',
                 'position' => $ticket->position,
+                'eta_minutes' => $ticket->eta_minutes,
                 'is_swapped' => true,
                 'deferred_at' => $ticket->deferred_at,
             ])));
             $this->broadcastSafely(fn() => event(new TicketUpdated($nextTicket->id, [
                 'status' => 'called',
                 'position' => $nextTicket->position,
+                'eta_minutes' => 0,
                 'is_swapped' => true,
             ])));
 
@@ -486,6 +556,7 @@ class TicketService
                     'service_id' => $service->id,
                     'status' => 'waiting',
                     'position' => $ticket->position,
+                    'eta_minutes' => $ticket->eta_minutes,
                     'deferred' => true,
                 ])));
             }
@@ -496,6 +567,7 @@ class TicketService
                     'service_id' => $service->id,
                     'status' => 'called',
                     'position' => $nextTicket->position,
+                    'eta_minutes' => 0,
                     'swapped' => true,
                 ])));
             }
@@ -544,14 +616,19 @@ class TicketService
     public function cancel(Ticket $ticket): Ticket
     {
         $ticket->status = 'canceled';
+        $ticket->eta_minutes = null;
         $ticket->save();
-        $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, ['status' => $ticket->status])));
+        $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
+            'status' => $ticket->status,
+            'eta_minutes' => null,
+        ])));
 
         if ($ticket->user) {
             $this->broadcastSafely(fn() => event(new UserTicketUpdated($ticket->user->id, [
                 'ticket_id' => $ticket->id,
                 'service_id' => $ticket->service_id,
                 'status' => $ticket->status,
+                'eta_minutes' => null,
             ])));
         }
         $this->recomputePositions($ticket->service);
@@ -567,6 +644,7 @@ class TicketService
 
         $ticket->status = 'called';
         $ticket->called_at = Carbon::now();
+        $ticket->eta_minutes = 0; // Called = no more waiting
         $ticket->save();
         $this->broadcastSafely(fn() => event(new TicketCalled($ticket->id, [
             'number' => $ticket->number,
@@ -587,6 +665,7 @@ class TicketService
                 'status' => $ticket->status,
                 'number' => $ticket->number,
                 'counter_id' => $ticket->counter_id,
+                'eta_minutes' => 0,
             ])));
             
             // Send push notification for recall

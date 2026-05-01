@@ -24,11 +24,21 @@ Broadcast::channel('user.{userId}', function ($user, int $userId) {
     return (int) $user->id === (int) $userId;
 });
 
-// Canal de présence d'un service: agents/admins uniquement
+// Canal de présence d'un service: agents/admins + usagers avec ticket actif
 Broadcast::channel('presence-service.{serviceId}', function ($user, int $serviceId) {
-    if (!in_array($user->role, ['agent','admin'], true)) {
-        return false;
+    if (in_array($user->role, ['agent','admin'], true)) {
+        return ['id' => $user->id, 'name' => $user->name, 'role' => $user->role];
     }
-    // Les canaux de présence attendent un tableau d'infos utilisateur à partager
-    return ['id' => $user->id, 'name' => $user->name, 'role' => $user->role];
+
+    // Allow users with an active ticket for this service (need real-time queue updates)
+    $hasActiveTicket = Ticket::where('service_id', $serviceId)
+        ->where('user_id', $user->id)
+        ->whereIn('status', ['waiting', 'called', 'absent'])
+        ->exists();
+
+    if ($hasActiveTicket) {
+        return ['id' => $user->id, 'name' => $user->name, 'role' => $user->role];
+    }
+
+    return false;
 });
