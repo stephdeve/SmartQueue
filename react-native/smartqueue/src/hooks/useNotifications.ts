@@ -1,13 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCustomAlert } from './useCustomAlert';
+/**
+ * useNotifications — gestion complète des notifications push avec expo-notifications.
+ *
+ * Deux chemins automatiques :
+ *  - Expo Go / EAS (dev)  → getExpoPushTokenAsync → ExponentPushToken[...]
+ *                            Le backend appelle l'API Expo Push (proxy FCM gratuit)
+ *  - EAS build production → getDevicePushTokenAsync → token FCM natif Android / APNs iOS
+ *                            Le backend appelle directement l'API FCM HTTP v1
+ *
+ * Dans les deux cas : gratuit, tokens stockés dans PostgreSQL sur Railway.
+ */
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Platform } from "react-native";
+import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axiosClient from "../api/axiosClient";
+import { useCustomAlert } from "./useCustomAlert";
 
-// Types pour les notifications
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 export interface NotificationPermission {
   granted: boolean;
   canAskAgain: boolean;
-  status: 'granted' | 'denied' | 'disabled' | 'restricted' | 'never_ask_again';
+  status: "granted" | "denied" | "disabled" | "restricted" | "undetermined";
 }
 
 export interface NotificationData {
@@ -15,8 +30,6 @@ export interface NotificationData {
   body: string;
   data?: Record<string, any>;
   sound?: string;
-  vibrate?: boolean;
-  priority?: 'default' | 'high' | 'max';
 }
 
 export interface ScheduledNotification {
@@ -27,413 +40,345 @@ export interface ScheduledNotification {
   data?: Record<string, any>;
 }
 
-export interface PushNotificationToken {
-  token: string;
-  platform: 'ios' | 'android';
-  appVersion: string;
-  osVersion: string;
-}
+// ─── Foreground handler : affiche la notif même quand l'app est ouverte ───────
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
-// Hook pour la gestion des notifications
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 export const useNotifications = () => {
   const { showWarning } = useCustomAlert();
+
   const [permission, setPermission] = useState<NotificationPermission>({
     granted: false,
     canAskAgain: true,
-    status: 'denied',
+    status: "undetermined",
   });
   const [fcmToken, setFcmToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scheduledNotifications, setScheduledNotifications] = useState<ScheduledNotification[]>([]);
+  const [scheduledNotifications, setScheduledNotifications] = useState<
+    ScheduledNotification[]
+  >([]);
 
-  // Vérifier la permission de notification
-  const checkPermission = useCallback(async (): Promise<NotificationPermission> => {
-    try {
-      // Note: Ceci nécessite l'installation de @react-native-firebase/messaging
-      // et react-native-permissions
-      
-      if (Platform.OS === 'ios') {
-        // const authStatus = await messaging().requestPermission();
-        // const enabled =
-        //   authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        //   authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-        
-        // return {
-        //   granted: enabled,
-        //   canAskAgain: authStatus !== messaging.AuthorizationStatus.DENIED,
-        //   status: enabled ? 'granted' : 'denied',
-        // };
-        
-        // Simulation pour l'instant
-        const simulatedPermission = {
-          granted: true,
-          canAskAgain: true,
-          status: 'granted' as const,
+  const foregroundListener = useRef<Notifications.EventSubscription | null>(
+    null,
+  );
+  const responseListener = useRef<Notifications.EventSubscription | null>(null);
+
+  // ── Vérifier la permission ────────────────────────────────────────────────
+  const checkPermission =
+    useCallback(async (): Promise<NotificationPermission> => {
+      try {
+        const { status, canAskAgain } =
+          await Notifications.getPermissionsAsync();
+        const perm: NotificationPermission = {
+          granted: status === "granted",
+          canAskAgain: canAskAgain ?? true,
+          status: status as NotificationPermission["status"],
         };
-        setPermission(simulatedPermission);
-        return simulatedPermission;
-      } else if (Platform.OS === 'android') {
-        // Android 13+ nécessite la permission POST_NOTIFICATIONS
-        if (Platform.Version >= 33) {
-          const granted = await PermissionsAndroid.check(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-          );
-          
-          const androidPermission = {
-            granted,
-            canAskAgain: true,
-            status: granted ? 'granted' : 'denied' as const,
-          };
-          setPermission(androidPermission);
-          return androidPermission;
-        } else {
-          // Android < 13, permission accordée par défaut
-          const defaultPermission = {
-            granted: true,
-            canAskAgain: true,
-            status: 'granted' as const,
-          };
-          setPermission(defaultPermission);
-          return defaultPermission;
-        }
+        setPermission(perm);
+        return perm;
+      } catch (err) {
+        console.error("[Notifications] checkPermission:", err);
+        return { granted: false, canAskAgain: true, status: "denied" };
       }
+    }, []);
 
-      const defaultPermission = {
-        granted: false,
-        canAskAgain: true,
-        status: 'denied' as const,
-      };
-      setPermission(defaultPermission);
-      return defaultPermission;
-    } catch (err) {
-      console.error('Error checking notification permission:', err);
-      const errorPermission = {
-        granted: false,
-        canAskAgain: true,
-        status: 'denied' as const,
-      };
-      setPermission(errorPermission);
-      return errorPermission;
-    }
-  }, []);
-
-  // Demander la permission de notification
-  const requestPermission = useCallback(async (): Promise<NotificationPermission> => {
-    try {
+  // ── Demander la permission ────────────────────────────────────────────────
+  const requestPermission =
+    useCallback(async (): Promise<NotificationPermission> => {
       setIsLoading(true);
-      setError(null);
-
-      if (Platform.OS === 'ios') {
-        // const authStatus = await messaging().requestPermission();
-        // const enabled =
-        //   authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        //   authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-        
-        // const newPermission = {
-        //   granted: enabled,
-        //   canAskAgain: authStatus !== messaging.AuthorizationStatus.DENIED,
-        //   status: enabled ? 'granted' : 'denied',
-        // };
-        
-        // Simulation pour l'instant
-        const newPermission = {
-          granted: true,
-          canAskAgain: true,
-          status: 'granted' as const,
+      try {
+        const { status, canAskAgain } =
+          await Notifications.requestPermissionsAsync({
+            ios: { allowAlert: true, allowBadge: true, allowSound: true },
+          });
+        const perm: NotificationPermission = {
+          granted: status === "granted",
+          canAskAgain: canAskAgain ?? true,
+          status: status as NotificationPermission["status"],
         };
-        setPermission(newPermission);
+        setPermission(perm);
+        return perm;
+      } catch (err) {
+        console.error("[Notifications] requestPermission:", err);
+        return { granted: false, canAskAgain: true, status: "denied" };
+      } finally {
         setIsLoading(false);
-        return newPermission;
-      } else if (Platform.OS === 'android') {
-        if (Platform.Version >= 33) {
-          const granted = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-            {
-              title: 'Permission de notifications',
-              message: 'SmartQueue a besoin d\'envoyer des notifications pour vous alerter quand c\'est votre tour.',
-              buttonNeutral: 'Demander plus tard',
-              buttonNegative: 'Annuler',
-              buttonPositive: 'OK',
-            }
-          );
+      }
+    }, []);
 
-          const newPermission = {
-            granted: granted === PermissionsAndroid.RESULTS.GRANTED,
-            canAskAgain: true,
-            status: granted === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied' as const,
-          };
-          setPermission(newPermission);
-          setIsLoading(false);
-          return newPermission;
-        } else {
-          // Android < 13, permission accordée par défaut
-          const defaultPermission = {
-            granted: true,
-            canAskAgain: true,
-            status: 'granted' as const,
-          };
-          setPermission(defaultPermission);
-          setIsLoading(false);
-          return defaultPermission;
+  // ── Obtenir le token push ─────────────────────────────────────────────────
+  //    1er essai : Expo Push Token  (fonctionne dans Expo Go + EAS)
+  //    Fallback  : token FCM natif  (EAS build production uniquement)
+  const getFCMToken = useCallback(async (): Promise<string | null> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Retourner le token mis en cache si disponible
+      const cached = await AsyncStorage.getItem("push_token");
+      if (cached) {
+        setFcmToken(cached);
+        return cached;
+      }
+
+      let token: string | null = null;
+
+      try {
+        // projectId requis pour getExpoPushTokenAsync avec EAS
+        const projectId =
+          Constants.expoConfig?.extra?.eas?.projectId ??
+          (Constants as any).easConfig?.projectId;
+
+        const pushToken = await Notifications.getExpoPushTokenAsync(
+          projectId ? { projectId } : {},
+        );
+        token = pushToken.data; // format : ExponentPushToken[xxxxx]
+        console.log("[Notifications] Expo push token obtenu ✓");
+      } catch (expoErr) {
+        console.warn(
+          "[Notifications] getExpoPushTokenAsync échoué, essai token natif:",
+          expoErr,
+        );
+        try {
+          const deviceToken = await Notifications.getDevicePushTokenAsync();
+          token =
+            typeof deviceToken.data === "string"
+              ? deviceToken.data
+              : JSON.stringify(deviceToken.data);
+          console.log("[Notifications] Token FCM natif obtenu ✓");
+        } catch (nativeErr) {
+          console.error(
+            "[Notifications] getDevicePushTokenAsync échoué:",
+            nativeErr,
+          );
+          setError(
+            "Impossible d'obtenir le token push. Vérifiez la configuration Firebase.",
+          );
         }
       }
 
-      const defaultPermission = {
-        granted: false,
-        canAskAgain: true,
-        status: 'denied' as const,
-      };
-      setPermission(defaultPermission);
-      setIsLoading(false);
-      return defaultPermission;
-    } catch (err) {
-      console.error('Error requesting notification permission:', err);
-      setError('Erreur lors de la demande de permission de notification');
-      setIsLoading(false);
-      
-      const errorPermission = {
-        granted: false,
-        canAskAgain: true,
-        status: 'denied' as const,
-      };
-      setPermission(errorPermission);
-      return errorPermission;
-    }
-  }, []);
-
-  // Obtenir le token FCM
-  const getFCMToken = useCallback(async (): Promise<string | null> => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Note: Ceci nécessite l'installation de @react-native-firebase/messaging
-      // const token = await messaging().getToken();
-      
-      // Simulation pour l'instant
-      const simulatedToken = 'simulated_fcm_token_' + Date.now();
-      setFcmToken(simulatedToken);
-      await AsyncStorage.setItem('fcm_token', simulatedToken);
-      
-      setIsLoading(false);
-      return simulatedToken;
-    } catch (err) {
-      console.error('Error getting FCM token:', err);
-      setError('Erreur lors de l\'obtention du token de notification');
-      setIsLoading(false);
-      return null;
-    }
-  }, []);
-
-  // Enregistrer le token FCM auprès du backend
-  const registerFCMToken = useCallback(async (deviceId: string): Promise<void> => {
-    try {
-      const token = fcmToken || await getFCMToken();
-      
-      if (!token) {
-        throw new Error('No FCM token available');
+      if (token) {
+        setFcmToken(token);
+        await AsyncStorage.setItem("push_token", token);
       }
 
-      // Note: Ceci nécessite l'installation de l'API client
-      // await authApi.registerDevice({
-      //   device_id: deviceId,
-      //   platform: Platform.OS as 'ios' | 'android',
-      //   token,
-      //   app_version: '1.0.0',
-      //   os_version: Platform.Version.toString(),
-      // });
-
-      console.log('FCM token registered successfully');
+      return token;
     } catch (err) {
-      console.error('Error registering FCM token:', err);
-      setError('Erreur lors de l\'enregistrement du token de notification');
-    }
-  }, [fcmToken, getFCMToken]);
-
-  // Envoyer une notification locale
-  const sendLocalNotification = useCallback(async (data: NotificationData): Promise<void> => {
-    try {
-      // Note: Ceci nécessite l'installation de react-native-push-notification ou expo-notifications
-      
-      // Avec expo-notifications:
-      // await Notifications.scheduleNotificationAsync({
-      //   content: {
-      //     title: data.title,
-      //     body: data.body,
-      //     data: data.data,
-      //     sound: data.sound || 'default',
-      //   },
-      //   trigger: null,
-      // });
-
-      console.log('Local notification sent:', data);
-    } catch (err) {
-      console.error('Error sending local notification:', err);
-      setError('Erreur lors de l\'envoi de la notification locale');
-    }
-  }, []);
-
-  // Programmer une notification
-  const scheduleNotification = useCallback(async (
-    title: string,
-    body: string,
-    scheduledTime: Date,
-    data?: Record<string, any>
-  ): Promise<string | null> => {
-    try {
-      const notificationId = `notification_${Date.now()}`;
-      
-      // Note: Ceci nécessite l'installation de react-native-push-notification ou expo-notifications
-      
-      // Avec expo-notifications:
-      // const id = await Notifications.scheduleNotificationAsync({
-      //   content: {
-      //     title,
-      //     body,
-      //     data,
-      //   },
-      //   trigger: {
-      //     date: scheduledTime,
-      //   },
-      // });
-
-      const newScheduledNotification: ScheduledNotification = {
-        id: notificationId,
-        title,
-        body,
-        scheduledTime,
-        data,
-      };
-
-      setScheduledNotifications(prev => [...prev, newScheduledNotification]);
-      
-      console.log('Notification scheduled:', newScheduledNotification);
-      return notificationId;
-    } catch (err) {
-      console.error('Error scheduling notification:', err);
-      setError('Erreur lors de la programmation de la notification');
+      console.error("[Notifications] getFCMToken:", err);
+      setError("Erreur lors de l'obtention du token de notification");
       return null;
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
-  // Annuler une notification programmée
-  const cancelScheduledNotification = useCallback(async (notificationId: string): Promise<void> => {
-    try {
-      // Note: Ceci nécessite l'installation de react-native-push-notification ou expo-notifications
-      
-      // Avec expo-notifications:
-      // await Notifications.cancelScheduledNotificationAsync(notificationId);
+  // ── Enregistrer le token auprès du backend (PostgreSQL Railway) ───────────
+  const registerFCMToken = useCallback(
+    async (deviceId?: string): Promise<void> => {
+      try {
+        const token = fcmToken || (await getFCMToken());
+        if (!token) {
+          console.warn("[Notifications] Aucun token à enregistrer");
+          return;
+        }
 
-      setScheduledNotifications(prev => 
-        prev.filter(notification => notification.id !== notificationId)
-      );
-      
-      console.log('Scheduled notification cancelled:', notificationId);
-    } catch (err) {
-      console.error('Error cancelling scheduled notification:', err);
-      setError('Erreur lors de l\'annulation de la notification programmée');
-    }
-  }, []);
+        const id = deviceId ?? `${Platform.OS}-${Date.now()}`;
 
-  // Effacer toutes les notifications programmées
-  const clearAllScheduledNotifications = useCallback(async (): Promise<void> => {
-    try {
-      // Note: Ceci nécessite l'installation de react-native-push-notification ou expo-notifications
-      
-      // Avec expo-notifications:
-      // await Notifications.cancelAllScheduledNotificationsAsync();
+        await axiosClient.post("/auth/devices/register", {
+          device_id: id,
+          fcm_token: token,
+          platform: Platform.OS as "ios" | "android",
+          push_enabled: true,
+          app_version: Constants.expoConfig?.version ?? "1.0.0",
+        });
 
-      setScheduledNotifications([]);
-      console.log('All scheduled notifications cleared');
-    } catch (err) {
-      console.error('Error clearing scheduled notifications:', err);
-      setError('Erreur lors de la suppression des notifications programmées');
-    }
-  }, []);
+        console.log(
+          "[Notifications] Token enregistré côté backend ✓",
+          token.substring(0, 40) + "…",
+        );
+      } catch (err: any) {
+        // 401 = pas encore connecté, on ignore silencieusement
+        if (err?.response?.status !== 401) {
+          console.error(
+            "[Notifications] registerFCMToken:",
+            err?.response?.data ?? err,
+          );
+        }
+      }
+    },
+    [fcmToken, getFCMToken],
+  );
 
-  // Afficher une alerte pour demander la permission
+  // ── Notification locale immédiate ─────────────────────────────────────────
+  const sendLocalNotification = useCallback(
+    async (data: NotificationData): Promise<void> => {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: data.title,
+            body: data.body,
+            data: data.data ?? {},
+            sound: data.sound ?? "default",
+          },
+          trigger: null, // null = immédiat
+        });
+      } catch (err) {
+        console.error("[Notifications] sendLocalNotification:", err);
+      }
+    },
+    [],
+  );
+
+  // ── Programmer une notification future ────────────────────────────────────
+  const scheduleNotification = useCallback(
+    async (
+      title: string,
+      body: string,
+      scheduledTime: Date,
+      data?: Record<string, any>,
+    ): Promise<string | null> => {
+      try {
+        const secondsUntil = Math.max(
+          1,
+          Math.round((scheduledTime.getTime() - Date.now()) / 1000),
+        );
+
+        const id = await Notifications.scheduleNotificationAsync({
+          content: { title, body, data: data ?? {}, sound: "default" },
+          trigger: { seconds: secondsUntil, repeats: false },
+        });
+
+        setScheduledNotifications((prev) => [
+          ...prev,
+          { id, title, body, scheduledTime, data },
+        ]);
+        return id;
+      } catch (err) {
+        console.error("[Notifications] scheduleNotification:", err);
+        return null;
+      }
+    },
+    [],
+  );
+
+  // ── Annuler une notification programmée ──────────────────────────────────
+  const cancelScheduledNotification = useCallback(
+    async (notificationId: string): Promise<void> => {
+      try {
+        await Notifications.cancelScheduledNotificationAsync(notificationId);
+        setScheduledNotifications((prev) =>
+          prev.filter((n) => n.id !== notificationId),
+        );
+      } catch (err) {
+        console.error("[Notifications] cancelScheduledNotification:", err);
+      }
+    },
+    [],
+  );
+
+  // ── Tout annuler ─────────────────────────────────────────────────────────
+  const clearAllScheduledNotifications =
+    useCallback(async (): Promise<void> => {
+      try {
+        await Notifications.cancelAllScheduledNotificationsAsync();
+        setScheduledNotifications([]);
+      } catch (err) {
+        console.error("[Notifications] clearAll:", err);
+      }
+    }, []);
+
+  // ── Alerte de demande de permission ──────────────────────────────────────
   const showPermissionAlert = useCallback(() => {
     showWarning(
-      'Notifications requises',
-      'SmartQueue a besoin d\'envoyer des notifications pour vous alerter quand c\'est votre tour dans la file d\'attente.',
-      'Autoriser',
+      "Notifications requises",
+      "SmartQueue a besoin de vous notifier quand c'est votre tour dans la file d'attente.",
+      "Autoriser",
       () => requestPermission(),
-      'Annuler'
+      "Annuler",
     );
   }, [requestPermission, showWarning]);
 
-  // Initialiser les notifications
+  // ── Initialisation complète ───────────────────────────────────────────────
   const initializeNotifications = useCallback(async (): Promise<void> => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      
-      // Vérifier la permission
-      const currentPermission = await checkPermission();
-      
-      if (currentPermission.granted) {
-        // Obtenir le token FCM
-        await getFCMToken();
-        
-        // Configurer les handlers pour les notifications en foreground et background
-        // Note: Ceci nécessite @react-native-firebase/messaging
-        
-        // messaging().onNotificationOpenedApp(remoteMessage => {
-        //   console.log('Notification caused app to open from background state:', remoteMessage);
-        // });
-        
-        // messaging().onMessage(async remoteMessage => {
-        //   console.log('Received message in foreground:', remoteMessage);
-        //   await sendLocalNotification({
-        //     title: remoteMessage.notification?.title || 'Nouvelle notification',
-        //     body: remoteMessage.notification?.body || '',
-        //     data: remoteMessage.data,
-        //   });
-        // });
-        
-        // messaging().setBackgroundMessageHandler(async remoteMessage => {
-        //   console.log('Handled background message:', remoteMessage);
-        // });
+      // Canal Android (obligatoire Android 8+)
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("smartqueue-default", {
+          name: "SmartQueue",
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: "#3B82F6",
+          sound: "default",
+        });
       }
-      
-      setIsLoading(false);
+
+      const perm = await checkPermission();
+
+      if (perm.granted) {
+        await getFCMToken();
+      } else if (perm.canAskAgain) {
+        // On ne spam pas l'utilisateur, on laisse l'UI décider quand demander
+        console.log("[Notifications] Permission pas encore accordée");
+      }
     } catch (err) {
-      console.error('Error initializing notifications:', err);
-      setError('Erreur lors de l\'initialisation des notifications');
+      console.error("[Notifications] initializeNotifications:", err);
+    } finally {
       setIsLoading(false);
     }
-  }, [checkPermission, getFCMToken, sendLocalNotification]);
+  }, [checkPermission, getFCMToken]);
 
-  // Effet pour initialiser les notifications au montage
+  // ── Listeners ────────────────────────────────────────────────────────────
   useEffect(() => {
-    initializeNotifications();
-  }, [initializeNotifications]);
+    // Notif reçue en premier plan
+    foregroundListener.current = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const { title, body } = notification.request.content;
+        console.log("[Notifications] Reçue en FG:", title, body);
+      },
+    );
 
-  // Effet pour charger le token FCM depuis le stockage
-  useEffect(() => {
-    const loadStoredToken = async () => {
-      try {
-        const storedToken = await AsyncStorage.getItem('fcm_token');
-        if (storedToken) {
-          setFcmToken(storedToken);
-        }
-      } catch (err) {
-        console.error('Error loading stored FCM token:', err);
-      }
+    // Utilisateur a tapé sur la notif
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response.notification.request.content.data as Record<
+          string,
+          any
+        >;
+        console.log("[Notifications] Tap sur notif, data:", data);
+        // Navigation possible ici selon data.type / data.ticket_id
+        // ex: router.push(`/(tabs)/tickets?id=${data.ticket_id}`)
+      });
+
+    return () => {
+      foregroundListener.current?.remove();
+      responseListener.current?.remove();
     };
+  }, []);
 
-    loadStoredToken();
+  // ── Initialisation au montage ─────────────────────────────────────────────
+  useEffect(() => {
+    // Charger le token stocké
+    AsyncStorage.getItem("push_token").then((stored) => {
+      if (stored) setFcmToken(stored);
+    });
+
+    initializeNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {
-    // État
     permission,
     fcmToken,
     isLoading,
     error,
     scheduledNotifications,
-    
-    // Actions
     checkPermission,
     requestPermission,
     getFCMToken,
@@ -444,7 +389,6 @@ export const useNotifications = () => {
     clearAllScheduledNotifications,
     showPermissionAlert,
     initializeNotifications,
-    
     // Propriétés calculées
     hasPermission: permission.granted,
     canRequestPermission: permission.canAskAgain,
