@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     && rm -rf /var/lib/apt/lists/*
 
-# ─── 3. Extensions PHP ────────────────────────────────────────────────────────
+# ─── 3. Extensions PHP (hors redis) ─────────────────────────────────────────
 RUN install-php-extensions \
     pdo_mysql \
     pdo_pgsql \
@@ -28,19 +28,31 @@ RUN install-php-extensions \
     pcntl \
     bcmath \
     intl \
-    gd \
-    redis
+    gd
 
-# ─── 4. Composer ──────────────────────────────────────────────────────────────
+# ─── 4. Redis — installé depuis GitHub pour éviter pecl.php.net (souvent down) ─
+# pecl.php.net retourne des 502/503 de façon intermittente en CI.
+# GitHub releases est beaucoup plus fiable.
+RUN curl -fsSL https://github.com/phpredis/phpredis/archive/refs/tags/6.1.0.tar.gz \
+        | tar xz -C /tmp \
+    && cd /tmp/phpredis-6.1.0 \
+    && phpize \
+    && ./configure \
+    && make -j"$(nproc)" \
+    && make install \
+    && docker-php-ext-enable redis \
+    && rm -rf /tmp/phpredis-6.1.0
+
+# ─── 5. Composer ──────────────────────────────────────────────────────────────
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# ─── 5. Dépendances Composer (layer mis en cache) ─────────────────────────────
+# ─── 6. Dépendances Composer (layer mis en cache) ─────────────────────────────
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
-# ─── 6. Code applicatif ───────────────────────────────────────────────────────
+# ─── 7. Code applicatif ───────────────────────────────────────────────────────
 COPY --chown=www-data:www-data . .
 
 RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache \
@@ -48,10 +60,10 @@ RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framewor
     && chmod -R ug+rwX storage bootstrap/cache \
     && composer dump-autoload --optimize
 
-# ─── 7. Nginx ─────────────────────────────────────────────────────────────────
+# ─── 8. Nginx ─────────────────────────────────────────────────────────────────
 RUN rm -f /etc/nginx/sites-enabled/default
 
-# ─── 8. Supervisor ────────────────────────────────────────────────────────────
+# ─── 9. Supervisor ────────────────────────────────────────────────────────────
 RUN printf '%s\n' \
   '[supervisord]' \
   'nodaemon=true' \
