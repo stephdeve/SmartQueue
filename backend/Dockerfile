@@ -1,14 +1,24 @@
 FROM php:8.2-fpm
 
-# ─── 1. install-php-extensions ────────────────────────────────────────────────
-# Outil communautaire officiel : gère automatiquement toutes les dépendances
-# système (libjpeg, libpng, libicu, libpq, etc.) selon l'image PHP utilisée.
-# Plus besoin de gérer manuellement les paquets apt ni les flags de compilation.
-ADD --chmod=0755 \
-    https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions \
+# ─── 1. install-php-extensions (COPY --from, plus fiable que ADD URL) ─────────
+# Copie depuis l'image officielle plutôt que de télécharger via HTTPS.
+# Évite les problèmes de réseau, BuildKit, permissions et fichiers corrompus.
+COPY --from=mlocati/php-extension-installer:latest \
+    /usr/bin/install-php-extensions \
     /usr/local/bin/
 
-# ─── 2. Extensions PHP ────────────────────────────────────────────────────────
+# ─── 2. Outils système ────────────────────────────────────────────────────────
+# On installe uniquement git/unzip/nginx/supervisor.
+# install-php-extensions gère lui-même toutes les libs C nécessaires (libpng,
+# libjpeg, libpq, libicu, etc.) selon la version Debian de l'image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    unzip \
+    nginx \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── 3. Extensions PHP ────────────────────────────────────────────────────────
 RUN install-php-extensions \
     pdo_mysql \
     pdo_pgsql \
@@ -21,20 +31,12 @@ RUN install-php-extensions \
     gd \
     redis
 
-# ─── 3. Outils système (nginx + supervisor uniquement) ────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    unzip \
-    nginx \
-    supervisor \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
 # ─── 4. Composer ──────────────────────────────────────────────────────────────
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# ─── 5. Dépendances PHP (cache de layer) ──────────────────────────────────────
+# ─── 5. Dépendances Composer (layer mis en cache) ─────────────────────────────
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
