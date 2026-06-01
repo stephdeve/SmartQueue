@@ -8,13 +8,13 @@ import {
   FlatList,
   ActivityIndicator,
   ScrollView,
-  Modal
+  Modal,
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, Region } from "react-native-maps";
 import { useGeolocation } from "../../hooks/useGeolocation";
 import { useCustomAlert } from "../../hooks/useCustomAlert";
 import { establishmentsApi, Establishment } from "../../api/establishmentsApi";
-import {  Theme } from "../../theme";
+import { Theme } from "../../theme";
 import { useThemeColors } from "../../hooks/useThemeColors";
 import { Badge } from "../../components/ui/Badge";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,6 +27,7 @@ import { useSimpleNotification } from "../../hooks/useSimpleNotification";
 import { Coordinates } from "../../utils/distance";
 import { ActiveTicketCard } from "../../components/ActiveTicketCard";
 import useExploreCacheStore, { useExploreCache } from "../../store/exploreCacheStore";
+import { useUnreadNotifications } from "../../hooks/useUnreadNotifications";
 // Types pour les filtres
 type FilterType = "all" | "banks" | "clinics" | "pharmacies" | "gov";
 type SortOption = "default" | "distance" | "name" | "crowd_level";
@@ -39,8 +40,9 @@ export const ExploreScreen: React.FC = () => {
   const colors = useThemeColors();
   const { location, getCurrentPosition } = useGeolocation();
   const [placeName, setPlaceName] = useState<string | null>(null);
-  const { hasActiveTicket, activeTicket, fetchActiveTicket, isInitialized } = useTicket();
+  const { hasActiveTicket, activeTicket, activeTickets, fetchActiveTicket, isInitialized } = useTicket();
   const { AlertComponent, showError } = useCustomAlert();
+  const { unreadCount, refresh: refreshUnread } = useUnreadNotifications();
 
   // Debug log
   useEffect(() => {
@@ -54,14 +56,16 @@ export const ExploreScreen: React.FC = () => {
     useCallback(() => {
       console.log('[ExploreScreen] Fetching active ticket...');
       fetchActiveTicket().catch(err => console.error('Error fetching active ticket:', err));
-    }, [fetchActiveTicket]),
+      // Rafraîchir aussi le compteur de notifications non lues
+      refreshUnread();
+    }, [fetchActiveTicket, refreshUnread]),
   );
 
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [filteredEstablishments, setFilteredEstablishments] = useState<
     Establishment[]
   >([]);
-    const [selectedFilter, setSelectedFilter] = useState<FilterType>("all");
+  const [selectedFilter, setSelectedFilter] = useState<FilterType>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [mapRegion, setMapRegion] = useState<Region | null>(null);
@@ -155,54 +159,54 @@ export const ExploreScreen: React.FC = () => {
     setRouteCoordinates(points);
   }, [location, establishmentCoords, hasActiveTicket]);
 
-//Ajouter le reverse geocoding
-useEffect(() => {
-  const fetchPlaceName = async () => {
-    if (!location) return;
+  //Ajouter le reverse geocoding
+  useEffect(() => {
+    const fetchPlaceName = async () => {
+      if (!location) return;
 
-    try {
-      const result = await Location.reverseGeocodeAsync({
-        latitude: location.latitude,
-        longitude: location.longitude,
-      });
+      try {
+        const result = await Location.reverseGeocodeAsync({
+          latitude: location.latitude,
+          longitude: location.longitude,
+        });
 
-      if (result.length > 0) {
-        const place = result[0];
+        if (result.length > 0) {
+          const place = result[0];
 
-        const normalize = (str?: string) =>
-          str
-            ? str.toLowerCase().replace(/[-\s]+/g, "").trim()
-            : "";
+          const normalize = (str?: string) =>
+            str
+              ? str.toLowerCase().replace(/[-\s]+/g, "").trim()
+              : "";
 
-        const city = place.city?.trim();
-        const subregion = place.subregion?.trim();
-        const district = place.district?.trim();
-        const region = place.region?.trim();
-        const primary = district || subregion || city;
-        const secondary = city || region;
+          const city = place.city?.trim();
+          const subregion = place.subregion?.trim();
+          const district = place.district?.trim();
+          const region = place.region?.trim();
+          const primary = district || subregion || city;
+          const secondary = city || region;
 
-        let name = "";
+          let name = "";
 
-        if (
-          primary &&
-          secondary &&
-          normalize(primary) !== normalize(secondary)
-        ) {
-          name = `${primary}, ${secondary}`;
-        } else {
-          name = primary || secondary || place.country || "Ma position";
+          if (
+            primary &&
+            secondary &&
+            normalize(primary) !== normalize(secondary)
+          ) {
+            name = `${primary}, ${secondary}`;
+          } else {
+            name = primary || secondary || place.country || "Ma position";
+          }
+
+          setPlaceName(name);
         }
-
-        setPlaceName(name);
+      } catch (error) {
+        console.log("Reverse geocode error", error);
+        setPlaceName("Ma position");
       }
-    } catch (error) {
-      console.log("Reverse geocode error", error);
-      setPlaceName("Ma position");
-    }
-  };
+    };
 
-  fetchPlaceName();
-}, [location]);
+    fetchPlaceName();
+  }, [location]);
 
 
   // Charger les établissements
@@ -231,7 +235,7 @@ useEffect(() => {
         }
         return;
       }
-      
+
       showError(
         "Localisation requise",
         "Veuillez autoriser la localisation pour trouver les établissements proches.",
@@ -353,9 +357,9 @@ useEffect(() => {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(location.latitude * (Math.PI / 180)) *
-        Math.cos(estLat * (Math.PI / 180)) *
-        Math.sin(dLng / 2) *
-        Math.sin(dLng / 2);
+      Math.cos(estLat * (Math.PI / 180)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }, [location]);
@@ -368,7 +372,7 @@ useEffect(() => {
     const nearbyLowCrowd = establishments.filter(est => {
       if (est.crowd_level !== 'low') return false;
       if (notifiedEstablishmentsRef.current.has(`crowd_${est.id}`)) return false;
-      
+
       const dist = calculateDistance(est);
       return dist < 1; // Within 1km
     });
@@ -384,7 +388,7 @@ useEffect(() => {
     const newlyOpened = establishments.filter(est => {
       if (est.open_now !== true) return false;
       if (notifiedEstablishmentsRef.current.has(`open_${est.id}`)) return false;
-      
+
       const dist = calculateDistance(est);
       return dist < 2; // Within 2km
     });
@@ -462,7 +466,7 @@ useEffect(() => {
   const getTrendIndicator = (establishment: Establishment) => {
     const trend = establishment.crowd_trend || 'stable';
     const peopleWaiting = establishment.people_waiting ?? 0;
-    
+
     // Simulation: si plus de 10 personnes, tendance à la hausse probable
     // Si 0-3 personnes, tendance à la baisse probable
     // Sinon stable
@@ -653,30 +657,112 @@ useEffect(() => {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Search Header - iOS Style */}
-      <View style={{ paddingHorizontal: 20, paddingTop: 43, paddingBottom: 16, backgroundColor: colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <TouchableOpacity 
-            onPress={()=>getCurrentPosition()} 
-            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '20', borderColor: colors.primary + '30', borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 }}
+      {/* ── Header principal ─────────────────────────────────────────────── */}
+      <View style={{
+        paddingHorizontal: 20,
+        paddingTop: 43,
+        paddingBottom: 16,
+        backgroundColor: colors.surface,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+      }}>
+
+        {/* Ligne 1 : localisation · tickets actifs · cloche */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+
+          {/* Bouton localisation — width fit-content, tronqué si trop long */}
+          <TouchableOpacity
+            onPress={() => getCurrentPosition()}
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '20', borderColor: colors.primary + '30', borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, maxWidth: '55%', marginRight: 8 }}
           >
-            <Ionicons name="location-sharp" size={16} color={colors.primary} />
-            <Text style={{ marginLeft: 4, fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>
+            <Ionicons name="location-sharp" size={16} color={colors.primary} style={{ flexShrink: 0 }} />
+            <Text style={{ marginLeft: 4, fontSize: 14, fontWeight: '600', color: colors.textPrimary, flexShrink: 1 }} numberOfLines={1} ellipsizeMode="tail">
               {placeName || "Localisation en cours..."}
             </Text>
-            <Ionicons name="chevron-down" size={12} color={colors.textSecondary} style={{ marginLeft: 4 }} />
+            <Ionicons name="chevron-down" size={12} color={colors.textSecondary} style={{ marginLeft: 4, flexShrink: 0 }} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: 'red' , borderColor: colors.danger + '30', borderWidth: 1, borderRadius: 999,  }}
-            onPress={() => router.push('/notifications' as any)}
+          {/* Badge tickets actifs — visible seulement si ≥ 1 ticket */}
+          {isInitialized && hasActiveTicket && activeTickets.length > 0 && (
+            <TouchableOpacity
+              onPress={() => router.push({
+                pathname: '/(tabs)/live-ticket',
+                params: { ticketId: String(activeTickets[0].id) },
+              })}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: activeTickets.some(t => t.status === 'called')
+                  ? colors.danger + '15'
+                  : colors.success + '15',
+                borderWidth: 1,
+                borderColor: activeTickets.some(t => t.status === 'called')
+                  ? colors.danger + '50'
+                  : colors.success + '50',
+                borderRadius: 999,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                marginRight: 8,
+                flexShrink: 0,
+              }}
+            >
+              <View style={{
+                width: 7,
+                height: 7,
+                borderRadius: 4,
+                backgroundColor: activeTickets.some(t => t.status === 'called')
+                  ? colors.danger
+                  : colors.success,
+                marginRight: 5,
+              }} />
+              <Text style={{
+                fontSize: 13,
+                fontWeight: '700',
+                color: activeTickets.some(t => t.status === 'called')
+                  ? colors.danger
+                  : colors.success,
+              }}>
+                {activeTickets.length} ticket{activeTickets.length > 1 ? 's' : ''}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Bouton notifications */}
+          <TouchableOpacity
+            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, borderRadius: 999, flexShrink: 0 }}
+            onPress={() => {
+              refreshUnread();
+              router.push('/notifications' as any);
+            }}
           >
             <Ionicons name="notifications-outline" size={20} color={'white'} />
-            {/* <View style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, backgroundColor: colors.background, borderRadius: 99, }} /> */}
+            {unreadCount > 0 && (
+              <View style={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                minWidth: 18,
+                height: 18,
+                borderRadius: 9,
+                backgroundColor: colors.danger,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingHorizontal: 4,
+                borderWidth: 2,
+                borderColor: colors.surface,
+              }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800', lineHeight: 12 }}>
+                  {unreadCount > 99 ? '99+' : String(unreadCount)}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
-        {/* Search Input Container */}
+
+        {/* Ligne 2 : Searchbar */}
         <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderRadius: 16, paddingHorizontal: 16 }}>
           <Ionicons name="search-outline" size={20} color={colors.textTertiary} />
           <TextInput
@@ -803,8 +889,8 @@ useEffect(() => {
             )}
 
             {!location ||
-            isNaN(Number(location.latitude)) ||
-            isNaN(Number(location.longitude)) ? null : (
+              isNaN(Number(location.latitude)) ||
+              isNaN(Number(location.longitude)) ? null : (
               <Marker
                 coordinate={{
                   latitude: Number(location.latitude),
@@ -931,7 +1017,7 @@ useEffect(() => {
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={{ fontSize: 14, color: colors.textTertiary,marginTop:-8, }}>
+          <Text style={{ fontSize: 14, color: colors.textTertiary, marginTop: -8, }}>
             {filteredEstablishments.length} résultats trouvés
           </Text>
         </View>
@@ -943,7 +1029,7 @@ useEffect(() => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
           ItemSeparatorComponent={() => (
-            <View style={{ height: 1, backgroundColor: colors.border, width: '80%' ,alignSelf:"center", }} />
+            <View style={{ height: 1, backgroundColor: colors.border, width: '80%', alignSelf: "center", }} />
           )}
           ListHeaderComponent={
             isInitialized && hasActiveTicket && activeTicket ? (
