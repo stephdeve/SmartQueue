@@ -13,7 +13,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useTicket } from '../../store/ticketStore';
+import { useTicket, useTicketStore } from '../../store/ticketStore';
 import { useDistanceTracking } from '../../hooks/useDistanceTracking';
 import { useSmartNotifications } from '../../hooks/useSmartNotifications';
 import { useUserStatsStore } from '../../store/userStatsStore';
@@ -53,8 +53,16 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
 
   // Fetch fresh ticket data on mount and whenever the screen regains focus
   // (defensive re-sync in case a realtime event was missed).
+  // Guard : on ne re-fetch pas si l'overlay est déjà visible ET que l'utilisateur
+  // a déjà répondu (en_route_at posé localement) pour éviter la réouverture.
   useFocusEffect(
     useCallback(() => {
+      const state = useTicketStore.getState();
+      // Si le ticket est appelé ET que l'utilisateur a déjà répondu localement,
+      // on saute le fetch pour ne pas écraser en_route_at avant le prochain resync.
+      if (state.isCalled && state.activeTicket?.en_route_at) {
+        return;
+      }
       fetchActiveTicket().catch(err => console.error('Error fetching ticket:', err));
     }, [fetchActiveTicket]),
   );
@@ -68,12 +76,12 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
 
   // WebSocket is now connected at tab layout level - removed duplicate
   // Check if establishment has valid coordinates
-  const hasValidCoordinates = activeTicket?.establishment && 
-    (activeTicket.establishment as any)?.lat !== null && 
+  const hasValidCoordinates = activeTicket?.establishment &&
+    (activeTicket.establishment as any)?.lat !== null &&
     (activeTicket.establishment as any)?.lat !== undefined &&
     (activeTicket.establishment as any)?.lng !== null &&
     (activeTicket.establishment as any)?.lng !== undefined;
-  
+
   // Distance tracking
   const { distanceInfo, hasPermission: hasLocationPermission } = useDistanceTracking({
     targetCoordinates: hasValidCoordinates ? {
@@ -93,7 +101,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
 
   // Countdown state - 10 minutes (600 seconds)
   const [countdownSeconds, setCountdownSeconds] = useState(600);
-  
+
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const positionAnim = useRef(new Animated.Value(1)).current;
@@ -144,11 +152,11 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
       Animated.spring(positionAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
     ]).start();
   }, [position]);
-  
+
   // Handle recall action
   const handleRecall = useCallback(async () => {
     if (!effectiveTicketId || hasRecalled) return;
-    
+
     try {
       const response = await axiosClient.post(`/tickets/${effectiveTicketId}/request-recall`);
       setRecalled();
@@ -157,11 +165,11 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
       showError('Erreur', getApiErrorMessage(error, 'Impossible d\'envoyer le rappel'));
     }
   }, [effectiveTicketId, hasRecalled, setRecalled, showError]);
-  
+
   // Handle "en route" action
   const handleEnRoute = useCallback(async () => {
     if (!effectiveTicketId) return;
-    
+
     try {
       const payload: { estimated_travel_minutes?: number } = {};
       const rawTravel = distanceInfo?.travelTimes?.car;
@@ -169,14 +177,32 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
         // Borné sur [1,60] car le backend valide integer|min:1|max:60.
         payload.estimated_travel_minutes = Math.min(60, Math.max(1, Math.round(rawTravel)));
       }
-      await axiosClient.post(`/tickets/${effectiveTicketId}/en-route`, payload);
+      const response = await axiosClient.post(`/tickets/${effectiveTicketId}/en-route`, payload);
+
+      // Persister en_route_at depuis la réponse backend dans le store pour que
+      // le flag survive au prochain resync et que l'overlay ne se rouvre pas.
+      const updatedTicket = response.data?.data || response.data;
+      if (updatedTicket?.en_route_at) {
+        const s = useTicketStore.getState();
+        if (s.activeTicket?.id === effectiveTicketId) {
+          useTicketStore.setState({
+            activeTicket: { ...s.activeTicket, en_route_at: updatedTicket.en_route_at },
+            activeTickets: s.activeTickets.map((t) =>
+              t.id === effectiveTicketId
+                ? { ...t, en_route_at: updatedTicket.en_route_at }
+                : t,
+            ),
+          });
+        }
+      }
+
       markEnRoute(); // Dismiss overlay et mémorise la réponse (évite la réapparition)
       showSuccess('Confirmation', 'L\'agent a été notifié que vous êtes en route');
     } catch (error: any) {
       showError('Erreur', getApiErrorMessage(error, 'Impossible de confirmer'));
     }
   }, [effectiveTicketId, distanceInfo, markEnRoute, showSuccess, showError]);
-  
+
   // Handle dismiss
   const handleDismiss = useCallback(() => {
     return router.replace('/(tabs)');
@@ -227,7 +253,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {AlertComponent}
-      
+
       {/* Gradient Header */}
       <LinearGradient
         colors={isDark ? ['#1E3A5F', '#2563EB', '#3B82F6'] : [colors.primary, colors.secondary, '#1D4ED8']}
@@ -247,7 +273,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          
+
           <View style={styles.headerTitleContainer}>
             <Text style={[styles.headerTitle, { color: '#FFFFFF' }]}>Ma File</Text>
             <View style={[styles.liveBadge, { backgroundColor: isCalled ? colors.danger + '40' : 'rgba(255,255,255,0.25)' }]}>
@@ -260,18 +286,18 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
               )}
             </View>
           </View>
-          
+
           <View style={styles.placeholder} />
         </View>
       </LinearGradient>
 
-      <ScrollView 
-        style={styles.scrollView} 
+      <ScrollView
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {/* Main Ticket Card */}
-        <Animated.View 
+        <Animated.View
           style={[
             styles.ticketCard,
             { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, },
@@ -371,13 +397,13 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
                     backgroundColor: departureInfo.shouldLeaveNow
                       ? colors.danger + '20'
                       : departureInfo.shouldLeaveSoon
-                      ? colors.warning + '20'
-                      : colors.success + '20',
+                        ? colors.warning + '20'
+                        : colors.success + '20',
                     borderColor: departureInfo.shouldLeaveNow
                       ? colors.danger
                       : departureInfo.shouldLeaveSoon
-                      ? colors.warning
-                      : colors.success,
+                        ? colors.warning
+                        : colors.success,
                   },
                 ]}
               >
@@ -394,24 +420,24 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
                         color: departureInfo.shouldLeaveNow
                           ? colors.danger
                           : departureInfo.shouldLeaveSoon
-                          ? colors.warning
-                          : colors.success,
+                            ? colors.warning
+                            : colors.success,
                       },
                     ]}
                   >
                     {departureInfo.shouldLeaveNow
                       ? 'Partez maintenant !'
                       : departureInfo.shouldLeaveSoon
-                      ? `Partez dans ${Math.ceil(departureInfo.leaveIn)} min`
-                      : ' Timing optimal'}
+                        ? `Partez dans ${Math.ceil(departureInfo.leaveIn)} min`
+                        : ' Timing optimal'}
                   </Text>
                 </View>
                 <Text style={[styles.departureAlertText, { color: colors.textSecondary }]}>
                   {departureInfo.shouldLeaveNow
                     ? `Risque de retard! Trajet: ${formatTravelTime(departureInfo.travelTime)}, attente: ${etaMinutes} min`
                     : departureInfo.shouldLeaveSoon
-                    ? `Temps de trajet: ${formatTravelTime(departureInfo.travelTime)}, vous avez ${Math.ceil(departureInfo.leaveIn)} min de marge`
-                    : `Vous pouvez partir dans ${Math.floor(departureInfo.leaveIn)} min. Trajet: ${formatTravelTime(departureInfo.travelTime)}`}
+                      ? `Temps de trajet: ${formatTravelTime(departureInfo.travelTime)}, vous avez ${Math.ceil(departureInfo.leaveIn)} min de marge`
+                      : `Vous pouvez partir dans ${Math.floor(departureInfo.leaveIn)} min. Trajet: ${formatTravelTime(departureInfo.travelTime)}`}
                 </Text>
                 {journeyProgress && (
                   <View style={styles.journeyProgressContainer}>
@@ -424,8 +450,8 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
                             backgroundColor: journeyProgress.isLate
                               ? colors.danger
                               : journeyProgress.isOptimal
-                              ? colors.success
-                              : colors.warning,
+                                ? colors.success
+                                : colors.warning,
                           },
                         ]}
                       />
@@ -445,16 +471,16 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
                   <Ionicons name="location-outline" size={18} color={colors.primary} />
                   <Text style={[styles.distanceTitle, { color: colors.primary }]}>Votre position</Text>
                 </View>
-                
+
                 <View style={styles.distanceGrid}>
                   <View style={styles.distanceItem}>
                     <Ionicons name="navigate-outline" size={20} color={colors.textSecondary} />
                     <Text style={[styles.distanceValue, { color: colors.textPrimary }]}>{formatDistance(distanceInfo.kilometers)}</Text>
                     <Text style={[styles.distanceLabel, { color: colors.textTertiary }]}>Distance</Text>
                   </View>
-                  
+
                   <View style={[styles.distanceDivider, { backgroundColor: colors.separator }]} />
-                  
+
                   <View style={styles.distanceItem}>
                     <Ionicons name="walk-outline" size={20} color={colors.textSecondary} />
                     <Text style={[styles.distanceValue, { color: colors.textPrimary }]}>
@@ -462,9 +488,9 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
                     </Text>
                     <Text style={[styles.distanceLabel, { color: colors.textTertiary }]}>À pied</Text>
                   </View>
-                  
+
                   <View style={[styles.distanceDivider, { backgroundColor: colors.separator }]} />
-                  
+
                   <View style={styles.distanceItem}>
                     <Ionicons name="car-outline" size={20} color={colors.textSecondary} />
                     <Text style={[styles.distanceValue, { color: colors.textPrimary }]}>
@@ -487,7 +513,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
         </Animated.View>
 
         {/* Action Buttons */}
-        <Animated.View 
+        <Animated.View
           style={[
             styles.actionsContainer,
             {
@@ -496,7 +522,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
             },
           ]}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.primaryButton, { shadowColor: colors.primary }]}
             onPress={() => router.push('/navigation' as any)}
             activeOpacity={0.8}
@@ -511,8 +537,8 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
           </TouchableOpacity>
 
           <View style={styles.secondaryButtons}>
-            <TouchableOpacity 
-              style={[styles.secondaryButton, { backgroundColor: colors.surface , borderColor: colors.border, borderWidth: 1}]}
+            <TouchableOpacity
+              style={[styles.secondaryButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
               onPress={() => router.push('/dashboard' as any)}
               activeOpacity={0.8}
             >
@@ -837,7 +863,7 @@ const styles = StyleSheet.create({
   actionsContainer: {
     marginHorizontal: 16,
     marginTop: 20,
-    marginBottom:100,
+    marginBottom: 100,
     gap: 12,
   },
   primaryButton: {
@@ -854,7 +880,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     gap: 8,
-    elevation:0,
+    elevation: 0,
   },
   actionButtonText: {
     color: "#FFFFFF",
@@ -875,7 +901,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
-    borderWidth:1,
+    borderWidth: 1,
   },
   secondaryButtonIcon: {
     width: 48,

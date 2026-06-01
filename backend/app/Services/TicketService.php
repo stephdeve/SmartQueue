@@ -43,28 +43,37 @@ class TicketService
             ->where('status', 'waiting')
             ->orderBy('created_at')
             ->orderBy('id')
-            ->get(['id', 'user_id', 'position']);
+            ->get(['id', 'user_id', 'position', 'eta_minutes']);
 
         $pos = 1;
         foreach ($waiting as $t) {
             $eta = $this->estimateWaitTime($service, new Ticket(['position' => $pos]));
-            $changed = (int) $t->position !== $pos;
+            $positionChanged = (int) $t->position !== $pos;
+            $etaChanged = (int) ($t->eta_minutes ?? -1) !== $eta;
 
-            if ($changed) {
+            // Mettre à jour la DB uniquement si quelque chose a changé
+            if ($positionChanged || $etaChanged) {
                 Ticket::query()->where('id', $t->id)->update([
                     'position' => $pos,
                     'eta_minutes' => $eta,
                 ]);
-                $this->broadcastSafely(fn() => event(new TicketUpdated($t->id, [
-                    'position' => $pos,
-                    'eta_minutes' => $eta,
-                ])));
-                $this->broadcastSafely(fn() => event(new UserTicketUpdated($t->user_id, [
-                    'ticket_id' => $t->id,
-                    'position' => $pos,
-                    'eta_minutes' => $eta,
-                ])));
             }
+
+            // Toujours broadcaster la position et l'ETA pour que le mobile reste
+            // synchronisé, même si la position numérique n'a pas changé.
+            // Cas typique : un ticket est servi, les positions restent identiques
+            // mais l'ETA recalculé est différent — sans cet événement le mobile
+            // affiche un ETA figé.
+            $this->broadcastSafely(fn() => event(new TicketUpdated($t->id, [
+                'position' => $pos,
+                'eta_minutes' => $eta,
+            ])));
+            $this->broadcastSafely(fn() => event(new UserTicketUpdated($t->user_id, [
+                'ticket_id' => $t->id,
+                'position' => $pos,
+                'eta_minutes' => $eta,
+            ])));
+
             $pos++;
         }
 

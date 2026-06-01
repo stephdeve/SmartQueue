@@ -108,6 +108,16 @@ export const useAuthStore = create<AuthState>()(
           // Ignorer les erreurs de déconnexion côté serveur
           console.warn("Logout API error:", error);
         } finally {
+          // Supprimer le token push mis en cache pour qu'il soit re-enregistré
+          // au prochain login avec le bon user_id (évite les notifications
+          // envoyées au mauvais utilisateur sur un device partagé).
+          try {
+            const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+            await AsyncStorage.removeItem('push_token');
+          } catch (e) {
+            console.warn('Failed to clear push token on logout:', e);
+          }
+
           // Clear ticket store to prevent stale data from previous user
           const { useTicketStore } = require("./ticketStore");
           useTicketStore.getState().clearActiveTicket();

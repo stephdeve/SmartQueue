@@ -10,6 +10,11 @@ class DeviceController extends Controller
 {
     /**
      * Enregistre ou met à jour un device FCM pour l'utilisateur courant.
+     *
+     * Correction : un token FCM est unique par device physique. Si ce token
+     * appartient déjà à un autre utilisateur (ex : même téléphone, compte
+     * différent), on le réassigne à l'utilisateur courant pour éviter que
+     * les notifications d'un utilisateur soient envoyées à un autre.
      */
     public function register(Request $request)
     {
@@ -21,10 +26,21 @@ class DeviceController extends Controller
             'sms_enabled' => ['nullable','boolean'],
         ]);
 
-        // Upsert basé sur le token + user_id
+        $currentUserId = $request->user()->id;
+
+        // Supprimer ce token s'il est associé à un autre utilisateur.
+        // Un token FCM est lié au device physique, pas au compte — si l'utilisateur
+        // change de compte sur le même téléphone, l'ancien propriétaire ne doit
+        // plus recevoir les notifications de ce device.
+        Device::where('fcm_token', $data['fcm_token'])
+            ->where('user_id', '!=', $currentUserId)
+            ->delete();
+
+        // Upsert basé sur le token (maintenant unique) pour l'utilisateur courant
         $device = Device::updateOrCreate(
-            ['user_id' => $request->user()->id, 'fcm_token' => $data['fcm_token']],
+            ['fcm_token' => $data['fcm_token']],
             [
+                'user_id' => $currentUserId,
                 'platform' => $data['platform'] ?? null,
                 'app_version' => $data['app_version'] ?? null,
                 'push_enabled' => $data['push_enabled'] ?? true,

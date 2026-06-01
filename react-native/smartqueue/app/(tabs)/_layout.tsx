@@ -1,27 +1,41 @@
-import { Tabs, Redirect} from "expo-router";
+import { Tabs, Redirect } from "expo-router";
 import { View, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect } from "react";
 import "../../global.css";
 import { useThemeColors } from "../../src/hooks/useThemeColors";
 import { useAuth } from "../../src/store/authStore";
 // eslint-disable-next-line import/no-named-as-default
 import GlobalCalledTicketOverlay from "../../src/components/GlobalCalledTicketOverlay";
-import { useTicket } from "../../src/store/ticketStore";
+import { useTicket, useTicketStore } from "../../src/store/ticketStore";
 import { useCustomAlert } from "../../src/hooks/useCustomAlert";
 import { useTicketSocket } from "../../src/hooks/useTicketSocket";
 
 export default function TabLayout() {
   const colors = useThemeColors();
   const isDark = !!colors.dark?.background;
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { AlertComponent, showSuccess, showError, showWarning } = useCustomAlert();
 
-  // Called ticket overlay state
   const {
     activeTicket,
+    isInitialized,
   } = useTicket();
 
-  // Connect WebSocket at tab level so called events work on ALL screens
+  // Charger le ticket actif dès que l'utilisateur est authentifié et que le
+  // store n'est pas encore initialisé. Cela garantit que le socket se connecte
+  // avec le bon ticketId dès le premier rendu des tabs.
+  useEffect(() => {
+    if (isAuthenticated && !isInitialized) {
+      useTicketStore.getState().fetchActiveTicket().catch((err) =>
+        console.warn('[TabLayout] fetchActiveTicket error:', err?.message),
+      );
+    }
+  }, [isAuthenticated, isInitialized]);
+
+  // Connect WebSocket at tab level so called events work on ALL screens.
+  // ticketId est null tant que fetchActiveTicket n'a pas répondu — le hook
+  // attend et se connecte dès qu'un ticket actif est disponible.
   useTicketSocket(activeTicket?.id?.toString() || null);
 
   // Redirect agents to their space

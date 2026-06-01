@@ -65,7 +65,26 @@ export const GlobalCalledTicketOverlay: React.FC<GlobalCalledTicketOverlayProps>
         // Borné sur [1,60] car le backend valide integer|min:1|max:60.
         payload.estimated_travel_minutes = Math.min(60, Math.max(1, Math.round(rawTravel)));
       }
-      await axiosClient.post(`/tickets/${effectiveTicketId}/en-route`, payload);
+      const response = await axiosClient.post(`/tickets/${effectiveTicketId}/en-route`, payload);
+
+      // Persister en_route_at depuis la réponse backend dans le store pour que
+      // le flag soit fiable dès maintenant et survive au prochain resync.
+      const updatedTicket = response.data?.data || response.data;
+      if (updatedTicket?.en_route_at) {
+        const { useTicketStore: store } = require('../store/ticketStore');
+        const s = store.getState();
+        if (s.activeTicket?.id === effectiveTicketId) {
+          store.setState({
+            activeTicket: { ...s.activeTicket, en_route_at: updatedTicket.en_route_at },
+            activeTickets: s.activeTickets.map((t: any) =>
+              t.id === effectiveTicketId
+                ? { ...t, en_route_at: updatedTicket.en_route_at }
+                : t,
+            ),
+          });
+        }
+      }
+
       // Mémorise la réponse localement pour que l'overlay ne se rouvre pas après
       // une resynchro/navigation (le backend garde status='called').
       markEnRoute();

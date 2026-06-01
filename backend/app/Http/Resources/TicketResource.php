@@ -34,6 +34,9 @@ class TicketResource extends JsonResource
 
         return [
             'id' => $this->id,
+            // user_id est nécessaire côté mobile pour s'abonner au bon canal
+            // WebSocket user.{userId} — sans lui, le hook s'abonne au mauvais canal.
+            'user_id' => $this->user_id,
             'number' => $this->number,
             'status' => $this->status,
             'priority' => $this->priority,

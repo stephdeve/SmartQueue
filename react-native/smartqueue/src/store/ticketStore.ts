@@ -20,24 +20,24 @@ export interface TicketState {
   etaMinutes: number;
   isAlmostThere: boolean;
   isCalled: boolean;
-  
+
   // Rappel (seconde chance)
   hasRecalled: boolean;
   countdownExpiry: Date | null;
-  
+
   // Defer (laisser passer)
   hasDeferred: boolean;
   counterNumber: string | null;
-  
+
   // État de connexion WebSocket
   isConnected: boolean;
   lastUpdate: Date | null;
-  
+
   // État de chargement
   isLoading: boolean;
   isInitialized: boolean; // True once we've fetched from backend
   error: string | null;
-  
+
   // Actions
   setActiveTicket: (ticket: Ticket | null) => void;
   setActiveTickets: (tickets: Ticket[]) => void;
@@ -55,13 +55,13 @@ export interface TicketState {
   updateTicketStatus: (status: Ticket['status']) => void;
   setWebSocketConnected: (connected: boolean) => void;
   setLastUpdate: (date: Date) => void;
-  
+
   // Rappel actions
   markEnRoute: () => void;
   setRecalled: () => void;
   resetRecall: () => void;
   setCountdownExpiry: (expiry: Date | null) => void;
-  
+
   // Defer actions
   setDeferred: () => void;
   resetDeferred: () => void;
@@ -117,14 +117,25 @@ export const useTicketStore = create<TicketState>()(
       },
 
       // Mettre à jour la position et l'ETA
+      // Correction : met aussi à jour activeTicket pour que tous les composants
+      // qui lisent activeTicket.position/eta_minutes voient la valeur fraîche.
       updatePosition: (position: number, etaMinutes: number) => {
-        const { isCalled } = get();
-        
+        const { isCalled, activeTicket, activeTickets } = get();
+
         set({
           position,
           etaMinutes,
           isAlmostThere: !isCalled && position <= 2,
           lastUpdate: new Date(),
+          // Synchroniser aussi l'objet ticket pour les composants qui le lisent directement
+          activeTicket: activeTicket
+            ? { ...activeTicket, position, eta_minutes: etaMinutes }
+            : null,
+          activeTickets: activeTickets.map((t) =>
+            t.id === activeTicket?.id
+              ? { ...t, position, eta_minutes: etaMinutes }
+              : t,
+          ),
         });
       },
 
@@ -213,7 +224,7 @@ export const useTicketStore = create<TicketState>()(
 
           // Handle API response that may be wrapped in {data: {...}}
           const ticketData = (ticket as any)?.data || ticket;
-          
+
           const { activeTickets } = get();
 
           set({
@@ -296,7 +307,7 @@ export const useTicketStore = create<TicketState>()(
       // Rafraîchir le ticket actif
       refreshActiveTicket: async () => {
         const { activeTicket } = get();
-        
+
         if (!activeTicket) {
           return;
         }
@@ -305,7 +316,7 @@ export const useTicketStore = create<TicketState>()(
 
         try {
           const updatedTicket = await ticketsApi.getTicket(activeTicket.id);
-          
+
           set({
             activeTicket: updatedTicket,
             position: updatedTicket.position,
@@ -333,17 +344,34 @@ export const useTicketStore = create<TicketState>()(
         try {
           const tickets = await ticketsApi.getMyActiveTickets();
           console.log('[ticketStore] fetchActiveTicket got tickets:', tickets.length);
-          
+
           if (tickets.length > 0) {
             const firstTicket = tickets[0];
             console.log('[ticketStore] firstTicket:', JSON.stringify(firstTicket).substring(0, 300));
+
+            // Préserver en_route_at local si le backend ne l'a pas encore persisté.
+            // Évite la réouverture de l'overlay après un resync quand l'utilisateur
+            // a déjà cliqué "Je suis en route" (latence de persistance backend).
+            const currentState = get();
+            const localEnRouteAt =
+              currentState.activeTicket?.id === firstTicket.id
+                ? currentState.activeTicket?.en_route_at ?? null
+                : null;
+
+            const mergedTicket: Ticket = {
+              ...firstTicket,
+              en_route_at: firstTicket.en_route_at ?? localEnRouteAt,
+            };
+
             set({
-              activeTickets: tickets,
-              activeTicket: firstTicket,
-              position: firstTicket.position || 0,
-              etaMinutes: firstTicket.eta_minutes || 0,
-              isAlmostThere: firstTicket.position ? firstTicket.position <= 2 : false,
-              isCalled: isTicketCalled(firstTicket),
+              activeTickets: tickets.map((t) =>
+                t.id === mergedTicket.id ? mergedTicket : t,
+              ),
+              activeTicket: mergedTicket,
+              position: mergedTicket.position || 0,
+              etaMinutes: mergedTicket.eta_minutes || 0,
+              isAlmostThere: mergedTicket.position ? mergedTicket.position <= 2 : false,
+              isCalled: isTicketCalled(mergedTicket),
               isLoading: false,
               isInitialized: true,
               error: null,
@@ -351,7 +379,6 @@ export const useTicketStore = create<TicketState>()(
             });
           } else {
             console.log('[ticketStore] No active tickets');
-            // Pas de ticket actif
             set({
               activeTickets: [],
               activeTicket: null,
@@ -488,10 +515,10 @@ export const useTicket = () => {
   const isLoading = useTicketStore((state) => state.isLoading);
   const isInitialized = useTicketStore((state) => state.isInitialized);
   const error = useTicketStore((state) => state.error);
-  
+
   // Actions - use getState() to avoid subscription
   const actions = useTicketStore.getState();
-  
+
   return {
     // État
     activeTicket,
@@ -509,7 +536,7 @@ export const useTicket = () => {
     isLoading,
     isInitialized,
     error,
-    
+
     // Actions
     setActiveTicket: actions.setActiveTicket,
     setActiveTickets: actions.setActiveTickets,
@@ -533,7 +560,7 @@ export const useTicket = () => {
     setCountdownExpiry: actions.setCountdownExpiry,
     setDeferred: actions.setDeferred,
     resetDeferred: actions.resetDeferred,
-    
+
     // Computed properties (reactive because they depend on reactive state)
     hasActiveTicket: activeTicket !== null,
     ticketNumber: activeTicket?.number || '',
@@ -542,8 +569,8 @@ export const useTicket = () => {
     ticketStatus: activeTicket?.status || 'created',
     peopleAhead: Math.max(0, position - 1),
     progressPercentage: position > 0 ? Math.max(0, (1 - position / 10) * 100) : 100,
-    timeAgo: lastUpdate 
-      ? Math.floor((Date.now() - lastUpdate.getTime()) / 1000 / 60) 
+    timeAgo: lastUpdate
+      ? Math.floor((Date.now() - lastUpdate.getTime()) / 1000 / 60)
       : 0,
   };
 };
