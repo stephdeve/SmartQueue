@@ -5,6 +5,12 @@ import { ticketsApi, Ticket, CreateTicketData } from '../api/ticketsApi';
 import { shallow } from 'zustand/shallow';
 import { useUserStatsStore } from './userStatsStore';
 
+// L'overlay "ticket appelé" ne doit s'afficher que tant que l'utilisateur n'a pas
+// répondu. Le backend garde status='called' après "en route" (il pose seulement
+// en_route_at) ; sans ce filtre, toute resynchro/navigation rouvrait l'overlay.
+const isTicketCalled = (ticket: Ticket | null | undefined): boolean =>
+  ticket?.status === 'called' && !ticket?.en_route_at;
+
 // Types pour le store de tickets
 export interface TicketState {
   // État du ticket actif (principal - pour compatibilité)
@@ -51,6 +57,7 @@ export interface TicketState {
   setLastUpdate: (date: Date) => void;
   
   // Rappel actions
+  markEnRoute: () => void;
   setRecalled: () => void;
   resetRecall: () => void;
   setCountdownExpiry: (expiry: Date | null) => void;
@@ -88,7 +95,7 @@ export const useTicketStore = create<TicketState>()(
           position: ticket?.position || 0,
           etaMinutes: ticket?.eta_minutes || 0,
           isAlmostThere: ticket?.position ? ticket.position <= 2 : false,
-          isCalled: ticket?.status === 'called',
+          isCalled: isTicketCalled(ticket),
           isInitialized: true,
           error: null,
         });
@@ -103,7 +110,7 @@ export const useTicketStore = create<TicketState>()(
           position: firstTicket?.position || 0,
           etaMinutes: firstTicket?.eta_minutes || 0,
           isAlmostThere: firstTicket?.position ? firstTicket.position <= 2 : false,
-          isCalled: firstTicket?.status === 'called',
+          isCalled: isTicketCalled(firstTicket),
           isInitialized: true,
           error: null,
         });
@@ -137,6 +144,27 @@ export const useTicketStore = create<TicketState>()(
       // Effacer l'état appelé (fermer l'overlay)
       clearCalled: () => {
         set({
+          isCalled: false,
+          lastUpdate: new Date(),
+        });
+      },
+
+      // Marquer "en route" localement : pose en_route_at sur le ticket pour que
+      // l'overlay ne se rouvre plus après une resynchro/navigation (feedback
+      // instantané, sans attendre le prochain fetch depuis le backend).
+      markEnRoute: () => {
+        const { activeTicket, activeTickets } = get();
+        if (!activeTicket) {
+          set({ isCalled: false, lastUpdate: new Date() });
+          return;
+        }
+        const enRouteAt = new Date().toISOString();
+        const updatedTicket = { ...activeTicket, en_route_at: enRouteAt };
+        set({
+          activeTicket: updatedTicket,
+          activeTickets: activeTickets.map((t) =>
+            t.id === activeTicket.id ? { ...t, en_route_at: enRouteAt } : t
+          ),
           isCalled: false,
           lastUpdate: new Date(),
         });
@@ -194,7 +222,7 @@ export const useTicketStore = create<TicketState>()(
             position: ticketData.position || 0,
             etaMinutes: ticketData.eta_minutes || 0,
             isAlmostThere: ticketData.position ? ticketData.position <= 2 : false,
-            isCalled: ticketData.status === 'called',
+            isCalled: isTicketCalled(ticketData),
             isLoading: false,
             error: null,
             lastUpdate: new Date(),
@@ -283,7 +311,7 @@ export const useTicketStore = create<TicketState>()(
             position: updatedTicket.position,
             etaMinutes: updatedTicket.eta_minutes,
             isAlmostThere: updatedTicket.position <= 2,
-            isCalled: updatedTicket.status === 'called',
+            isCalled: isTicketCalled(updatedTicket),
             isLoading: false,
             error: null,
             lastUpdate: new Date(),
@@ -315,7 +343,7 @@ export const useTicketStore = create<TicketState>()(
               position: firstTicket.position || 0,
               etaMinutes: firstTicket.eta_minutes || 0,
               isAlmostThere: firstTicket.position ? firstTicket.position <= 2 : false,
-              isCalled: firstTicket.status === 'called',
+              isCalled: isTicketCalled(firstTicket),
               isLoading: false,
               isInitialized: true,
               error: null,
@@ -371,15 +399,21 @@ export const useTicketStore = create<TicketState>()(
         const { activeTicket, activeTickets } = get();
 
         if (activeTicket) {
-          const updatedTicket = { ...activeTicket, status };
+          // Un nouvel appel (status 'called') réinitialise en_route_at pour rouvrir
+          // l'overlay ; sinon on conserve la valeur existante.
+          const updatedTicket: Ticket = {
+            ...activeTicket,
+            status,
+            en_route_at: status === 'called' ? null : activeTicket.en_route_at,
+          };
 
           set({
             activeTicket: updatedTicket,
             // Garder le tableau cohérent pour les écrans qui le consomment.
             activeTickets: activeTickets.map((t) =>
-              t.id === activeTicket.id ? { ...t, status } : t
+              t.id === activeTicket.id ? { ...t, status: updatedTicket.status, en_route_at: updatedTicket.en_route_at } : t
             ),
-            isCalled: status === 'called',
+            isCalled: isTicketCalled(updatedTicket),
             lastUpdate: new Date(),
           });
         }
@@ -493,6 +527,7 @@ export const useTicket = () => {
     updateTicketStatus: actions.updateTicketStatus,
     setWebSocketConnected: actions.setWebSocketConnected,
     setLastUpdate: actions.setLastUpdate,
+    markEnRoute: actions.markEnRoute,
     setRecalled: actions.setRecalled,
     resetRecall: actions.resetRecall,
     setCountdownExpiry: actions.setCountdownExpiry,

@@ -20,6 +20,7 @@ import {
 import "../../global.css";
 import axiosClient from "../api/axiosClient";
 import { ticketsApi } from "../api/ticketsApi";
+import { getApiErrorMessage } from "../utils/errors";
 
 interface ActiveTicketCardProps {
   onPress?: () => void;
@@ -165,15 +166,19 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
   // Handle confirm presence
   const handleConfirmPresence = useCallback(async () => {
     try {
-      const response = await axiosClient.post(`/tickets/${activeTicket?.id}/en-route`, {
-        estimated_travel_minutes:
-          distanceInfo?.travelTimes?.[preferredTransportMode],
-      });
+      const rawTravel = distanceInfo?.travelTimes?.[preferredTransportMode];
+      const payload: { estimated_travel_minutes?: number } = {};
+      if (typeof rawTravel === "number" && Number.isFinite(rawTravel)) {
+        // Le backend valide estimated_travel_minutes en integer|min:1|max:60 ;
+        // on borne pour éviter un 422 (qui crashait l'app en build).
+        payload.estimated_travel_minutes = Math.min(60, Math.max(1, Math.round(rawTravel)));
+      }
+      await axiosClient.post(`/tickets/${activeTicket?.id}/en-route`, payload);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showSuccess("Présence confirmée", "L'agent a été notifié de votre arrivée");
       onConfirmPresence?.();
     } catch (error: any) {
-      showError("Erreur", error.response?.data?.error || "Impossible de confirmer");
+      showError("Erreur", getApiErrorMessage(error, "Impossible de confirmer"));
     }
   }, [activeTicket, distanceInfo, preferredTransportMode, onConfirmPresence, showSuccess, showError]);
 
@@ -189,13 +194,7 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
       setRecalled();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     } catch (error: any) {
-      // Handle different error response formats from backend
-      const errorMessage = error.response?.data?.error 
-        || error.response?.data?.message 
-        || (typeof error.response?.data === 'string' ? error.response?.data : null)
-        || error.message 
-        || "Impossible d'envoyer le rappel";
-      showError("Erreur", errorMessage);
+      showError("Erreur", getApiErrorMessage(error, "Impossible d'envoyer le rappel"));
     }
   }, [activeTicket, hasRecalled, setRecalled, showInfo, showError]);
 

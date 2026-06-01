@@ -342,6 +342,7 @@ class TicketService
             }
 
             $ticket->status = 'called';
+            $ticket->en_route_at = null; // Nouvel appel : l'utilisateur n'a pas encore répondu
             if (!is_null($counterId)) {
                 $ticket->counter_id = $counterId;
             }
@@ -574,6 +575,7 @@ class TicketService
             // Le ticket suivant est appelé à la place
             $nextTicket->position = $ticketOriginalPosition;
             $nextTicket->status = 'called';
+            $nextTicket->en_route_at = null; // Nouvel appel : pas encore de réponse
             $nextTicket->called_at = Carbon::now();
             $nextTicket->is_swapped = true;
             $nextTicket->swapped_with_ticket_id = $ticket->id;
@@ -707,6 +709,7 @@ class TicketService
         $this->expireOldTicketsForServiceId($ticket->service_id);
 
         $ticket->status = 'called';
+        $ticket->en_route_at = null; // Rappel : réinitialise la réponse précédente
         $ticket->called_at = Carbon::now();
         $ticket->eta_minutes = 0; // Called = no more waiting
         $ticket->save();

@@ -175,6 +175,11 @@ export const useTicketSocket = (ticketId: string | number | null) => {
         })
         .listen('.ticket.updated', (data: any) => {
           console.log('Ticket updated event received:', data);
+          // Ignorer les évènements qui ne concernent pas le ticket suivi : sinon
+          // une mise à jour d'un autre ticket déclenchait une resync inutile.
+          if (data.ticket_id != null && data.ticket_id !== Number(ticketId)) {
+            return;
+          }
           setLastUpdate(new Date());
           // Handle status changes
           if (data.status) {

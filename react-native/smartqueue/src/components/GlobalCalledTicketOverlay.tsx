@@ -3,6 +3,7 @@ import { CalledTicketOverlay } from './CalledTicketOverlay';
 import { useTicket } from '../store/ticketStore';
 import { useDistanceTracking } from '../hooks/useDistanceTracking';
 import axiosClient from '../api/axiosClient';
+import { getApiErrorMessage } from '../utils/errors';
 import { useRouter } from 'expo-router';
 
 /**
@@ -32,6 +33,7 @@ export const GlobalCalledTicketOverlay: React.FC<GlobalCalledTicketOverlayProps>
     setDeferred,
     resetDeferred,
     fetchActiveTicket,
+    markEnRoute,
   } = useTicket();
 
   const router = useRouter();
@@ -57,18 +59,21 @@ export const GlobalCalledTicketOverlay: React.FC<GlobalCalledTicketOverlayProps>
     if (!effectiveTicketId) return;
 
     try {
-      const payload: any = {};
-      if (distanceInfo?.travelTimes?.car) {
-        payload.estimated_travel_minutes = distanceInfo.travelTimes.car;
+      const payload: { estimated_travel_minutes?: number } = {};
+      const rawTravel = distanceInfo?.travelTimes?.car;
+      if (typeof rawTravel === 'number' && Number.isFinite(rawTravel)) {
+        // Borné sur [1,60] car le backend valide integer|min:1|max:60.
+        payload.estimated_travel_minutes = Math.min(60, Math.max(1, Math.round(rawTravel)));
       }
       await axiosClient.post(`/tickets/${effectiveTicketId}/en-route`, payload);
-      showSuccess('Confirmation', 'L\'agent a été notifié que vous êtes en route', 'OK', () => {
-        clearCalled(); // Dismiss overlay after user clicks OK
-      });
+      // Mémorise la réponse localement pour que l'overlay ne se rouvre pas après
+      // une resynchro/navigation (le backend garde status='called').
+      markEnRoute();
+      showSuccess('Confirmation', 'L\'agent a été notifié que vous êtes en route');
     } catch (error: any) {
-      showError('Erreur', error.response?.data?.error || 'Impossible de confirmer');
+      showError('Erreur', getApiErrorMessage(error, 'Impossible de confirmer'));
     }
-  }, [effectiveTicketId, distanceInfo, clearCalled, showSuccess, showError]);
+  }, [effectiveTicketId, distanceInfo, markEnRoute, showSuccess, showError]);
 
   // Handle "Me rappeler"
   const handleRecall = useCallback(async () => {
@@ -80,7 +85,7 @@ export const GlobalCalledTicketOverlay: React.FC<GlobalCalledTicketOverlayProps>
       setCountdownSeconds(response.data.countdown_seconds || 600);
       showSuccess('Rappel demandé', 'Un nouveau compte à rebours de 10 minutes a été accordé. Vous ne pouvez plus demander de rappel.');
     } catch (error: any) {
-      const errorMsg = error.response?.data?.error || '';
+      const errorMsg = getApiErrorMessage(error, '');
       // If backend says already used, sync the local state
       if (errorMsg.includes('déjà été utilisé') || errorMsg.includes('already been used')) {
         setRecalled();
@@ -105,8 +110,7 @@ export const GlobalCalledTicketOverlay: React.FC<GlobalCalledTicketOverlayProps>
         showWarning('Information', response.data.message || 'Impossible d\'échanger la position');
       }
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Impossible d\'échanger la position';
-      showError('Erreur', errorMsg);
+      showError('Erreur', getApiErrorMessage(error, 'Impossible d\'échanger la position'));
     }
   }, [effectiveTicketId, fetchActiveTicket, clearCalled, setDeferred, showError, showSuccess, showWarning]);
 

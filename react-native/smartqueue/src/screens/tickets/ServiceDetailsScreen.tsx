@@ -23,6 +23,7 @@ import { useSimpleNotification } from '../../hooks/useSimpleNotification';
 import { useDistanceTracking } from '../../hooks/useDistanceTracking';
 import { useCustomAlert } from '../../hooks/useCustomAlert';
 import { formatDistance, formatTravelTime } from '../../utils/distance';
+import { getApiErrorMessage } from '../../utils/errors';
 
 interface ServiceData {
   description: ReactNode;
@@ -195,10 +196,7 @@ export const ServiceDetailsScreen: React.FC = () => {
         params: { ticketId: String(ticketData.id) },
       });
     } catch (error: any) {
-      // API returns errors in format: {error: {message: ...}} or {message: ...}
-      const apiError = error?.response?.data?.error || error?.response?.data;
-      const message = apiError?.message || error?.message || 'Impossible de rejoindre la file.';
-      showError('Erreur', message);
+      showError('Erreur', getApiErrorMessage(error, 'Impossible de rejoindre la file.'));
     } finally {
       setIsJoining(false);
     }

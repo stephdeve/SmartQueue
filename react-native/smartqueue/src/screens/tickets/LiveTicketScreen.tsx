@@ -21,6 +21,7 @@ import { formatDistance, formatTravelTime } from '../../utils/distance';
 import { useCustomAlert } from '../../hooks/useCustomAlert';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import axiosClient from '../../api/axiosClient';
+import { getApiErrorMessage } from '../../utils/errors';
 
 const { width } = Dimensions.get('window');
 
@@ -45,6 +46,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
     markAsCalled,
     clearCalled,
     fetchActiveTicket,
+    markEnRoute,
   } = useTicket();
 
   const { AlertComponent, showError, showSuccess, showWarning } = useCustomAlert();
@@ -152,7 +154,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
       setRecalled();
       setCountdownSeconds(response.data.countdown_seconds || 600);
     } catch (error: any) {
-      showError('Erreur', error.response?.data?.error || 'Impossible d\'envoyer le rappel');
+      showError('Erreur', getApiErrorMessage(error, 'Impossible d\'envoyer le rappel'));
     }
   }, [effectiveTicketId, hasRecalled, setRecalled, showError]);
   
@@ -161,17 +163,19 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
     if (!effectiveTicketId) return;
     
     try {
-      const payload: any = {};
-      if (distanceInfo?.travelTimes?.car) {
-        payload.estimated_travel_minutes = distanceInfo.travelTimes.car;
+      const payload: { estimated_travel_minutes?: number } = {};
+      const rawTravel = distanceInfo?.travelTimes?.car;
+      if (typeof rawTravel === 'number' && Number.isFinite(rawTravel)) {
+        // Borné sur [1,60] car le backend valide integer|min:1|max:60.
+        payload.estimated_travel_minutes = Math.min(60, Math.max(1, Math.round(rawTravel)));
       }
       await axiosClient.post(`/tickets/${effectiveTicketId}/en-route`, payload);
+      markEnRoute(); // Dismiss overlay et mémorise la réponse (évite la réapparition)
       showSuccess('Confirmation', 'L\'agent a été notifié que vous êtes en route');
-      clearCalled(); // Dismiss overlay
     } catch (error: any) {
-      showError('Erreur', error.response?.data?.error || 'Impossible de confirmer');
+      showError('Erreur', getApiErrorMessage(error, 'Impossible de confirmer'));
     }
-  }, [effectiveTicketId, distanceInfo, clearCalled, showSuccess, showError]);
+  }, [effectiveTicketId, distanceInfo, markEnRoute, showSuccess, showError]);
   
   // Handle dismiss
   const handleDismiss = useCallback(() => {
@@ -192,8 +196,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
         showWarning('Information', response.data.message || 'Impossible d\'échanger la position');
       }
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Impossible d\'échanger la position';
-      showError('Erreur', errorMsg);
+      showError('Erreur', getApiErrorMessage(error, 'Impossible d\'échanger la position'));
     }
   }, [effectiveTicketId, fetchActiveTicket, clearCalled, showError, showSuccess, showWarning]);
 

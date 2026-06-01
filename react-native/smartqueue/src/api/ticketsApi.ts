@@ -15,6 +15,8 @@ export interface Ticket {
   called_at?: string;
   closed_at?: string;
   absent_at?: string;
+  en_route_at?: string | null;
+  estimated_travel_minutes?: number | null;
   last_distance_m?: number;
   last_seen_at?: string;
   created_at: string;

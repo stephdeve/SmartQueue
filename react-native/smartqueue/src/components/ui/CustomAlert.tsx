@@ -102,6 +102,14 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
   const isDark = !!colors.dark?.background;
   const config = alertConfig[type];
 
+  // Garde-fou : ne jamais rendre un objet comme enfant React (crash fatal en
+  // build : "Objects are not valid as a React child"). On force une chaîne.
+  const safeTitle = typeof title === 'string' ? title : String(title ?? '');
+  const safeMessage =
+    typeof message === 'string'
+      ? message
+      : (message as any)?.message ?? JSON.stringify(message ?? '');
+
   return (
     <Modal
       visible={visible}
@@ -120,8 +128,8 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
 
           {/* Content */}
           <View style={styles.content}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
-            <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>{safeTitle}</Text>
+            <Text style={[styles.message, { color: colors.textSecondary }]}>{safeMessage}</Text>
 
             {/* Buttons */}
             <View style={styles.buttonContainer}>
