@@ -19,6 +19,7 @@ import { useThemeColors } from "../../hooks/useThemeColors";
 import { Badge } from "../../components/ui/Badge";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import "../../../global.css";
 import { useTicket } from "../../store/ticketStore";
 import { useDistanceTracking } from "../../hooks/useDistanceTracking";
@@ -46,11 +47,15 @@ export const ExploreScreen: React.FC = () => {
     console.log('[ExploreScreen] State:', { hasActiveTicket, isInitialized, activeTicketId: activeTicket?.id });
   }, [hasActiveTicket, isInitialized, activeTicket]);
 
-  // Fetch fresh ticket data on mount to avoid showing stale data from other users
-  useEffect(() => {
-    console.log('[ExploreScreen] Fetching active ticket...');
-    fetchActiveTicket().catch(err => console.error('Error fetching active ticket:', err));
-  }, [fetchActiveTicket]);
+  // Re-synchronise le ticket actif à chaque fois que l'écran reçoit le focus
+  // (filet de sécurité si un événement temps réel a été manqué) — évite d'avoir
+  // à rafraîchir manuellement pour voir un changement de statut.
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[ExploreScreen] Fetching active ticket...');
+      fetchActiveTicket().catch(err => console.error('Error fetching active ticket:', err));
+    }, [fetchActiveTicket]),
+  );
 
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [filteredEstablishments, setFilteredEstablishments] = useState<

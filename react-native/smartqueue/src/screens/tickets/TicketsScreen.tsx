@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { useSimpleNotification } from '../../hooks/useSimpleNotification';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
@@ -59,17 +60,15 @@ export const TicketsScreen: React.FC = () => {
     console.log('[TicketsScreen] State:', { hasActiveTicket, isInitialized, activeTicketId: activeTicket?.id, position });
   }, [hasActiveTicket, isInitialized, activeTicket, position]);
 
-  // Rafraîchir le ticket actif au montage pour s'assurer que les données sont à jour
-  useEffect(() => {
-    const refreshOnMount = async () => {
-      try {
-        await fetchActiveTicket();
-      } catch (error) {
-        console.error('Error fetching active ticket on mount:', error);
-      }
-    };
-    refreshOnMount();
-  }, []);
+  // Rafraîchir le ticket actif au montage ET à chaque focus de l'écran pour
+  // garantir des données à jour même si un événement temps réel a été manqué.
+  useFocusEffect(
+    useCallback(() => {
+      fetchActiveTicket().catch((error) =>
+        console.error('Error fetching active ticket on focus:', error),
+      );
+    }, [fetchActiveTicket]),
+  );
 
   useEffect(() => {
     Animated.timing(fadeAnim, {

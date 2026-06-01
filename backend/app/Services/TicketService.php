@@ -449,6 +449,70 @@ class TicketService
     }
 
     /**
+     * Clôture un ticket (service rendu) et notifie l'usager.
+     *
+     * Diffuse les mêmes événements temps réel que markAbsent/cancel afin que
+     * l'app mobile reflète immédiatement le passage à "servi" sur tous les
+     * écrans (sinon le ticket restait affiché "en cours" jusqu'à un refresh).
+     */
+    public function close(Ticket $ticket): Ticket
+    {
+        $ticket->status = 'closed';
+        $ticket->closed_at = Carbon::now();
+        $ticket->eta_minutes = null;
+        $ticket->save();
+
+        $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
+            'status' => $ticket->status,
+            'eta_minutes' => null,
+        ])));
+
+        if ($ticket->user) {
+            $this->broadcastSafely(fn() => event(new UserTicketUpdated($ticket->user->id, [
+                'ticket_id' => $ticket->id,
+                'service_id' => $ticket->service_id,
+                'status' => $ticket->status,
+                'eta_minutes' => null,
+            ])));
+
+            dispatch(new SendPushNotification($ticket->user->id, 'Service terminé', 'Votre ticket '.$ticket->number.' a été servi. Merci !', [
+                'ticket_id' => $ticket->id,
+                'service_id' => $ticket->service_id,
+                'type' => 'served',
+            ]));
+        }
+
+        $this->recomputePositions($ticket->service);
+        return $ticket->fresh();
+    }
+
+    /**
+     * Met à jour la priorité d'un ticket et notifie en temps réel.
+     */
+    public function setPriority(Ticket $ticket, string $priority): Ticket
+    {
+        $ticket->priority = $priority;
+        $ticket->save();
+
+        $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
+            'status'   => $ticket->status,
+            'priority' => $ticket->priority,
+        ])));
+
+        if ($ticket->user) {
+            $this->broadcastSafely(fn() => event(new UserTicketUpdated($ticket->user->id, [
+                'ticket_id'  => $ticket->id,
+                'service_id' => $ticket->service_id,
+                'status'     => $ticket->status,
+                'priority'   => $ticket->priority,
+            ])));
+        }
+
+        $this->recomputePositions($ticket->service);
+        return $ticket->fresh();
+    }
+
+    /**
      * Défère un ticket appelé : échange sa position avec le ticket suivant.
      * Le ticket déferré redevient "waiting" avec la position du suivant.
      * Le ticket suivant est appelé à la place.

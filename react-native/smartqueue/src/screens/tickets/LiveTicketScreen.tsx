@@ -9,6 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -48,10 +49,13 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({ ticketId }) 
 
   const { AlertComponent, showError, showSuccess, showWarning } = useCustomAlert();
 
-  // Fetch fresh ticket data on mount
-  useEffect(() => {
-    fetchActiveTicket().catch(err => console.error('Error fetching ticket:', err));
-  }, []);
+  // Fetch fresh ticket data on mount and whenever the screen regains focus
+  // (defensive re-sync in case a realtime event was missed).
+  useFocusEffect(
+    useCallback(() => {
+      fetchActiveTicket().catch(err => console.error('Error fetching ticket:', err));
+    }, [fetchActiveTicket]),
+  );
 
   // Use activeTicket.id from store if ticketId prop is invalid
   const effectiveTicketId = useMemo(() => {

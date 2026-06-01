@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
-import { useTicket } from '../store/ticketStore';
+import { useTicket, useTicketStore } from '../store/ticketStore';
 import { useUserStatsStore } from '../store/userStatsStore';
 import axiosClient from '../api/axiosClient';
 
@@ -41,15 +41,34 @@ interface QueueHighDemandEvent {
 export const useTicketSocket = (ticketId: string | number | null) => {
   const echoInstance = useRef<any>(null);
   const reconnectAttempts = useRef(0);
-  
+  // Canaux secondaires réellement souscrits (pour pouvoir les quitter proprement
+  // sans dépendre de l'objet activeTicket dans les deps — source de reconnexions
+  // en boucle qui faisaient manquer des événements).
+  const subscribedUserId = useRef<number | null>(null);
+  const subscribedServiceId = useRef<number | null>(null);
+  const resyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const {
-    activeTicket,
     updatePosition,
     markAsCalled,
     updateTicketStatus,
     setWebSocketConnected,
     setLastUpdate,
   } = useTicket();
+
+  // Re-synchronise l'état COMPLET depuis le backend (activeTicket + activeTickets)
+  // après n'importe quel événement de cycle de vie. Garantit la cohérence sur tous
+  // les écrans : un ticket servi/clôturé disparaît de "en cours", un absent reflète
+  // son statut, etc. Débounce pour éviter les rafales (recompute des positions).
+  const scheduleResync = useCallback(() => {
+    if (resyncTimer.current) clearTimeout(resyncTimer.current);
+    resyncTimer.current = setTimeout(() => {
+      useTicketStore
+        .getState()
+        .fetchActiveTicket()
+        .catch((err: any) => console.warn('[Echo] resync failed:', err?.message || err));
+    }, 400);
+  }, []);
 
   const connect = useCallback(async () => {
     if (!ticketId || echoInstance.current) {
@@ -151,6 +170,7 @@ export const useTicketSocket = (ticketId: string | number | null) => {
             setLastUpdate(new Date());
             triggerNotification("C'est votre tour !", data.message || 'Votre ticket est appelé');
             triggerHapticFeedback('success');
+            scheduleResync();
           }
         })
         .listen('.ticket.updated', (data: any) => {
@@ -179,6 +199,8 @@ export const useTicketSocket = (ticketId: string | number | null) => {
           if (data.position) {
             updatePosition(data.position, data.eta_minutes || 0);
           }
+          // Re-synchronise l'état complet pour rester cohérent sur tous les écrans.
+          scheduleResync();
         })
         .listen('.ticket.status_changed', (data: TicketStatusEvent) => {
           console.log('Ticket status changed:', data);
@@ -205,12 +227,21 @@ export const useTicketSocket = (ticketId: string | number | null) => {
                 });
                 break;
             }
+            scheduleResync();
           }
         });
 
-      // Also listen to user-specific channel for ticket updates
-      if (activeTicket?.user_id) {
-        echoInstance.current.private(`user.${activeTicket.user_id}`)
+      // Also listen to user-specific channel for ticket updates.
+      // On lit les ids via getState() (et non via les deps du useCallback) pour
+      // éviter de reconstruire la connexion à chaque changement d'activeTicket.
+      const storeTicket = useTicketStore.getState().activeTicket as any;
+      const userId = storeTicket?.user_id ?? null;
+      const serviceId = storeTicket?.service_id ?? null;
+      subscribedUserId.current = userId;
+      subscribedServiceId.current = serviceId;
+
+      if (userId) {
+        echoInstance.current.private(`user.${userId}`)
           .listen('.user.ticket.updated', (data: any) => {
             console.log('User ticket updated event received:', data);
             if (data.ticket_id === Number(ticketId)) {
@@ -232,13 +263,14 @@ export const useTicketSocket = (ticketId: string | number | null) => {
               if (data.position) {
                 updatePosition(data.position, 0);
               }
+              scheduleResync();
             }
           });
       }
 
       // Listen to service-wide alerts (e.g. high demand)
-      if (activeTicket?.service_id) {
-         echoInstance.current.private(`service.${activeTicket.service_id}`)
+      if (serviceId) {
+         echoInstance.current.private(`service.${serviceId}`)
          .listen('.queue.high_demand', (data: QueueHighDemandEvent) => {
           console.log('High demand alert:', data);
           triggerNotification('Forte demande', data.message || "Le temps d'attente a augmenté");
@@ -250,20 +282,22 @@ export const useTicketSocket = (ticketId: string | number | null) => {
       console.error('Error creating Echo connection:', error);
       setWebSocketConnected(false);
     }
-  }, [ticketId, activeTicket, updatePosition, markAsCalled, updateTicketStatus, setWebSocketConnected, setLastUpdate]);
+  }, [ticketId, updatePosition, markAsCalled, updateTicketStatus, setWebSocketConnected, setLastUpdate, scheduleResync]);
 
   const disconnect = useCallback(() => {
     if (echoInstance.current) {
       if (ticketId) echoInstance.current.leave(`ticket.${ticketId}`);
-      if (activeTicket?.user_id) echoInstance.current.leave(`user.${activeTicket.user_id}`);
-      if (activeTicket?.service_id) echoInstance.current.leave(`service.${activeTicket.service_id}`);
-      
+      if (subscribedUserId.current) echoInstance.current.leave(`user.${subscribedUserId.current}`);
+      if (subscribedServiceId.current) echoInstance.current.leave(`service.${subscribedServiceId.current}`);
+      subscribedUserId.current = null;
+      subscribedServiceId.current = null;
+
       echoInstance.current.disconnect();
       echoInstance.current = null;
       setWebSocketConnected(false);
       console.log('WebSocket (Echo) disconnected gracefully');
     }
-  }, [ticketId, activeTicket?.user_id, activeTicket?.service_id, setWebSocketConnected]);
+  }, [ticketId, setWebSocketConnected]);
 
   const sendMessage = useCallback((event: string, data: any) => {
     if (echoInstance.current && echoInstance.current.connector.pusher.connection.state === 'connected') {

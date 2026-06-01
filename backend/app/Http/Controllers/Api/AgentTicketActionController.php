@@ -15,12 +15,7 @@ class AgentTicketActionController extends Controller
     {
         $this->authorize('actOn', $ticket);
 
-        $ticket->status = 'closed';
-        $ticket->closed_at = now();
-        $ticket->eta_minutes = null;
-        $ticket->save();
-
-        $svc->recomputePositions($ticket->service);
+        $ticket = $svc->close($ticket);
 
         return response()->json(['ticket' => [
             'id' => $ticket->id,
@@ -134,10 +129,7 @@ class AgentTicketActionController extends Controller
             'priority' => ['required','in:normal,high,vip'],
         ]);
 
-        $ticket->priority = $data['priority'];
-        $ticket->save();
-
-        $svc->recomputePositions($ticket->service);
+        $ticket = $svc->setPriority($ticket, $data['priority']);
 
         return response()->json(['ticket' => [
             'id' => $ticket->id,

@@ -365,15 +365,20 @@ export const useTicketStore = create<TicketState>()(
         }
       },
 
-      // Mettre à jour le statut du ticket
+      // Mettre à jour le statut du ticket (feedback instantané ; une
+      // re-synchronisation complète via fetchActiveTicket suit côté socket).
       updateTicketStatus: (status: Ticket['status']) => {
-        const { activeTicket } = get();
-        
+        const { activeTicket, activeTickets } = get();
+
         if (activeTicket) {
           const updatedTicket = { ...activeTicket, status };
-          
+
           set({
             activeTicket: updatedTicket,
+            // Garder le tableau cohérent pour les écrans qui le consomment.
+            activeTickets: activeTickets.map((t) =>
+              t.id === activeTicket.id ? { ...t, status } : t
+            ),
             isCalled: status === 'called',
             lastUpdate: new Date(),
           });
