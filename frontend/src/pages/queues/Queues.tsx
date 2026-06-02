@@ -102,6 +102,16 @@ const Queues: React.FC = () => {
     }
   }, [serviceId, assignedServices]);
 
+    const enRouteCount = useMemo(
+    () =>
+      queue.filter(
+        (ticket) =>
+          (ticket.status === "en_route" || ticket.status === "present") &&
+          !!ticket.en_route_at,
+      ).length,
+    [queue],
+  );
+
   const fetchService = async (id: string) => {
     const numericId = Number(id);
     if (!Number.isFinite(numericId) || numericId <= 0) {
@@ -536,15 +546,7 @@ const Queues: React.FC = () => {
     );
   }
 
-  const enRouteCount = useMemo(
-    () =>
-      queue.filter(
-        (ticket) =>
-          (ticket.status === "en_route" || ticket.status === "present") &&
-          !!ticket.en_route_at,
-      ).length,
-    [queue],
-  );
+
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
