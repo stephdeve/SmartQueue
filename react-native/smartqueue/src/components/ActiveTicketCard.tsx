@@ -82,7 +82,21 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
 
   // Queue length (from ticket data from backend)
   const queueLength = (activeTicket as any)?.queue_length || position || 1;
-  const processedCount = Math.max(0, queueLength - position);
+  const processedCount = Math.max(0, queueLength - (position || 0));
+
+  const isTicketCalledState = activeTicket?.status === "called";
+
+  const queueState = isTicketCalledState
+    ? {
+        label: "Statut du ticket",
+        value: "Appelé au guichet",
+        etaLabel: "Présentez-vous maintenant",
+      }
+    : {
+        label: "Position dans la file",
+        value: `${position}ème / ${queueLength}`,
+        etaLabel: `≈ ${etaMinutes} minutes`,
+      };
 
   // Calculate when to leave
   const getWhenToLeave = useCallback(() => {
@@ -299,13 +313,19 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-              Position dans la file
+              {queueState.label}
             </Text>
             <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-              <Text style={[styles.statHighlight, { color: colors.primary }]}>
-                {position}ème
-              </Text>{" "}
-              / {queueLength}
+              <Text
+                style={[
+                  styles.statHighlight,
+                  {
+                    color: isTicketCalledState ? colors.danger : colors.primary,
+                  },
+                ]}
+              >
+                {queueState.value}
+              </Text>
             </Text>
           </View>
           <View
@@ -316,7 +336,16 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
               Temps d&apos;attente estimé
             </Text>
             <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-              ≈ <Text style={styles.statHighlight}>{etaMinutes}</Text> minutes
+              {isTicketCalledState ? (
+                <Text style={[styles.statHighlight, { color: colors.danger }]}>
+                  {queueState.etaLabel}
+                </Text>
+              ) : (
+                <>
+                  ≈ <Text style={styles.statHighlight}>{etaMinutes}</Text>{" "}
+                  minutes
+                </>
+              )}
             </Text>
           </View>
         </View>

@@ -32,14 +32,9 @@ class TicketResource extends JsonResource
             ->count();
 
         // Cohérence métier :
-        // - waiting => taille réelle de la file d'attente
-        // - called  => l'utilisateur est au guichet, donc file restante = 1 pour lui
-        // - absent/closed/canceled/expired => plus de file active
-        $queueLength = match ($this->status) {
-            'called' => 1,
-            'waiting' => $waitingCount,
-            default => 0,
-        };
+        // - waiting => taille réelle de la file d'attente restante
+        // - called/absent/closed/canceled/expired => le ticket n'est plus dans la file
+        $queueLength = $this->status === 'waiting' ? $waitingCount : 0;
 
         return [
             'id' => $this->id,

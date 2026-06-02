@@ -185,6 +185,10 @@ export const TicketsScreen: React.FC = () => {
   };
 
   const getTicketQueueInfo = (ticket: Ticket) => {
+    if (ticket.status === "called") {
+      return "Appelé — présentez-vous au guichet";
+    }
+
     if (typeof ticket.position === "number" && ticket.position > 0) {
       return `${ticket.position}${ticket.position === 1 ? "er" : "e"} dans la file`;
     }
@@ -194,6 +198,31 @@ export const TicketsScreen: React.FC = () => {
     }
 
     return "Estimation indisponible";
+  };
+
+  const isPrimaryCalled = activeTicket?.status === "called";
+
+  const renderPrimaryQueueState = () => {
+    if (isPrimaryCalled) {
+      return {
+        value: "Appelé",
+        suffix: "",
+        label: "statut du ticket",
+        helperText: "Présentez-vous maintenant au guichet",
+      };
+    }
+
+    return {
+      value: String(position),
+      suffix: position === 1 ? "er" : "ème",
+      label: "position dans la file",
+      helperText:
+        position <= 3
+          ? position === 1
+            ? "C'est bientôt votre tour !"
+            : "Approchez-vous du guichet"
+          : null,
+    };
   };
 
   // Rendu du ticket actif
@@ -236,6 +265,8 @@ export const TicketsScreen: React.FC = () => {
       );
     }
 
+    const queueState = renderPrimaryQueueState();
+
     return (
       <Animated.View
         style={[
@@ -274,33 +305,61 @@ export const TicketsScreen: React.FC = () => {
             <View
               style={[
                 styles.positionBadge,
-                { backgroundColor: colors.primary + "15" },
+                {
+                  backgroundColor: isPrimaryCalled
+                    ? colors.danger + "15"
+                    : colors.primary + "15",
+                },
               ]}
             >
-              <Text style={[styles.positionNumber, { color: colors.primary }]}>
-                {position}
+              <Text
+                style={[
+                  styles.positionNumber,
+                  styles.positionNumberAdaptive,
+                  { color: isPrimaryCalled ? colors.danger : colors.primary },
+                ]}
+              >
+                {queueState.value}
               </Text>
-              <Text style={[styles.positionSuffix, { color: colors.primary }]}>
-                {position === 1 ? "er" : "ème"}
-              </Text>
+              {!!queueState.suffix && (
+                <Text
+                  style={[
+                    styles.positionSuffix,
+                    { color: isPrimaryCalled ? colors.danger : colors.primary },
+                  ]}
+                >
+                  {queueState.suffix}
+                </Text>
+              )}
             </View>
             <Text
               style={[styles.positionLabel, { color: colors.textTertiary }]}
             >
-              position dans la file
+              {queueState.label}
             </Text>
-            {position <= 3 && (
+            {!!queueState.helperText && (
               <View
                 style={[
                   styles.urgentBadge,
-                  { backgroundColor: colors.warning + "20" },
+                  {
+                    backgroundColor: isPrimaryCalled
+                      ? colors.danger + "15"
+                      : colors.warning + "20",
+                  },
                 ]}
               >
-                <Ionicons name="flash" size={12} color={colors.warning} />
-                <Text style={[styles.urgentText, { color: colors.warning }]}>
-                  {position === 1
-                    ? "C'est bientôt votre tour !"
-                    : "Approchez-vous du guichet"}
+                <Ionicons
+                  name={isPrimaryCalled ? "notifications" : "flash"}
+                  size={12}
+                  color={isPrimaryCalled ? colors.danger : colors.warning}
+                />
+                <Text
+                  style={[
+                    styles.urgentText,
+                    { color: isPrimaryCalled ? colors.danger : colors.warning },
+                  ]}
+                >
+                  {queueState.helperText}
                 </Text>
               </View>
             )}
@@ -984,6 +1043,10 @@ const styles = StyleSheet.create({
     fontSize: 56,
     fontWeight: "800",
     lineHeight: 56,
+  },
+  positionNumberAdaptive: {
+    fontSize: 42,
+    lineHeight: 46,
   },
   positionSuffix: {
     fontSize: 20,
