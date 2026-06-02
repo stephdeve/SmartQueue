@@ -571,6 +571,20 @@ const Queues: React.FC = () => {
     }
   };
 
+  const parseDate = (date?: string | null) => {
+  if (!date) return null;
+  return new Date(date.replace(" ", "T") + "Z");
+  };
+
+  const formatTime = (date?: string | null) =>
+  date
+    ? new Intl.DateTimeFormat("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }).format(parseDate(date)!)
+    : "—";
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className=" mx-auto">
@@ -1004,25 +1018,19 @@ const Queues: React.FC = () => {
                                     </span>
                                     <div className="text-xs text-muted-foreground">
                                       Réponse reçue à{" "}
-                                      {new Date(
-                                        t.response_received_at ?? t.en_route_at,
-                                      ).toLocaleTimeString()}
+                                      {formatTime(t.response_received_at ?? t.en_route_at)}
                                     </div>
                                     {t.called_at && (
                                       <div className="text-xs text-muted-foreground">
                                         Appelé à{" "}
-                                        {new Date(
-                                          t.called_at,
-                                        ).toLocaleTimeString()}
+                                        {formatTime(t.called_at)}
                                       </div>
                                     )}
                                     {t.en_route_expires_at &&
                                       t.status === "en_route" && (
                                         <div className="text-xs font-medium text-amber-700 dark:text-amber-300">
                                           Priorité valable jusqu&apos;à{" "}
-                                          {new Date(
-                                            t.en_route_expires_at,
-                                          ).toLocaleTimeString()}
+                                          {formatTime(t.en_route_expires_at)}
                                         </div>
                                       )}
                                   </div>
