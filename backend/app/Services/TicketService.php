@@ -96,7 +96,12 @@ class TicketService
 
             try {
                 return DB::transaction(function () use ($user, $serviceId, $lat, $lng) {
-                    $service = Service::query()->findOrFail($serviceId);
+                    // Verrouille le service pour sérialiser les créations simultanées
+                    // et garantir des positions/numéros uniques et cohérents.
+                    $service = Service::query()
+                        ->whereKey($serviceId)
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
             // Vérifier que le service est ouvert
             if ($service->status !== 'open') {
@@ -215,6 +220,13 @@ class TicketService
         $this->expireOldTicketsForService($service);
 
         return DB::transaction(function () use ($service, $user) {
+            // Verrouille le service pour éviter les collisions de numérotation et
+            // de position lors de scans QR simultanés.
+            $service = Service::query()
+                ->whereKey($service->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             // Vérifier que le service est ouvert
             if ($service->status !== 'open') {
                 abort(422, 'Service is closed');
@@ -364,7 +376,7 @@ class TicketService
                 $ticket->counter_id = $counterId;
             }
             $ticket->called_at = Carbon::now();
-            $ticket->position = 1;
+            $ticket->position = null;
             $ticket->eta_minutes = 0; // Called = no more waiting
             $ticket->save();
 
@@ -374,11 +386,11 @@ class TicketService
                 'number' => $ticket->number,
                 'counter_id' => $ticket->counter_id,
                 'service_id' => $service->id,
-                'position' => 1,
+                'position' => null,
             ])));
             $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
                 'status' => $ticket->status,
-                'position' => 1,
+                'position' => null,
                 'eta_minutes' => 0,
             ])));
 
@@ -389,7 +401,7 @@ class TicketService
                     'status' => $ticket->status,
                     'number' => $ticket->number,
                     'counter_id' => $ticket->counter_id,
-                    'position' => 1,
+                    'position' => null,
                     'eta_minutes' => 0,
                 ])));
             }
@@ -607,7 +619,7 @@ class TicketService
             $ticket->save();
 
             // Le ticket suivant est appelé à la place
-            $nextTicket->position = 1;
+            $nextTicket->position = null;
             $nextTicket->status = 'called';
             $nextTicket->en_route_at = null; // Nouvel appel : pas encore de réponse
             $nextTicket->called_at = Carbon::now();
@@ -645,7 +657,7 @@ class TicketService
             ])));
             $this->broadcastSafely(fn() => event(new TicketUpdated($nextTicket->id, [
                 'status' => 'called',
-                'position' => 1,
+                'position' => null,
                 'eta_minutes' => 0,
                 'is_swapped' => true,
             ])));
@@ -666,7 +678,7 @@ class TicketService
                     'ticket_id' => $nextTicket->id,
                     'service_id' => $service->id,
                     'status' => 'called',
-                    'position' => 1,
+                    'position' => null,
                     'eta_minutes' => 0,
                     'swapped' => true,
                 ])));
@@ -748,7 +760,7 @@ class TicketService
         $ticket->status = 'called';
         $ticket->en_route_at = null; // Rappel : réinitialise la réponse précédente
         $ticket->called_at = Carbon::now();
-        $ticket->position = 1;
+        $ticket->position = null;
         $ticket->eta_minutes = 0; // Called = no more waiting
         $ticket->save();
         $this->broadcastSafely(fn() => event(new TicketCalled($ticket->id, [
@@ -756,11 +768,11 @@ class TicketService
             'number' => $ticket->number,
             'counter_id' => $ticket->counter_id,
             'service_id' => $ticket->service_id,
-            'position' => 1,
+            'position' => null,
         ])));
         $this->broadcastSafely(fn() => event(new TicketUpdated($ticket->id, [
             'status' => $ticket->status,
-            'position' => 1,
+            'position' => null,
             'eta_minutes' => 0,
         ])));
         $this->broadcastSafely(fn() => event(new ServiceTicketCalled($ticket->service_id, [
@@ -780,7 +792,7 @@ class TicketService
                 'status' => $ticket->status,
                 'number' => $ticket->number,
                 'counter_id' => $ticket->counter_id,
-                'position' => 1,
+                'position' => null,
                 'eta_minutes' => 0,
             ])));
 
