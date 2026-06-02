@@ -178,6 +178,11 @@ export default function AgentQueue() {
             if (!isActive) return;
             fetchData();
           })
+          .listen(".service.ticket.served", () => {
+            // Usager a cliqué "Je suis déjà là" → ticket auto-clos
+            if (!isActive) return;
+            fetchData();
+          })
           .listen(".service.stats.updated", () => {
             if (!isActive) return;
             fetchData();

@@ -138,6 +138,11 @@ export default function CalledTickets() {
           .listen(".service.ticket.absent", () => {
             if (!isActive) return;
             fetchData();
+          })
+          .listen(".service.ticket.served", () => {
+            // Usager a cliqué "Je suis déjà là" → ticket retiré de la liste appelés
+            if (!isActive) return;
+            fetchData();
           });
       };
 

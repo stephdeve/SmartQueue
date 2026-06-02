@@ -152,55 +152,47 @@ export const GlobalCalledTicketOverlay: React.FC<
     }
   }, [handleEnRoute, fetchActiveTicket]);
 
-  // Handle "Je suis déjà là" - present
+  // Handle "Je suis déjà là"
+  // → ferme le ticket directement (auto-servi) : l'agent n'a plus rien à faire.
   const handlePresent = useCallback(async () => {
     if (!effectiveTicketId) return;
 
     try {
-      const response = await axiosClient.post(
-        `/tickets/${effectiveTicketId}/present`,
-      );
+      // POST /tickets/{id}/present → backend met status='closed' + broadcast agent
+      await axiosClient.post(`/tickets/${effectiveTicketId}/present`);
 
-      const updatedTicket = response.data?.data || response.data;
-      if (updatedTicket?.present_at) {
-        const s = useTicketStore.getState();
-        if (s.activeTicket?.id === effectiveTicketId) {
-          useTicketStore.setState({
-            activeTicket: {
-              ...s.activeTicket,
-              status: "present",
-              present_at: updatedTicket.present_at,
-              response_received_at: updatedTicket.response_received_at,
-            },
-            activeTickets: s.activeTickets.map((t: any) =>
-              t.id === effectiveTicketId
-                ? {
-                    ...t,
-                    status: "present",
-                    present_at: updatedTicket.present_at,
-                    response_received_at: updatedTicket.response_received_at,
-                  }
-                : t,
-            ),
-          });
-        }
+      // 1. Mettre à jour le store local immédiatement (pas d'attente serveur)
+      const s = useTicketStore.getState();
+      if (s.activeTicket?.id === effectiveTicketId) {
+        useTicketStore.setState({
+          activeTicket: {
+            ...s.activeTicket,
+            status: "closed",
+            closed_at: new Date().toISOString(),
+          },
+          activeTickets: s.activeTickets.map((t: any) =>
+            t.id === effectiveTicketId
+              ? { ...t, status: "closed", closed_at: new Date().toISOString() }
+              : t,
+          ),
+        });
       }
 
-      // Mark local state so overlay closes and UI reflects 'present'
-      markPresent();
-      // Refresh server state to ensure full sync
-      try {
-        await fetchActiveTicket();
-      } catch (err) {
-        console.warn(
-          "[GlobalCalledTicketOverlay] fetchActiveTicket after present failed",
-          err,
-        );
-      }
+      // 2. Fermer l'overlay
+      clearCalled();
+      resetRecall();
+      resetDeferred();
 
+      // 3. Succès + navigation vers l'accueil après confirmation
       showSuccess(
-        "Présence confirmée",
-        "L'agent a été notifié que vous êtes présent au guichet",
+        "Ticket clos ✔",
+        "Vous êtes marqué comme servi. Merci de votre visite !",
+        "OK",
+        () => {
+          // Vider le ticket actif et retourner à l\'accueil
+          useTicketStore.setState({ activeTicket: null, activeTickets: [] });
+          router.replace("/(tabs)");
+        },
       );
     } catch (error: any) {
       showError(
@@ -210,10 +202,12 @@ export const GlobalCalledTicketOverlay: React.FC<
     }
   }, [
     effectiveTicketId,
-    markPresent,
+    clearCalled,
+    resetRecall,
+    resetDeferred,
     showSuccess,
     showError,
-    fetchActiveTicket,
+    router,
   ]);
 
   // Handle "Me rappeler"

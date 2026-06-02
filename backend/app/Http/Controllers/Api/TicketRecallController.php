@@ -214,92 +214,112 @@ class TicketRecallController extends Controller
     }
 
     /**
-     * User confirms they are physically present.
+     * Usager confirme "Je suis déjà là" → clôture directe du ticket (auto-servi).
+     *
+     * L'agent n'a plus besoin de cliquer sur "Servi" manuellement :
+     * le ticket passe à 'closed', la file est recalculée et l'agent est
+     * notifié en temps réel via le canal de présence du service.
      */
-    public function present(Request $request, Ticket $ticket): JsonResponse
-    {
+    public function present(
+        Request $request,
+        Ticket $ticket,
+        \App\Services\TicketService $ticketService
+    ): JsonResponse {
+        // Seul le propriétaire du ticket peut confirmer sa présence
         if ($ticket->user_id !== $request->user()->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        if (!in_array($ticket->status, ['en_route', 'called'], true)) {
+        // Ticket doit être dans un état "appelé"
+        if (!in_array($ticket->status, ['called', 'en_route'], true)) {
             return response()->json([
-                'error' => 'Le ticket ne peut pas être marqué présent',
-            ], 400);
+                'error' => 'Le ticket n\'est pas en statut appelé',
+            ], 422);
         }
 
+        // ── Clôturer le ticket directement ────────────────────────────────────
         $ticket->update([
-            'status' => 'present',
-            'present_at' => now(),
-            'response_received_at' => $ticket->response_received_at ?? now(),
+            'status'              => 'closed',
+            'closed_at'          => now(),
+            'present_at'         => now(),
+            'response_received_at' => now(),
+            'eta_minutes'        => null,
+            'position'           => null,
         ]);
 
-        // Broadcast updates to keep mobile and agent UI in sync
+        $service = $ticket->service;
+
         try {
-            // Private ticket channel update
+            // 1. Notifier l'usager (canal privé ticket)
             event(new \App\Events\TicketUpdated($ticket->id, [
-                'status' => $ticket->status,
-                'position' => null,
-                'eta_minutes' => null,
+                'status'      => 'closed',
+                'self_served' => true,
+                'closed_at'   => $ticket->closed_at,
             ]));
 
-            // Private user channel update
+            // 2. Notifier l'usager (canal privé user)
             event(new \App\Events\UserTicketUpdated($ticket->user_id, [
-                'ticket_id' => $ticket->id,
-                'service_id' => $ticket->service_id,
-                'status' => $ticket->status,
-                'position' => null,
-                'eta_minutes' => null,
+                'ticket_id'   => $ticket->id,
+                'service_id'  => $ticket->service_id,
+                'status'      => 'closed',
+                'self_served' => true,
             ]));
 
-            // Notify agents via presence channel that the user is present
-            event(new \App\Events\UserEnRoute(
-                $ticket->id,
-                $ticket->service_id,
-                null,
-                $ticket->number,
-                true // confirmedPresence
-            ));
+            // 3. Notifier les agents en temps réel (canal présence du service)
+            //    → le dashboard agent se rafraîchit sans action manuelle
+            event(new \App\Events\ServiceTicketServed($service->id, [
+                'ticket' => [
+                    'id'          => $ticket->id,
+                    'number'      => $ticket->number,
+                    'service_id'  => $service->id,
+                    'self_served' => true,
+                    'closed_at'   => $ticket->closed_at,
+                ],
+            ]));
 
-            // Create in-app notifications for agents
-            $service = \App\Models\Service::find($ticket->service_id);
-            if ($service) {
-                $agents = $service->agents()->get();
-                foreach ($agents as $agent) {
-                    $agent->notify(new \App\Notifications\InAppNotification(
-                        'Usager présent',
-                        "L'usager est présent au guichet (Ticket {$ticket->number})",
-                        'user_present',
-                        [
-                            'ticket_id' => $ticket->id,
-                            'ticket_number' => $ticket->number,
-                            'service_id' => $ticket->service_id,
-                        ]
+            // 4. Notification in-app pour chaque agent du service
+            $agents = $service->agents()->get();
+            foreach ($agents as $agent) {
+                $agent->notify(new \App\Notifications\InAppNotification(
+                    'Ticket auto-servi ✓',
+                    "L'usager du ticket {$ticket->number} a confirmé sa présence. Ticket clos automatiquement.",
+                    'self_served',
+                    [
+                        'ticket_id'    => $ticket->id,
+                        'ticket_number'=> $ticket->number,
+                        'service_id'   => $ticket->service_id,
+                    ]
+                ));
+
+                // Push vers l'agent (async)
+                try {
+                    dispatch(new SendPushNotification(
+                        $agent->id,
+                        "Ticket {$ticket->number} — auto-servi",
+                        "L'usager est arrivé. Le ticket est clos automatiquement.",
+                        ['ticket_id' => $ticket->id, 'service_id' => $ticket->service_id, 'type' => 'self_served']
                     ));
-
-                    try {
-                        dispatch(new SendPushNotification(
-                            $agent->id,
-                            "Usager présent - {$ticket->number}",
-                            "L'usager du ticket {$ticket->number} est présent au guichet.",
-                            [
-                                'ticket_id' => $ticket->id,
-                                'service_id' => $ticket->service_id,
-                                'type' => 'user_present',
-                            ]
-                        ));
-                    } catch (\Exception $_e) {
-                        \Log::warning('[TicketRecallController] Failed to push present to agent: ' . $_e->getMessage());
-                    }
+                } catch (\Exception $_e) {
+                    \Log::warning('[present] push agent failed: ' . $_e->getMessage());
                 }
             }
+
+            // 5. Recalculer les positions de la file (ticket retiré)
+            $ticketService->recomputePositions($service);
+
         } catch (\Exception $e) {
-            \Log::error('[TicketRecallController] present - broadcast/notify failed: '. $e->getMessage());
+            \Log::error('[TicketRecallController] present - broadcast failed: ' . $e->getMessage());
+            // On ne fait pas échouer la requête si le broadcast rate
         }
 
         return response()->json([
-            'data' => $ticket->fresh(),
-            'message' => 'Présence confirmée',
+            'message'    => 'Présence confirmée. Votre ticket est clos.',
+            'self_served' => true,
+            'ticket' => [
+                'id'        => $ticket->id,
+                'status'    => 'closed',
+                'closed_at' => $ticket->closed_at,
+            ],
         ]);
     }
 
