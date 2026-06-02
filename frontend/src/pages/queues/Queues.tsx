@@ -44,6 +44,12 @@ type QueueTicket = {
   estimated_travel_minutes?: number | null;
   position?: number | null;
   called_at?: string | null;
+  present_at?: string | null;
+  response_received_at?: string | null;
+  en_route_expires_at?: string | null;
+  is_swapped?: boolean;
+  deferred_at?: string | null;
+  swapped_with_ticket_id?: number | null;
 };
 
 type ServiceStats = {
@@ -949,7 +955,12 @@ const Queues: React.FC = () => {
                                       "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200",
                                   )}
                                 >
-                                  {t.status === "waiting" && "En attente"}
+                                  {t.is_swapped &&
+                                    t.status === "waiting" &&
+                                    "Laisser passer"}
+                                  {t.status === "waiting" &&
+                                    !t.is_swapped &&
+                                    "En attente"}
                                   {t.status === "called" && "Appelé"}
                                   {t.status === "en_route" && "En route"}
                                   {t.status === "present" && "Présent"}
@@ -991,7 +1002,7 @@ const Queues: React.FC = () => {
                                     <div className="text-xs text-muted-foreground">
                                       Réponse reçue à{" "}
                                       {new Date(
-                                        t.en_route_at,
+                                        t.response_received_at ?? t.en_route_at,
                                       ).toLocaleTimeString()}
                                     </div>
                                     {t.called_at && (

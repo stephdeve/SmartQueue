@@ -14,6 +14,7 @@ use App\Jobs\SendSmsNotification;
 use App\Models\Service;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Notifications\InAppNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -598,12 +599,22 @@ class TicketService
             $service = $ticket->service;
 
             // Trouver le prochain ticket waiting après celui-ci
-            $nextTicket = Ticket::query()
+            // If the current ticket has no numeric position (e.g. already null when called),
+            // fall back to selecting the earliest waiting ticket. Avoids SQL errors like
+            // "operator does not exist" when comparing with NULL on some DB drivers.
+            $query = Ticket::query()
                 ->where('service_id', $service->id)
-                ->where('status', 'waiting')
-                ->where('position', '>', $ticket->position)
-                ->orderBy('position')
-                ->orderBy('created_at')
+                ->where('status', 'waiting');
+
+            if (is_numeric($ticket->position)) {
+                $query->where('position', '>', $ticket->position)
+                      ->orderBy('position');
+            } else {
+                // No position on the called ticket - pick the earliest waiting ticket
+                $query->orderBy('position');
+            }
+
+            $nextTicket = $query->orderBy('created_at')
                 ->lockForUpdate()
                 ->first();
 
@@ -663,6 +674,41 @@ class TicketService
                     'Vous avez été recalé en position ' . $ticket->position . '. Vous avez 24h pour vous présenter.',
                     ['ticket_id' => $ticket->id, 'service_id' => $service->id, 'deferred' => true]
                 ));
+            }
+
+            // Notify agents in-app that a user chose to defer
+            try {
+                $agents = $service->agents()->get();
+                foreach ($agents as $agent) {
+                    $agent->notify(new InAppNotification(
+                        'Usager a laissé passer',
+                        "L'usager du ticket {$ticket->number} a choisi de laisser passer son tour.",
+                        'user_deferred',
+                        [
+                            'ticket_id' => $ticket->id,
+                            'ticket_number' => $ticket->number,
+                            'service_id' => $service->id,
+                        ]
+                    ));
+
+                    // Also send a push notification to agents if they have devices
+                    try {
+                        dispatch(new SendPushNotification(
+                            $agent->id,
+                            "Usager laissé passer - {$ticket->number}",
+                            "L'usager du ticket {$ticket->number} a choisi de laisser passer son tour.",
+                            [
+                                'ticket_id' => $ticket->id,
+                                'service_id' => $service->id,
+                                'type' => 'user_deferred',
+                            ]
+                        ));
+                    } catch (\Exception $_e) {
+                        Log::warning('Failed to dispatch push to agent: ' . $_e->getMessage());
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to notify agents about defer: ' . $e->getMessage());
             }
 
             // Événements

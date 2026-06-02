@@ -61,6 +61,17 @@ type QueueTicket = {
   user_name: string | null;
   wait_time_minutes: number;
   created_at: string;
+
+  // Optional fields returned by API
+  is_swapped?: boolean;
+  deferred_at?: string | null;
+  swapped_with_ticket_id?: number | null;
+  called_at?: string | null;
+  en_route_at?: string | null;
+  present_at?: string | null;
+  response_received_at?: string | null;
+  en_route_expires_at?: string | null;
+  estimated_travel_minutes?: number | null;
 };
 
 type ServiceInfo = {
@@ -214,6 +225,50 @@ export default function AgentDashboard() {
         {config.label}
       </Badge>
     );
+  };
+
+  const getTicketBadge = (ticket: any) => {
+    // Laisser passer (swapped but waiting)
+    if (ticket.is_swapped && ticket.status === "waiting") {
+      return (
+        <Badge className={cn("bg-gray-100 text-gray-700 font-medium text-xs")}>
+          Laisser passer
+        </Badge>
+      );
+    }
+
+    // Called without response
+    if (ticket.status === "called" && !ticket.response_received_at) {
+      return (
+        <Badge className={cn("bg-blue-100 text-blue-700 font-medium text-xs")}>
+          Appelé - aucune réponse
+        </Badge>
+      );
+    }
+
+    // En route
+    if (ticket.status === "en_route") {
+      return (
+        <Badge
+          className={cn("bg-amber-100 text-amber-700 font-medium text-xs")}
+        >
+          En route
+        </Badge>
+      );
+    }
+
+    // Present
+    if (ticket.status === "present") {
+      return (
+        <Badge
+          className={cn("bg-violet-100 text-violet-700 font-medium text-xs")}
+        >
+          Présent
+        </Badge>
+      );
+    }
+
+    return getStatusBadge(ticket.status);
   };
 
   const getPriorityBadge = (priority: string) => {
@@ -386,7 +441,60 @@ export default function AgentDashboard() {
                             d'attente
                           </p>
                         </div>
-                        {getStatusBadge(ticket.status)}
+                        <div className="text-right">
+                          {/* Status badge */}
+                          {ticket.is_swapped && ticket.status === "waiting" ? (
+                            <Badge
+                              className={cn(
+                                "bg-gray-100 text-gray-700 font-medium text-xs",
+                              )}
+                            >
+                              Laisser passer
+                            </Badge>
+                          ) : (
+                            getTicketBadge(ticket)
+                          )}
+
+                          {/* Response info */}
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {ticket.response_received_at ? (
+                              <span>
+                                Réponse à{" "}
+                                {new Date(
+                                  ticket.response_received_at,
+                                ).toLocaleTimeString("fr-FR", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}{" "}
+                                (
+                                {Math.floor(
+                                  (Date.now() -
+                                    new Date(
+                                      ticket.response_received_at,
+                                    ).getTime()) /
+                                    60000,
+                                )}{" "}
+                                min)
+                              </span>
+                            ) : ticket.called_at ? (
+                              <span>
+                                Appelé à{" "}
+                                {new Date(ticket.called_at).toLocaleTimeString(
+                                  "fr-FR",
+                                  { hour: "2-digit", minute: "2-digit" },
+                                )}
+                              </span>
+                            ) : null}
+
+                            {/* En route details */}
+                            {ticket.status === "en_route" &&
+                              ticket.estimated_travel_minutes && (
+                                <div>
+                                  ETA ~{ticket.estimated_travel_minutes} min
+                                </div>
+                              )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -490,7 +598,7 @@ export default function AgentDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        {getStatusBadge(ticket.status)}
+                        {getTicketBadge(ticket)}
                         <span className="text-xs text-muted-foreground">
                           {new Date(ticket.created_at).toLocaleTimeString(
                             "fr-FR",

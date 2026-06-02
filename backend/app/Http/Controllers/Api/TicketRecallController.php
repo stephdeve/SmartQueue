@@ -8,6 +8,7 @@ use App\Models\Service;
 use App\Services\AlertService;
 use App\Events\UserEnRoute;
 use App\Notifications\InAppNotification;
+use App\Jobs\SendPushNotification;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Notification;
@@ -176,6 +177,22 @@ class TicketRecallController extends Controller
                             'estimated_minutes' => $travelMinutes,
                         ]
                     ));
+
+                    // Also push a notification to agent device
+                    try {
+                        dispatch(new SendPushNotification(
+                            $agent->id,
+                            "Usager en route - {$ticket->number}",
+                            $message,
+                            [
+                                'ticket_id' => $ticket->id,
+                                'service_id' => $ticket->service_id,
+                                'type' => 'user_en_route',
+                            ]
+                        ));
+                    } catch (\Exception $_e) {
+                        \Log::warning('[TicketRecallController] Failed to push to agent: ' . $_e->getMessage());
+                    }
                 }
                 \Log::info('[TicketRecallController] Notifications created for agents', [
                     'agent_count' => $agents->count(),
@@ -259,6 +276,21 @@ class TicketRecallController extends Controller
                             'service_id' => $ticket->service_id,
                         ]
                     ));
+
+                    try {
+                        dispatch(new SendPushNotification(
+                            $agent->id,
+                            "Usager présent - {$ticket->number}",
+                            "L'usager du ticket {$ticket->number} est présent au guichet.",
+                            [
+                                'ticket_id' => $ticket->id,
+                                'service_id' => $ticket->service_id,
+                                'type' => 'user_present',
+                            ]
+                        ));
+                    } catch (\Exception $_e) {
+                        \Log::warning('[TicketRecallController] Failed to push present to agent: ' . $_e->getMessage());
+                    }
                 }
             }
         } catch (\Exception $e) {
@@ -334,6 +366,12 @@ class TicketRecallController extends Controller
                 'success' => false,
                 'message' => $e->getMessage(),
             ], 422);
+        } catch (\Exception $e) {
+            \Log::error('[TicketRecallController] defer failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l\'échange de position',
+            ], 500);
         }
     }
 
