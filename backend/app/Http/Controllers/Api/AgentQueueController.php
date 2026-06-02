@@ -22,9 +22,9 @@ class AgentQueueController extends Controller
 
         $items = Ticket::query()
             ->where('service_id', $service->id)
-            ->whereIn('status', ['waiting','called','absent'])
+            ->whereIn('status', ['waiting','called','en_route','present','absent'])
             ->where('created_at', '>=', Carbon::now()->subHours(24))
-            ->orderByRaw("CASE status WHEN 'called' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END")
+            ->orderByRaw("CASE status WHEN 'present' THEN 1 WHEN 'called' THEN 2 WHEN 'en_route' THEN 3 WHEN 'waiting' THEN 4 ELSE 5 END")
             ->orderByRaw("CASE priority WHEN 'vip' THEN 3 WHEN 'high' THEN 2 ELSE 1 END DESC")
             ->orderBy('created_at')
             ->with(['user','counter'])
@@ -43,6 +43,9 @@ class AgentQueueController extends Controller
                     'called_at' => optional($t->called_at)->toDateTimeString(),
                     'absent_at' => optional($t->absent_at)->toDateTimeString(),
                     'en_route_at' => optional($t->en_route_at)->toDateTimeString(),
+                    'present_at' => optional($t->present_at)->toDateTimeString(),
+                    'response_received_at' => optional($t->response_received_at)->toDateTimeString(),
+                    'en_route_expires_at' => optional($t->en_route_expires_at)->toDateTimeString(),
                     'estimated_travel_minutes' => $t->estimated_travel_minutes,
                     'user' => $t->user ? [
                         'id' => $t->user->id,

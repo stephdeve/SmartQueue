@@ -76,22 +76,38 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
   const processedCount = Math.max(0, queueLength - (position || 0));
 
   const isTicketCalledState = activeTicket?.status === "called";
-  const canCancelTicket =
-    activeTicket?.status === "waiting" || activeTicket?.status === "called";
-  const canConfirmPresence =
-    activeTicket?.status === "called" && !activeTicket?.en_route_at;
+  const isTicketEnRoute = activeTicket?.status === "en_route";
+  const isTicketPresent = activeTicket?.status === "present";
+  const isTicketAbsent = activeTicket?.status === "absent";
+  const hasConfirmedPresence = isTicketEnRoute || isTicketPresent;
+  const canCancelTicket = activeTicket?.status === "waiting";
+  const canConfirmEnRoute = activeTicket?.status === "called";
+  const canMarkPresent =
+    activeTicket?.status === "en_route" || activeTicket?.status === "called";
 
-  const queueState = isTicketCalledState
+  const queueState = isTicketPresent
     ? {
         label: "Statut du ticket",
-        value: "Appelé au guichet",
-        etaLabel: "Présentez-vous maintenant",
+        value: "Présent au point de service",
+        etaLabel: "Priorité conservée",
       }
-    : {
-        label: "Position dans la file",
-        value: `${position}ème / ${queueLength}`,
-        etaLabel: `≈ ${etaMinutes} minutes`,
-      };
+    : isTicketEnRoute
+      ? {
+          label: "Statut du ticket",
+          value: "Usager en route",
+          etaLabel: "En attente d'arrivée",
+        }
+      : isTicketCalledState
+        ? {
+            label: "Statut du ticket",
+            value: "Appelé au guichet",
+            etaLabel: "Présentez-vous maintenant",
+          }
+        : {
+            label: "Position dans la file",
+            value: `${position}ème / ${queueLength}`,
+            etaLabel: `≈ ${etaMinutes} minutes`,
+          };
 
   // Calculate when to leave
   const getWhenToLeave = useCallback(() => {
@@ -111,7 +127,19 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
     };
   }, [distanceInfo, etaMinutes, marginMinutes, preferredTransportMode]);
 
-  const whenToLeave = getWhenToLeave();
+  const whenToLeave =
+    !isTicketAbsent && !hasConfirmedPresence ? getWhenToLeave() : null;
+
+  const getGraceRemainingText = useCallback(() => {
+    if (!activeTicket?.en_route_expires_at) return null;
+    const remainingMs =
+      new Date(activeTicket.en_route_expires_at).getTime() - Date.now();
+    if (remainingMs <= 0) return "Délai expiré";
+    const totalMinutes = Math.ceil(remainingMs / 60000);
+    return `${totalMinutes} min restantes`;
+  }, [activeTicket?.en_route_expires_at]);
+
+  const graceRemainingText = getGraceRemainingText();
 
   // Progress bar animation
   useEffect(() => {
@@ -175,7 +203,7 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
     );
   }, [activeTicket, cancelTicket, onCancel, showWarning, showError]);
 
-  // Handle confirm presence
+  // Handle confirm en route
   const handleConfirmPresence = useCallback(async () => {
     try {
       const rawTravel = distanceInfo?.travelTimes?.[preferredTransportMode];
@@ -207,7 +235,28 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
     showError,
   ]);
 
+  const handleMarkPresent = useCallback(async () => {
+    try {
+      await axiosClient.post(`/tickets/${activeTicket?.id}/present`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showSuccess(
+        "Présence confirmée",
+        "Votre priorité est conservée. L'agent sait que vous êtes arrivé.",
+      );
+      onConfirmPresence?.();
+    } catch (error: any) {
+      showError(
+        "Erreur",
+        getApiErrorMessage(error, "Impossible de confirmer votre présence"),
+      );
+    }
+  }, [activeTicket, onConfirmPresence, showSuccess, showError]);
+
   if (!activeTicket) return null;
+
+  const absentMessage = activeTicket.absent_at
+    ? "Vous avez été marqué absent par l'agent. Ce ticket n'est plus actif."
+    : "Votre délai de présentation est dépassé. Ce ticket n'est plus actif.";
 
   // Called state is now handled by global CalledTicketOverlay in tab layout
   // When ticket is called, the overlay takes over the entire screen
@@ -327,33 +376,173 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
         </View>
 
         {/* Progress Bar */}
-        <View style={styles.progressSection}>
+        {!isTicketAbsent && (
+          <View style={styles.progressSection}>
+            <View
+              style={[
+                styles.progressBar,
+                { backgroundColor: colors.surfaceSecondary },
+              ]}
+            >
+              <Animated.View
+                style={[
+                  styles.progressFill,
+                  { backgroundColor: colors.primary },
+                  {
+                    width: progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ["0%", "100%"],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+            <Text
+              style={[styles.progressText, { color: colors.textSecondary }]}
+            >
+              {processedCount} / {queueLength} traités
+            </Text>
+          </View>
+        )}
+
+        {isTicketAbsent ? (
           <View
             style={[
-              styles.progressBar,
-              { backgroundColor: colors.surfaceSecondary },
+              styles.absentStateContainer,
+              {
+                backgroundColor: colors.danger + "12",
+                borderColor: colors.danger + "35",
+              },
             ]}
           >
-            <Animated.View
+            <View style={styles.absentStateHeader}>
+              <Ionicons name="alert-circle" size={22} color={colors.danger} />
+              <Text style={[styles.absentStateTitle, { color: colors.danger }]}>
+                Ticket marqué absent
+              </Text>
+            </View>
+            <Text
+              style={[styles.absentStateText, { color: colors.textPrimary }]}
+            >
+              {absentMessage}
+            </Text>
+            <Text
               style={[
-                styles.progressFill,
-                { backgroundColor: colors.primary },
-                {
-                  width: progressAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ["0%", "100%"],
-                  }),
-                },
+                styles.absentStateSubtext,
+                { color: colors.textSecondary },
               ]}
-            />
+            >
+              Vous ne pouvez plus répondre à l&apos;appel ni confirmer votre
+              présence pour ce ticket. Reprenez un nouveau ticket si vous
+              souhaitez rejoindre à nouveau la file.
+            </Text>
           </View>
-          <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-            {processedCount} / {queueLength} traités
-          </Text>
-        </View>
-
-        {/* Distance Block */}
-        {hasValidCoordinates && distanceInfo ? (
+        ) : isTicketPresent ? (
+          <View
+            style={[
+              styles.confirmedStateContainer,
+              {
+                backgroundColor: colors.primary + "12",
+                borderColor: colors.primary + "35",
+              },
+            ]}
+          >
+            <View style={styles.absentStateHeader}>
+              <Ionicons name="person-circle" size={22} color={colors.primary} />
+              <Text
+                style={[styles.absentStateTitle, { color: colors.primary }]}
+              >
+                Présent au point de service
+              </Text>
+            </View>
+            <Text
+              style={[styles.absentStateText, { color: colors.textPrimary }]}
+            >
+              Votre présence a été enregistrée.
+            </Text>
+            <Text
+              style={[
+                styles.absentStateSubtext,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Vous conservez votre priorité et serez pris en charge dès
+              qu&apos;un agent est disponible.
+            </Text>
+          </View>
+        ) : hasConfirmedPresence ? (
+          <View
+            style={[
+              styles.confirmedStateContainer,
+              {
+                backgroundColor: colors.success + "12",
+                borderColor: colors.success + "35",
+              },
+            ]}
+          >
+            <View style={styles.absentStateHeader}>
+              <Ionicons
+                name="checkmark-circle"
+                size={22}
+                color={colors.success}
+              />
+              <Text
+                style={[styles.absentStateTitle, { color: colors.success }]}
+              >
+                Réponse envoyée à l&apos;agent
+              </Text>
+            </View>
+            <Text
+              style={[styles.absentStateText, { color: colors.textPrimary }]}
+            >
+              Votre réponse a été enregistrée.
+            </Text>
+            <Text
+              style={[
+                styles.absentStateSubtext,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Vous avez indiqué être en route vers le lieu de service. Merci de
+              vous présenter dans les prochaines minutes afin de conserver votre
+              priorité.
+            </Text>
+            {graceRemainingText && (
+              <View
+                style={[
+                  styles.enRouteTimerBadge,
+                  { backgroundColor: colors.warning + "20" },
+                ]}
+              >
+                <Ionicons name="time" size={14} color={colors.warning} />
+                <Text
+                  style={[styles.enRouteTimerText, { color: colors.warning }]}
+                >
+                  Délai de priorité : {graceRemainingText}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.presentButton,
+                { backgroundColor: colors.primary + "18" },
+              ]}
+              onPress={handleMarkPresent}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="checkmark-done-circle"
+                size={18}
+                color={colors.primary}
+              />
+              <Text
+                style={[styles.presentButtonText, { color: colors.primary }]}
+              >
+                Je suis présent
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : hasValidCoordinates && distanceInfo ? (
           <View style={styles.distanceGrid}>
             {[
               {
@@ -465,52 +654,82 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
         )}
 
         {/* Actions */}
-        {(canConfirmPresence || canCancelTicket) && (
-          <View style={styles.actionsRow}>
-            {canConfirmPresence && (
-              <TouchableOpacity
-                style={[
-                  styles.confirmPresenceButton,
-                  { backgroundColor: colors.success + "20" },
-                ]}
-                onPress={handleConfirmPresence}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="checkmark-circle"
-                  size={18}
-                  color={colors.success}
-                />
-                <Text
+        {!isTicketAbsent &&
+          (canConfirmEnRoute || canCancelTicket || canMarkPresent) && (
+            <View style={styles.actionsRow}>
+              {canConfirmEnRoute && (
+                <TouchableOpacity
                   style={[
-                    styles.confirmPresenceText,
-                    { color: colors.success },
+                    styles.confirmPresenceButton,
+                    { backgroundColor: colors.success + "20" },
                   ]}
+                  onPress={handleConfirmPresence}
+                  activeOpacity={0.8}
                 >
-                  Je suis en route
-                </Text>
-              </TouchableOpacity>
-            )}
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={colors.success}
+                  />
+                  <Text
+                    style={[
+                      styles.confirmPresenceText,
+                      { color: colors.success },
+                    ]}
+                  >
+                    Je suis en route
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-            {canCancelTicket && (
-              <TouchableOpacity
-                style={[
-                  styles.cancelTicketButton,
-                  { backgroundColor: colors.danger + "20" },
-                ]}
-                onPress={handleCancel}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="close-circle" size={18} color={colors.danger} />
-                <Text
-                  style={[styles.cancelTicketText, { color: colors.danger }]}
+              {canMarkPresent && !hasConfirmedPresence && (
+                <TouchableOpacity
+                  style={[
+                    styles.presentButton,
+                    { backgroundColor: colors.primary + "18" },
+                  ]}
+                  onPress={handleMarkPresent}
+                  activeOpacity={0.8}
                 >
-                  Annuler
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+                  <Ionicons
+                    name="checkmark-done-circle"
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.presentButtonText,
+                      { color: colors.primary },
+                    ]}
+                  >
+                    Je suis présent
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {canCancelTicket && (
+                <TouchableOpacity
+                  style={[
+                    styles.cancelTicketButton,
+                    { backgroundColor: colors.danger + "20" },
+                  ]}
+                  onPress={handleCancel}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={18}
+                    color={colors.danger}
+                  />
+                  <Text
+                    style={[styles.cancelTicketText, { color: colors.danger }]}
+                  >
+                    Annuler
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
       </TouchableOpacity>
       {AlertComponent}
     </>
@@ -705,12 +924,72 @@ const styles = StyleSheet.create({
   },
   noCoordinatesSubtext: {
     fontSize: 12,
-    color: "#9CA3AF",
+    textAlign: "center",
     marginTop: 4,
+  },
+  absentStateContainer: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  confirmedStateContainer: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  absentStateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  absentStateTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  absentStateText: {
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  absentStateSubtext: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  enRouteTimerBadge: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  enRouteTimerText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  presentButton: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  presentButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
   actionsRow: {
     flexDirection: "row",
     gap: 12,
+    marginTop: 8,
   },
   confirmPresenceButton: {
     flex: 1,

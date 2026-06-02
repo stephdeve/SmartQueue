@@ -77,20 +77,39 @@ class TicketsNotifyApproaching extends Command
                 ]
             );
 
-            $shouldByPosition = $ticket->position <= (int) $prefs->notify_before_positions;
-            $etaMinutes = $ticket->eta_minutes ?? $this->ticketService->estimateWaitTime($ticket->service, $ticket);
+            $freshTicket = Ticket::query()
+                ->whereKey($ticket->id)
+                ->where('status', 'waiting')
+                ->whereDate('valid_date', Carbon::today())
+                ->first();
+
+            if (!$freshTicket || $freshTicket->position === null) {
+                continue;
+            }
+
+            $position = (int) $freshTicket->position;
+            $peopleBefore = max(0, $position - 1);
+            $etaMinutes = $freshTicket->eta_minutes;
+
+            if ($etaMinutes === null) {
+                $etaMinutes = $this->ticketService->estimateWaitTime(
+                    $ticket->service,
+                    new Ticket(['position' => $position])
+                );
+            }
+
+            $shouldByPosition = $position <= (int) $prefs->notify_before_positions;
             $shouldByEta = $etaMinutes !== null && $etaMinutes <= (int) $prefs->notify_before_minutes;
 
             if (!$shouldByPosition && !$shouldByEta) {
                 continue;
             }
 
-            if ($this->wasRecentlyNotifiedForTicket($prefs, $ticket->id, $now)) {
+            if ($this->wasRecentlyNotifiedForTicket($prefs, $ticket->id, $position, $etaMinutes, $now)) {
                 continue;
             }
 
             $title = 'Bientôt votre tour';
-            $peopleBefore = max(0, ((int) $ticket->position) - 1);
 
             if ($shouldByPosition) {
                 if ($peopleBefore === 0) {
@@ -111,8 +130,8 @@ class TicketsNotifyApproaching extends Command
             }
 
             if ($dryRun) {
-                $this->line('[dry-run] notify user_id='.$ticket->user->id.' ticket_id='.$ticket->id.' service_id='.$ticket->service_id.' pos='.$ticket->position.' eta='.(string) $etaMinutes);
-                $this->markNotified($prefs, $ticket->id, $now, false);
+                $this->line('[dry-run] notify user_id='.$ticket->user->id.' ticket_id='.$ticket->id.' service_id='.$ticket->service_id.' pos='.$position.' eta='.(string) $etaMinutes);
+                $this->markNotified($prefs, $ticket->id, $position, $etaMinutes, $now, false);
                 $notified++;
                 continue;
             }
@@ -122,7 +141,7 @@ class TicketsNotifyApproaching extends Command
                     'type' => 'approaching',
                     'ticket_id' => $ticket->id,
                     'service_id' => $ticket->service_id,
-                    'position' => $ticket->position,
+                    'position' => $position,
                     'eta_minutes' => $etaMinutes,
                 ]));
             }
@@ -139,7 +158,7 @@ class TicketsNotifyApproaching extends Command
                 ));
             }
 
-            $this->markNotified($prefs, $ticket->id, $now, true);
+            $this->markNotified($prefs, $ticket->id, $position, $etaMinutes, $now, true);
             $notified++;
         }
 
@@ -147,7 +166,13 @@ class TicketsNotifyApproaching extends Command
         return self::SUCCESS;
     }
 
-    private function wasRecentlyNotifiedForTicket(NotificationPreference $prefs, int $ticketId, Carbon $now): bool
+    private function wasRecentlyNotifiedForTicket(
+        NotificationPreference $prefs,
+        int $ticketId,
+        int $position,
+        ?int $etaMinutes,
+        Carbon $now
+    ): bool
     {
         if ((int) $prefs->last_notified_ticket_id !== (int) $ticketId) {
             return false;
@@ -155,13 +180,27 @@ class TicketsNotifyApproaching extends Command
         if (empty($prefs->last_notified_at)) {
             return false;
         }
+
+        $currentPayload = $position.'|'.($etaMinutes ?? 'null');
+        if (($prefs->last_notification_payload ?? null) !== $currentPayload) {
+            return false;
+        }
+
         return $prefs->last_notified_at->greaterThan($now->copy()->subMinutes(20));
     }
 
-    private function markNotified(NotificationPreference $prefs, int $ticketId, Carbon $now, bool $persist): void
+    private function markNotified(
+        NotificationPreference $prefs,
+        int $ticketId,
+        int $position,
+        ?int $etaMinutes,
+        Carbon $now,
+        bool $persist
+    ): void
     {
         $prefs->last_notified_ticket_id = $ticketId;
         $prefs->last_notified_at = $now;
+        $prefs->last_notification_payload = $position.'|'.($etaMinutes ?? 'null');
         if ($persist) {
             $prefs->save();
         }

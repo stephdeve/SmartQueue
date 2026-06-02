@@ -12,7 +12,7 @@ class Ticket extends Model
     protected $fillable = [
         'user_id', 'service_id', 'counter_id', 'number', 'status', 'priority', 'position',
         'called_at', 'closed_at', 'absent_at', 'last_distance_m', 'last_seen_at',
-        'has_recalled', 'en_route_at', 'estimated_travel_minutes', 'called_counter_id',
+        'has_recalled', 'en_route_at', 'present_at', 'en_route_expires_at', 'response_received_at', 'estimated_travel_minutes', 'called_counter_id',
         'deferred_at', 'deferral_count', 'is_swapped', 'swapped_with_ticket_id',
         'original_called_at', 'grace_period_expires_at',
         'source', 'valid_date',
@@ -26,6 +26,9 @@ class Ticket extends Model
         'absent_at' => 'datetime',
         'last_seen_at' => 'datetime',
         'en_route_at' => 'datetime',
+        'present_at' => 'datetime',
+        'en_route_expires_at' => 'datetime',
+        'response_received_at' => 'datetime',
         'has_recalled' => 'boolean',
         'deferred_at' => 'datetime',
         'is_swapped' => 'boolean',
@@ -54,6 +57,6 @@ class Ticket extends Model
     // Scope: tickets encore actifs (non clos/cancel)
     public function scopeActive($q)
     {
-        return $q->whereNotIn('status', ['closed','canceled']);
+        return $q->whereNotIn('status', ['closed','canceled','expired']);
     }
 }

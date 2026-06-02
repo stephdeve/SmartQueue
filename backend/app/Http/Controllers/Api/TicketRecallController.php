@@ -32,8 +32,8 @@ class TicketRecallController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Can only recall if ticket is called
-        if ($ticket->status !== 'called') {
+        // Can only recall if ticket is called or en route
+        if (!in_array($ticket->status, ['called', 'en_route'], true)) {
             return response()->json([
                 'error' => 'Le ticket n\'est pas en statut appelé',
             ], 400);
@@ -73,8 +73,8 @@ class TicketRecallController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Can only confirm if ticket is called
-        if ($ticket->status !== 'called') {
+        // Can only confirm if ticket is called or already marked en route
+        if (!in_array($ticket->status, ['called', 'en_route'], true)) {
             return response()->json([
                 'error' => 'Le ticket n\'est pas en statut appelé',
             ], 400);
@@ -105,9 +105,14 @@ class TicketRecallController extends Controller
             ]);
         }
 
+        $graceMinutes = (int) config('queue.en_route_grace_minutes', 10);
+
         // Mark as en route
         $ticket->update([
-            'en_route_at' => now(),
+            'status' => 'en_route',
+            'en_route_at' => $ticket->en_route_at ?? now(),
+            'response_received_at' => now(),
+            'en_route_expires_at' => now()->addMinutes($graceMinutes),
             'estimated_travel_minutes' => $travelMinutes,
         ]);
 
@@ -187,6 +192,34 @@ class TicketRecallController extends Controller
             'data' => $ticket->fresh(),
             'message' => 'En route confirmé',
             'estimated_travel_minutes' => $travelMinutes,
+            'grace_minutes' => $graceMinutes,
+        ]);
+    }
+
+    /**
+     * User confirms they are physically present.
+     */
+    public function present(Request $request, Ticket $ticket): JsonResponse
+    {
+        if ($ticket->user_id !== $request->user()->id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        if (!in_array($ticket->status, ['en_route', 'called'], true)) {
+            return response()->json([
+                'error' => 'Le ticket ne peut pas être marqué présent',
+            ], 400);
+        }
+
+        $ticket->update([
+            'status' => 'present',
+            'present_at' => now(),
+            'response_received_at' => $ticket->response_received_at ?? now(),
+        ]);
+
+        return response()->json([
+            'data' => $ticket->fresh(),
+            'message' => 'Présence confirmée',
         ]);
     }
 
@@ -201,8 +234,8 @@ class TicketRecallController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Can only defer if ticket is called
-        if ($ticket->status !== 'called') {
+        // Can only defer if ticket is called or en route
+        if (!in_array($ticket->status, ['called', 'en_route'], true)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Le ticket n\'est pas en statut appelé',
@@ -265,7 +298,7 @@ class TicketRecallController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        if ($ticket->status !== 'called') {
+        if (!in_array($ticket->status, ['called', 'en_route', 'present'], true)) {
             return response()->json([
                 'is_called' => false,
                 'countdown_seconds' => 0,
@@ -278,11 +311,13 @@ class TicketRecallController extends Controller
         $remaining = max(0, $timeoutSeconds - $elapsed);
 
         return response()->json([
-            'is_called' => true,
+            'is_called' => $ticket->status === 'called',
+            'is_en_route' => $ticket->status === 'en_route',
+            'is_present' => $ticket->status === 'present',
             'countdown_seconds' => $remaining,
             'has_recalled' => $ticket->has_recalled,
             'counter_number' => $ticket->counter?->number,
-            'is_en_route' => !is_null($ticket->en_route_at),
+            'en_route_expires_at' => $ticket->en_route_expires_at,
         ]);
     }
 }

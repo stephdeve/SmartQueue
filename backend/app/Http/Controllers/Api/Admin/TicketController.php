@@ -12,7 +12,7 @@ class TicketController extends Controller
 {
     /**
      * Liste des tickets avec filtres pour admin/agent.
-     * 
+     *
      * Query params:
      * - status: waiting|called|closed|absent|cancelled|expired|all
      * - service_id: ID du service (optionnel)
@@ -185,7 +185,7 @@ class TicketController extends Controller
 
     /**
      * Statistiques des tickets par service.
-     * 
+     *
      * Query params:
      * - from/to ou period (today|week|month)
      */
@@ -260,6 +260,8 @@ class TicketController extends Controller
                     'total' => 0,
                     'waiting' => 0,
                     'called' => 0,
+                    'en_route' => 0,
+                    'present' => 0,
                     'closed' => 0,
                     'absent' => 0,
                     'cancelled' => 0,

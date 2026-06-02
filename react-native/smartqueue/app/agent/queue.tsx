@@ -29,6 +29,9 @@ type Ticket = {
   created_at: string;
   called_at?: string;
   en_route_at?: string | null;
+  present_at?: string | null;
+  response_received_at?: string | null;
+  en_route_expires_at?: string | null;
   estimated_travel_minutes?: number | null;
 };
 
@@ -86,7 +89,10 @@ export default function AgentQueue() {
 
       // Find currently called ticket
       const calledTicket = (queueRes.data?.tickets || []).find(
-        (t: Ticket) => t.status === "called",
+        (t: Ticket) =>
+          t.status === "present" ||
+          t.status === "called" ||
+          t.status === "en_route",
       );
       setCurrentTicket(calledTicket || null);
     } catch (error) {
@@ -594,14 +600,47 @@ export default function AgentQueue() {
               )}
               {currentTicket.en_route_at && (
                 <View style={styles.presenceBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color="#166534" />
+                  <Ionicons
+                    name={
+                      currentTicket.status === "present"
+                        ? "person-circle"
+                        : "checkmark-circle"
+                    }
+                    size={14}
+                    color="#166534"
+                  />
                   <Text style={styles.presenceBadgeText}>
-                    {currentTicket.estimated_travel_minutes != null
-                      ? `Usager en route · ≈ ${currentTicket.estimated_travel_minutes} min`
-                      : "Présence confirmée"}
+                    {currentTicket.status === "present"
+                      ? "Usager présent sur place"
+                      : currentTicket.estimated_travel_minutes != null
+                        ? `Usager en route · ≈ ${currentTicket.estimated_travel_minutes} min`
+                        : "Réponse reçue"}
                   </Text>
                 </View>
               )}
+              {currentTicket.response_received_at && (
+                <Text style={styles.elapsedTime}>
+                  Réponse reçue à{" "}
+                  {new Date(
+                    currentTicket.response_received_at,
+                  ).toLocaleTimeString("fr-FR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              )}
+              {currentTicket.en_route_expires_at &&
+                currentTicket.status === "en_route" && (
+                  <Text style={styles.elapsedTime}>
+                    Priorité valable jusqu&apos;à{" "}
+                    {new Date(
+                      currentTicket.en_route_expires_at,
+                    ).toLocaleTimeString("fr-FR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                )}
             </View>
           </View>
           <View style={styles.currentTicketActions}>

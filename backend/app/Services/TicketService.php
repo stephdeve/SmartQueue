@@ -21,7 +21,7 @@ use Illuminate\Database\QueryException;
 
 class TicketService
 {
-    private const ACTIVE_STATUSES = ['waiting','called','absent'];
+    private const ACTIVE_STATUSES = ['waiting','called','en_route','present','absent'];
 
     /**
      * Broadcast event safely - logs error but doesn't crash on failure
@@ -123,7 +123,7 @@ class TicketService
             $already = Ticket::query()
                 ->where('user_id', $user->id)
                 ->where('service_id', $serviceId)
-                ->whereIn('status', ['waiting','called','absent'])
+                ->whereIn('status', ['waiting','called','en_route','present','absent'])
                 ->exists();
             if ($already) {
                 abort(422, 'You already have an active ticket for this service');
@@ -356,12 +356,17 @@ class TicketService
         return DB::transaction(function () use ($service, $counterId) {
             $this->expireOldTicketsForService($service);
 
-            // Sélection du prochain ticket waiting (valid for today only)
+            // Priorité stricte :
+            // 1) ticket présent sur place
+            // 2) ticket appelé classique
+            // 3) prochain ticket en attente
             $ticket = Ticket::query()
                 ->where('service_id', $service->id)
-                ->where('status', 'waiting')
+                ->whereIn('status', ['present', 'called', 'waiting'])
                 ->whereDate('valid_date', Carbon::today())
+                ->orderByRaw("CASE status WHEN 'present' THEN 1 WHEN 'called' THEN 2 ELSE 3 END")
                 ->orderByRaw("CASE priority WHEN 'vip' THEN 3 WHEN 'high' THEN 2 ELSE 1 END DESC")
+                ->orderBy('position')
                 ->orderBy('created_at')
                 ->lockForUpdate()
                 ->first();
@@ -370,8 +375,15 @@ class TicketService
                 return null;
             }
 
+            $wasPresent = $ticket->status === 'present';
+
             $ticket->status = 'called';
-            $ticket->en_route_at = null; // Nouvel appel : l'utilisateur n'a pas encore répondu
+            if (!$wasPresent) {
+                $ticket->en_route_at = null; // Nouvel appel : l'utilisateur n'a pas encore répondu
+                $ticket->present_at = null;
+                $ticket->response_received_at = null;
+                $ticket->en_route_expires_at = null;
+            }
             if (!is_null($counterId)) {
                 $ticket->counter_id = $counterId;
             }
@@ -419,7 +431,7 @@ class TicketService
 
             // Notifications push & SMS (asynchrones via queue)
             if ($ticket->user) {
-                dispatch(new SendPushNotification($ticket->user->id, 'Vous êtes appelé', 'Présentez-vous au guichet', [
+                dispatch(new SendPushNotification($ticket->user->id, $wasPresent ? 'Vous êtes prioritaire' : 'Vous êtes appelé', $wasPresent ? 'Votre présence a été enregistrée. Présentez-vous immédiatement au guichet.' : 'Présentez-vous au guichet', [
                     'ticket_id' => $ticket->id,
                     'service_id' => $service->id,
                 ]));
@@ -446,6 +458,7 @@ class TicketService
 
         $ticket->status = 'absent';
         $ticket->absent_at = Carbon::now();
+        $ticket->en_route_expires_at = null;
         $ticket->position = null;
         $ticket->eta_minutes = null; // No longer in queue
         $ticket->save();
@@ -503,6 +516,7 @@ class TicketService
     {
         $ticket->status = 'closed';
         $ticket->closed_at = Carbon::now();
+        $ticket->en_route_expires_at = null;
         $ticket->position = null;
         $ticket->eta_minutes = null;
         $ticket->save();
@@ -570,8 +584,8 @@ class TicketService
         $this->expireOldTicketsForServiceId($ticket->service_id);
 
         // Vérifier que le ticket est bien appelé
-        if ($ticket->status !== 'called') {
-            throw new \InvalidArgumentException('Ticket must be called to defer');
+        if (!in_array($ticket->status, ['called', 'en_route'], true)) {
+            throw new \InvalidArgumentException('Ticket must be called or en route to defer');
         }
 
         // Vérifier la période de grâce (24h depuis appel original ou premier appel)
@@ -605,6 +619,7 @@ class TicketService
             // Le ticket déferré prend la position du suivant
             $ticket->position = $nextTicketPosition;
             $ticket->status = 'waiting';
+            $ticket->en_route_expires_at = null;
             $ticket->deferred_at = Carbon::now();
             $ticket->deferral_count = ($ticket->deferral_count ?? 0) + 1;
             $ticket->is_swapped = true;
@@ -622,6 +637,9 @@ class TicketService
             $nextTicket->position = null;
             $nextTicket->status = 'called';
             $nextTicket->en_route_at = null; // Nouvel appel : pas encore de réponse
+            $nextTicket->present_at = null;
+            $nextTicket->response_received_at = null;
+            $nextTicket->en_route_expires_at = null;
             $nextTicket->called_at = Carbon::now();
             $nextTicket->is_swapped = true;
             $nextTicket->swapped_with_ticket_id = $ticket->id;
@@ -698,7 +716,7 @@ class TicketService
 
         // Vérifier si on peut déférer (période de grâce de 24h)
         $referenceTime = $ticket->original_called_at ?? $ticket->called_at;
-        $canDefer = $ticket->status === 'called' &&
+        $canDefer = in_array($ticket->status, ['called', 'en_route'], true) &&
                     $referenceTime &&
                     !Carbon::parse($referenceTime)->addHours(24)->isPast();
 
@@ -759,6 +777,9 @@ class TicketService
 
         $ticket->status = 'called';
         $ticket->en_route_at = null; // Rappel : réinitialise la réponse précédente
+        $ticket->present_at = null;
+        $ticket->response_received_at = null;
+        $ticket->en_route_expires_at = null;
         $ticket->called_at = Carbon::now();
         $ticket->position = null;
         $ticket->eta_minutes = 0; // Called = no more waiting

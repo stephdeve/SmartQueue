@@ -14,6 +14,7 @@ class NotificationPreference extends Model
         'notify_before_minutes',
         'last_notified_ticket_id',
         'last_notified_at',
+        'last_notification_payload',
     ];
 
     protected $casts = [
@@ -23,6 +24,7 @@ class NotificationPreference extends Model
         'notify_before_minutes' => 'integer',
         'last_notified_ticket_id' => 'integer',
         'last_notified_at' => 'datetime',
+        'last_notification_payload' => 'string',
     ];
 
     public function user()

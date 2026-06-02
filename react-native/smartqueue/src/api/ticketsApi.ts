@@ -12,6 +12,8 @@ export interface Ticket {
     | "created"
     | "waiting"
     | "called"
+    | "en_route"
+    | "present"
     | "served"
     | "closed"
     | "absent"
@@ -25,6 +27,9 @@ export interface Ticket {
   closed_at?: string;
   absent_at?: string;
   en_route_at?: string | null;
+  present_at?: string | null;
+  response_received_at?: string | null;
+  en_route_expires_at?: string | null;
   estimated_travel_minutes?: number | null;
   last_distance_m?: number;
   last_seen_at?: string;

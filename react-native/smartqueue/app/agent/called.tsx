@@ -26,6 +26,9 @@ type Ticket = {
   called_at: string | null;
   created_at: string;
   en_route_at?: string | null;
+  present_at?: string | null;
+  response_received_at?: string | null;
+  en_route_expires_at?: string | null;
   estimated_travel_minutes?: number | null;
 };
 
@@ -57,7 +60,7 @@ export default function CalledTickets() {
       const response = await axiosClient.get("/agent/tickets", {
         params: {
           service_id: parseInt(serviceId),
-          status: "called",
+          status: "called,en_route,present",
           per_page: 50,
         },
       });
@@ -198,9 +201,11 @@ export default function CalledTickets() {
         <View style={styles.presenceRow}>
           <Ionicons name="checkmark-circle" size={16} color="#16A34A" />
           <Text style={[styles.presenceText, { color: "#166534" }]}>
-            {item.estimated_travel_minutes != null
-              ? `Usager en route · ≈ ${item.estimated_travel_minutes} min`
-              : "Présence confirmée"}
+            {item.status === "present"
+              ? "Usager présent sur place"
+              : item.estimated_travel_minutes != null
+                ? `Usager en route · ≈ ${item.estimated_travel_minutes} min`
+                : "Présence confirmée"}
           </Text>
         </View>
       )}

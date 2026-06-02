@@ -1,12 +1,12 @@
-import { useEffect, useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
-import { api } from '@/api/axios'
-import { useAppSelector } from '@/store'
-import { toast } from 'sonner'
-import { 
-  Users, 
-  Clock, 
-  CheckCircle, 
+import { useEffect, useState, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { api } from "@/api/axios";
+import { useAppSelector } from "@/store";
+import { toast } from "sonner";
+import {
+  Users,
+  Clock,
+  CheckCircle,
   AlertTriangle,
   TrendingUp,
   Activity,
@@ -19,159 +19,208 @@ import {
   ChevronRight,
   Zap,
   Star,
-  Flame
-} from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import { AnalyticsCard } from '@/components/ui/analytics-card'
-import { ChartContainer } from '@/components/ui/chart-container'
-import { VerticalBarChart } from '@/components/ui/charts'
+  Flame,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { AnalyticsCard } from "@/components/ui/analytics-card";
+import { ChartContainer } from "@/components/ui/chart-container";
+import { VerticalBarChart } from "@/components/ui/charts";
 
 type TodayTicket = {
-  id: number
-  number: string
-  status: string
-  priority: string
-  position: number | null
-  service_id: number
-  service_name: string
-  user_name: string | null
-  counter_name: string | null
-  called_at: string | null
-  closed_at: string | null
-  created_at: string
-}
+  id: number;
+  number: string;
+  status: string;
+  priority: string;
+  position: number | null;
+  service_id: number;
+  service_name: string;
+  user_name: string | null;
+  counter_name: string | null;
+  called_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+};
 
 type QueueTicket = {
-  id: number
-  number: string
-  status: string
-  priority: string
-  position: number | null
-  service_id: number
-  service_name: string
-  user_name: string | null
-  wait_time_minutes: number
-  created_at: string
-}
+  id: number;
+  number: string;
+  status: string;
+  priority: string;
+  position: number | null;
+  service_id: number;
+  service_name: string;
+  user_name: string | null;
+  wait_time_minutes: number;
+  created_at: string;
+};
 
 type ServiceInfo = {
-  id: number
-  name: string
-  status: string
-  waiting_count: number
-}
+  id: number;
+  name: string;
+  status: string;
+  waiting_count: number;
+};
 
 type DailyStat = {
-  date: string
-  total: number
-  closed: number
-  absent: number
-}
+  date: string;
+  total: number;
+  closed: number;
+  absent: number;
+};
 
 type Stats = {
-  today_total: number
-  today_called: number
-  today_closed: number
-  today_waiting: number
-  today_absent: number
-  avg_service_time: number | null
-  avg_wait_time: number | null
-  tickets_per_day: number
-  active_services: number
-  current_queue_size: number
-}
+  today_total: number;
+  today_called: number;
+  today_closed: number;
+  today_waiting: number;
+  today_absent: number;
+  avg_service_time: number | null;
+  avg_wait_time: number | null;
+  tickets_per_day: number;
+  active_services: number;
+  current_queue_size: number;
+};
 
 type Performance = {
-  daily: DailyStat[]
-  total_closed: number
-  total_absent: number
-  avg_service_time: number | null
-}
+  daily: DailyStat[];
+  total_closed: number;
+  total_absent: number;
+  avg_service_time: number | null;
+};
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
-  waiting: { label: 'En attente', color: 'text-yellow-700', bgColor: 'bg-yellow-100 dark:bg-yellow-900/30' },
-  created: { label: 'Créé', color: 'text-yellow-700', bgColor: 'bg-yellow-100 dark:bg-yellow-900/30' },
-  called: { label: 'Appelé', color: 'text-blue-700', bgColor: 'bg-blue-100 dark:bg-blue-900/30' },
-  closed: { label: 'Clôturé', color: 'text-green-700', bgColor: 'bg-green-100 dark:bg-green-900/30' },
-  absent: { label: 'Absent', color: 'text-orange-700', bgColor: 'bg-orange-100 dark:bg-orange-900/30' },
-}
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; color: string; bgColor: string }
+> = {
+  waiting: {
+    label: "En attente",
+    color: "text-yellow-700",
+    bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
+  },
+  created: {
+    label: "Créé",
+    color: "text-yellow-700",
+    bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
+  },
+  called: {
+    label: "Appelé",
+    color: "text-blue-700",
+    bgColor: "bg-blue-100 dark:bg-blue-900/30",
+  },
+  en_route: {
+    label: "En route",
+    color: "text-amber-700",
+    bgColor: "bg-amber-100 dark:bg-amber-900/30",
+  },
+  present: {
+    label: "Présent",
+    color: "text-violet-700",
+    bgColor: "bg-violet-100 dark:bg-violet-900/30",
+  },
+  closed: {
+    label: "Clôturé",
+    color: "text-green-700",
+    bgColor: "bg-green-100 dark:bg-green-900/30",
+  },
+  absent: {
+    label: "Absent",
+    color: "text-orange-700",
+    bgColor: "bg-orange-100 dark:bg-orange-900/30",
+  },
+};
 
 const PRIORITY_CONFIG: Record<string, { label: string; icon: any }> = {
-  normal: { label: 'Normal', icon: ListOrdered },
-  high: { label: 'Haute', icon: Flame },
-  vip: { label: 'VIP', icon: Star },
-}
+  normal: { label: "Normal", icon: ListOrdered },
+  high: { label: "Haute", icon: Flame },
+  vip: { label: "VIP", icon: Star },
+};
 
 export default function AgentDashboard() {
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [todayTickets, setTodayTickets] = useState<TodayTicket[]>([])
-  const [currentQueue, setCurrentQueue] = useState<{ services: ServiceInfo[]; tickets: QueueTicket[]; total_waiting: number } | null>(null)
-  const [performance, setPerformance] = useState<Performance | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
-  const user = useAppSelector((s) => s.auth.user)
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [todayTickets, setTodayTickets] = useState<TodayTicket[]>([]);
+  const [currentQueue, setCurrentQueue] = useState<{
+    services: ServiceInfo[];
+    tickets: QueueTicket[];
+    total_waiting: number;
+  } | null>(null);
+  const [performance, setPerformance] = useState<Performance | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const user = useAppSelector((s) => s.auth.user);
 
   const loadAll = async (isRefresh = false) => {
     if (isRefresh) {
-      setRefreshing(true)
+      setRefreshing(true);
     } else {
-      setLoading(true)
+      setLoading(true);
     }
-    
+
     try {
       const [statsRes, ticketsRes, queueRes, perfRes] = await Promise.all([
-        api.get('/api/agent/dashboard/stats'),
-        api.get('/api/agent/dashboard/today-tickets'),
-        api.get('/api/agent/dashboard/current-queue'),
-        api.get('/api/agent/dashboard/performance'),
-      ])
-      
-      setStats(statsRes.data)
-      setTodayTickets(ticketsRes.data)
-      setCurrentQueue(queueRes.data)
-      setPerformance(perfRes.data)
+        api.get("/api/agent/dashboard/stats"),
+        api.get("/api/agent/dashboard/today-tickets"),
+        api.get("/api/agent/dashboard/current-queue"),
+        api.get("/api/agent/dashboard/performance"),
+      ]);
+
+      setStats(statsRes.data);
+      setTodayTickets(ticketsRes.data);
+      setCurrentQueue(queueRes.data);
+      setPerformance(perfRes.data);
     } catch (error: any) {
-      const status = error?.response?.status
-      const detail = error?.response?.data?.message || error?.message || 'Erreur inconnue'
-      toast.error(`Erreur (${status}): ${detail}`)
-      console.error('Erreur lors du chargement des données agent:', error)
+      const status = error?.response?.status;
+      const detail =
+        error?.response?.data?.message || error?.message || "Erreur inconnue";
+      toast.error(`Erreur (${status}): ${detail}`);
+      console.error("Erreur lors du chargement des données agent:", error);
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      setLoading(false);
+      setRefreshing(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadAll()
-  }, [])
+    loadAll();
+  }, []);
 
   // Performance chart data
   const performanceChartData = useMemo(() => {
-    if (!performance?.daily) return []
-    return performance.daily.map(d => ({
-      name: new Date(d.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }),
+    if (!performance?.daily) return [];
+    return performance.daily.map((d) => ({
+      name: new Date(d.date).toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "short",
+      }),
       value: d.closed,
-      color: '#22c55e',
-    }))
-  }, [performance])
+      color: "#22c55e",
+    }));
+  }, [performance]);
 
   const getStatusBadge = (status: string) => {
-    const config = STATUS_CONFIG[status] || STATUS_CONFIG.waiting
+    const config = STATUS_CONFIG[status] || STATUS_CONFIG.waiting;
     return (
-      <Badge className={cn(config.bgColor, config.color, 'font-medium text-xs')}>
+      <Badge
+        className={cn(config.bgColor, config.color, "font-medium text-xs")}
+      >
         {config.label}
       </Badge>
-    )
-  }
+    );
+  };
 
   const getPriorityBadge = (priority: string) => {
-    const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.normal
-    const Icon = config.icon
-    return <Icon className="h-3 w-3" />
-  }
+    const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.normal;
+    const Icon = config.icon;
+    return <Icon className="h-3 w-3" />;
+  };
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
@@ -186,13 +235,15 @@ export default function AgentDashboard() {
               Bienvenue {user?.name}, voici votre activité du jour
             </p>
           </div>
-          
-          <Button 
-            variant="outline" 
+
+          <Button
+            variant="outline"
             onClick={() => loadAll(true)}
             disabled={refreshing}
           >
-            <RefreshCw className={cn('h-4 w-4 mr-2', refreshing && 'animate-spin')} />
+            <RefreshCw
+              className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")}
+            />
             Actualiser
           </Button>
         </div>
@@ -237,37 +288,45 @@ export default function AgentDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Temps moyen de service</p>
+                  <p className="text-sm text-muted-foreground">
+                    Temps moyen de service
+                  </p>
                   <p className="text-2xl font-bold">
-                    {stats?.avg_service_time ? `${stats.avg_service_time} min` : '—'}
+                    {stats?.avg_service_time
+                      ? `${stats.avg_service_time} min`
+                      : "—"}
                   </p>
                 </div>
                 <Clock className="h-8 w-8 text-blue-500" />
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Temps moyen d'attente</p>
+                  <p className="text-sm text-muted-foreground">
+                    Temps moyen d'attente
+                  </p>
                   <p className="text-2xl font-bold">
-                    {stats?.avg_wait_time ? `${stats.avg_wait_time} min` : '—'}
+                    {stats?.avg_wait_time ? `${stats.avg_wait_time} min` : "—"}
                   </p>
                 </div>
                 <Users className="h-8 w-8 text-orange-500" />
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Moyenne journalière</p>
+                  <p className="text-sm text-muted-foreground">
+                    Moyenne journalière
+                  </p>
                   <p className="text-2xl font-bold">
-                    {stats?.tickets_per_day ? `${stats.tickets_per_day}` : '—'}
+                    {stats?.tickets_per_day ? `${stats.tickets_per_day}` : "—"}
                   </p>
                 </div>
                 <BarChart3 className="h-8 w-8 text-purple-500" />
@@ -301,23 +360,31 @@ export default function AgentDashboard() {
               {currentQueue?.tickets && currentQueue.tickets.length > 0 ? (
                 <div className="space-y-3">
                   {currentQueue.tickets.slice(0, 10).map((ticket) => (
-                    <div 
-                      key={ticket.id} 
+                    <div
+                      key={ticket.id}
                       className="flex items-center justify-between p-3 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                           {getPriorityBadge(ticket.priority)}
-                          <span className="font-semibold text-lg">{ticket.number}</span>
+                          <span className="font-semibold text-lg">
+                            {ticket.number}
+                          </span>
                         </div>
                         <div className="hidden md:block">
-                          <p className="text-sm text-muted-foreground">{ticket.service_name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {ticket.service_name}
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <p className="text-sm font-medium">{ticket.wait_time_minutes} min</p>
-                          <p className="text-xs text-muted-foreground">d'attente</p>
+                          <p className="text-sm font-medium">
+                            {ticket.wait_time_minutes} min
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            d'attente
+                          </p>
                         </div>
                         {getStatusBadge(ticket.status)}
                       </div>
@@ -348,18 +415,26 @@ export default function AgentDashboard() {
               {currentQueue?.services && currentQueue.services.length > 0 ? (
                 <div className="space-y-3">
                   {currentQueue.services.map((service) => (
-                    <div 
-                      key={service.id} 
+                    <div
+                      key={service.id}
                       className="flex items-center justify-between p-3 rounded-lg border"
                     >
                       <div className="flex items-center gap-2">
-                        <div className={cn(
-                          "w-2 h-2 rounded-full",
-                          service.status === 'open' ? "bg-green-500" : "bg-gray-400"
-                        )} />
+                        <div
+                          className={cn(
+                            "w-2 h-2 rounded-full",
+                            service.status === "open"
+                              ? "bg-green-500"
+                              : "bg-gray-400",
+                          )}
+                        />
                         <span className="font-medium">{service.name}</span>
                       </div>
-                      <Badge variant={service.waiting_count > 0 ? "default" : "secondary"}>
+                      <Badge
+                        variant={
+                          service.waiting_count > 0 ? "default" : "secondary"
+                        }
+                      >
                         {service.waiting_count} en attente
                       </Badge>
                     </div>
@@ -391,27 +466,36 @@ export default function AgentDashboard() {
               {todayTickets.length > 0 ? (
                 <div className="space-y-3">
                   {todayTickets.slice(0, 8).map((ticket) => (
-                    <div 
-                      key={ticket.id} 
+                    <div
+                      key={ticket.id}
                       className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
                     >
                       <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "w-2 h-2 rounded-full",
-                          ticket.status === 'waiting' && "bg-yellow-500",
-                          ticket.status === 'called' && "bg-blue-500",
-                          ticket.status === 'closed' && "bg-green-500",
-                          ticket.status === 'absent' && "bg-orange-500",
-                        )} />
+                        <div
+                          className={cn(
+                            "w-2 h-2 rounded-full",
+                            ticket.status === "waiting" && "bg-yellow-500",
+                            ticket.status === "called" && "bg-blue-500",
+                            ticket.status === "en_route" && "bg-amber-500",
+                            ticket.status === "present" && "bg-violet-500",
+                            ticket.status === "closed" && "bg-green-500",
+                            ticket.status === "absent" && "bg-orange-500",
+                          )}
+                        />
                         <div>
                           <p className="font-medium">{ticket.number}</p>
-                          <p className="text-xs text-muted-foreground">{ticket.service_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {ticket.service_name}
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         {getStatusBadge(ticket.status)}
                         <span className="text-xs text-muted-foreground">
-                          {new Date(ticket.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(ticket.created_at).toLocaleTimeString(
+                            "fr-FR",
+                            { hour: "2-digit", minute: "2-digit" },
+                          )}
                         </span>
                       </div>
                     </div>
@@ -443,14 +527,18 @@ export default function AgentDashboard() {
                   Aucune donnée
                 </div>
               )}
-              
+
               <div className="mt-4 grid grid-cols-2 gap-4 pt-4 border-t">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{performance?.total_closed ?? 0}</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {performance?.total_closed ?? 0}
+                  </p>
                   <p className="text-xs text-muted-foreground">Clôturés</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-orange-600">{performance?.total_absent ?? 0}</p>
+                  <p className="text-2xl font-bold text-orange-600">
+                    {performance?.total_absent ?? 0}
+                  </p>
                   <p className="text-xs text-muted-foreground">Absents</p>
                 </div>
               </div>
@@ -494,5 +582,5 @@ export default function AgentDashboard() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

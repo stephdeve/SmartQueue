@@ -43,6 +43,7 @@ type QueueTicket = {
   en_route_at?: string | null;
   estimated_travel_minutes?: number | null;
   position?: number | null;
+  called_at?: string | null;
 };
 
 type ServiceStats = {
@@ -532,7 +533,9 @@ const Queues: React.FC = () => {
   const enRouteCount = useMemo(
     () =>
       queue.filter(
-        (ticket) => ticket.status === "called" && !!ticket.en_route_at,
+        (ticket) =>
+          (ticket.status === "en_route" || ticket.status === "present") &&
+          !!ticket.en_route_at,
       ).length,
     [queue],
   );
@@ -936,6 +939,10 @@ const Queues: React.FC = () => {
                                       "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200",
                                     t.status === "called" &&
                                       "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200",
+                                    t.status === "en_route" &&
+                                      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200",
+                                    t.status === "present" &&
+                                      "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-200",
                                     t.status === "absent" &&
                                       "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200",
                                     t.status === "closed" &&
@@ -944,6 +951,8 @@ const Queues: React.FC = () => {
                                 >
                                   {t.status === "waiting" && "En attente"}
                                   {t.status === "called" && "Appelé"}
+                                  {t.status === "en_route" && "En route"}
+                                  {t.status === "present" && "Présent"}
                                   {t.status === "absent" && "Absent"}
                                   {t.status === "closed" && "Clôturé"}
                                 </span>
@@ -966,13 +975,18 @@ const Queues: React.FC = () => {
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                {t.status === "called" && t.en_route_at ? (
+                                {(t.status === "called" ||
+                                  t.status === "en_route" ||
+                                  t.status === "present") &&
+                                t.en_route_at ? (
                                   <div className="space-y-1">
                                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
                                       <CheckCircle className="h-3.5 w-3.5" />
-                                      {t.estimated_travel_minutes != null
-                                        ? `En route · ≈ ${t.estimated_travel_minutes} min`
-                                        : "Présence confirmée"}
+                                      {t.status === "present"
+                                        ? "Présent sur place"
+                                        : t.estimated_travel_minutes != null
+                                          ? `En route · ≈ ${t.estimated_travel_minutes} min`
+                                          : "Présence confirmée"}
                                     </span>
                                     <div className="text-xs text-muted-foreground">
                                       Réponse reçue à{" "}
@@ -980,6 +994,23 @@ const Queues: React.FC = () => {
                                         t.en_route_at,
                                       ).toLocaleTimeString()}
                                     </div>
+                                    {t.called_at && (
+                                      <div className="text-xs text-muted-foreground">
+                                        Appelé à{" "}
+                                        {new Date(
+                                          t.called_at,
+                                        ).toLocaleTimeString()}
+                                      </div>
+                                    )}
+                                    {t.en_route_expires_at &&
+                                      t.status === "en_route" && (
+                                        <div className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                          Priorité valable jusqu&apos;à{" "}
+                                          {new Date(
+                                            t.en_route_expires_at,
+                                          ).toLocaleTimeString()}
+                                        </div>
+                                      )}
                                   </div>
                                 ) : t.status === "called" ? (
                                   <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">

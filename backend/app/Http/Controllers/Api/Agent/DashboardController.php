@@ -46,6 +46,8 @@ class DashboardController extends Controller
             ->selectRaw("
                 COUNT(*) as total,
                 SUM(CASE WHEN status = 'called' THEN 1 ELSE 0 END) as called,
+                SUM(CASE WHEN status = 'en_route' THEN 1 ELSE 0 END) as en_route,
+                SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present,
                 SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed,
                 SUM(CASE WHEN status = 'waiting' THEN 1 ELSE 0 END) as waiting,
                 SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent
@@ -84,7 +86,7 @@ class DashboardController extends Controller
         // File actuelle (tickets en attente)
         $currentQueueSize = DB::table('tickets')
             ->whereIn('service_id', $assignedServiceIds)
-            ->whereIn('status', ['waiting', 'created'])
+            ->whereIn('status', ['waiting', 'created', 'en_route', 'present'])
             ->where('created_at', '>=', Carbon::now()->subHours(24))
             ->count();
 
@@ -93,6 +95,8 @@ class DashboardController extends Controller
             'today_called' => (int) ($todayStats->called ?? 0),
             'today_closed' => (int) ($todayStats->closed ?? 0),
             'today_waiting' => (int) ($todayStats->waiting ?? 0),
+            'today_en_route' => (int) ($todayStats->en_route ?? 0),
+            'today_present' => (int) ($todayStats->present ?? 0),
             'today_absent' => (int) ($todayStats->absent ?? 0),
             'avg_service_time' => $avgServiceTime ? (int) round($avgServiceTime) : null,
             'avg_wait_time' => $avgWaitTime ? (int) round($avgWaitTime) : null,

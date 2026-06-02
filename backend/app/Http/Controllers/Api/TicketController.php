@@ -36,7 +36,7 @@ class TicketController extends Controller
 
         $expiredServiceIds = Ticket::query()
             ->where('user_id', $request->user()->id)
-            ->whereIn('status', ['waiting','called','absent'])
+            ->whereIn('status', ['waiting','called','en_route','present','absent'])
             ->where(function ($query) use ($today) {
                 $query
                     ->where(function ($q) use ($today) {
@@ -56,7 +56,7 @@ class TicketController extends Controller
         // Expire tickets whose valid_date is before today
         Ticket::query()
             ->where('user_id', $request->user()->id)
-            ->whereIn('status', ['waiting','called','absent'])
+            ->whereIn('status', ['waiting','called','en_route','present','absent'])
             ->whereNotNull('valid_date')
             ->whereDate('valid_date', '<', $today)
             ->update(['status' => 'expired', 'position' => null, 'eta_minutes' => null]);
@@ -64,7 +64,7 @@ class TicketController extends Controller
         // Safety net: expire tickets with no valid_date older than 24h
         Ticket::query()
             ->where('user_id', $request->user()->id)
-            ->whereIn('status', ['waiting','called','absent'])
+            ->whereIn('status', ['waiting','called','en_route','present','absent'])
             ->whereNull('valid_date')
             ->where('created_at', '<', now()->subHours(24))
             ->update(['status' => 'expired', 'position' => null, 'eta_minutes' => null]);
@@ -79,7 +79,7 @@ class TicketController extends Controller
         // Only return tickets valid for today
         $tickets = Ticket::query()
             ->where('user_id', $request->user()->id)
-            ->whereIn('status', ['waiting','called','absent'])
+            ->whereIn('status', ['waiting','called','en_route','present','absent'])
             ->whereDate('valid_date', $today)
             ->with(['service.establishment'])
             ->orderByDesc('created_at')
@@ -109,7 +109,7 @@ class TicketController extends Controller
 
         if ($statusFilter === 'active') {
             // Active tickets: waiting, called, created
-            $query->whereIn('status', ['waiting', 'called', 'created']);
+            $query->whereIn('status', ['waiting', 'called', 'en_route', 'present', 'created']);
         } elseif ($statusFilter === 'completed') {
             // Completed tickets: closed, canceled, served, expired, absent
             $query->whereIn('status', ['closed', 'canceled', 'cancelled', 'served', 'expired', 'absent']);

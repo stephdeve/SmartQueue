@@ -199,6 +199,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('tickets')->group(function () {
         Route::post('{ticket}/request-recall', [TicketRecallController::class, 'recall']);
         Route::post('{ticket}/en-route', [TicketRecallController::class, 'enRoute']);
+        Route::post('{ticket}/present', [TicketRecallController::class, 'present']);
         Route::post('{ticket}/defer', [TicketRecallController::class, 'defer']); // User defers/swap position
         Route::get('{ticket}/countdown', [TicketRecallController::class, 'countdown']);
     });

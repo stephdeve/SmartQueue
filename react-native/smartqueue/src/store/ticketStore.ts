@@ -2,25 +2,29 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ticketsApi, Ticket, CreateTicketData } from "../api/ticketsApi";
-import { shallow } from "zustand/shallow";
+
 import { useUserStatsStore } from "./userStatsStore";
 
 // L'overlay "ticket appelé" ne doit s'afficher que tant que l'utilisateur n'a pas
 // répondu. Le backend garde status='called' après "en route" (il pose seulement
 // en_route_at) ; sans ce filtre, toute resynchro/navigation rouvrait l'overlay.
 const isTicketCalled = (ticket: Ticket | null | undefined): boolean =>
-  ticket?.status === "called" && !ticket?.en_route_at;
+  ticket?.status === "called";
 
 const getTicketStatusPriority = (status: Ticket["status"]): number => {
   switch (status) {
-    case "called":
+    case "present":
       return 0;
-    case "waiting":
+    case "called":
       return 1;
-    case "created":
+    case "en_route":
       return 2;
-    case "absent":
+    case "waiting":
       return 3;
+    case "created":
+      return 4;
+    case "absent":
+      return 5;
     default:
       return 4;
   }
@@ -217,11 +221,17 @@ export const useTicketStore = create<TicketState>()(
           return;
         }
         const enRouteAt = new Date().toISOString();
-        const updatedTicket = { ...activeTicket, en_route_at: enRouteAt };
+        const updatedTicket = {
+          ...activeTicket,
+          status: "en_route" as const,
+          en_route_at: enRouteAt,
+        };
         set({
           activeTicket: updatedTicket,
           activeTickets: activeTickets.map((t) =>
-            t.id === activeTicket.id ? { ...t, en_route_at: enRouteAt } : t,
+            t.id === activeTicket.id
+              ? { ...t, status: "en_route" as const, en_route_at: enRouteAt }
+              : t,
           ),
           isCalled: false,
           lastUpdate: new Date(),
