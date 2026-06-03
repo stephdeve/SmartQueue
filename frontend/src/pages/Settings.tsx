@@ -29,8 +29,46 @@ export default function Settings() {
   const [stats, setStats] = useState(null);
   const [agents, setAgents] = useState(null);
 
-  const currentPlan = (subscription as any)?.plan || user?.pending_subscription?.plan || 'basic'
+  const currentPlan = (subscription as any)?.plan || user?.pending_subscription?.plan || 'starter'
   const currentStatus = (subscription as any)?.status || user?.pending_subscription?.status || 'active'
+
+  // Configuration des plans avec prix CFA
+  const getPlanPrice = (plan: string) => {
+    const prices = {
+      starter: 10000,
+      basic: 10000,   // Alias pour starter
+      professional: 30000,
+      pro: 30000,     // Alias pour professional
+      enterprise: 80000
+    }
+    return prices[plan as keyof typeof prices] || 10000
+  }
+
+  const getPlanFeatures = (plan: string) => {
+    const features = {
+      starter: 'Jusqu\'à 2 agents, 3 services, analytics basic',
+      basic: 'Jusqu\'à 2 agents, 3 services, analytics basic',
+      professional: 'Jusqu\'à 5 agents, 10 services, analytics avancées',
+      pro: 'Jusqu\'à 5 agents, 10 services, analytics avancées',
+      enterprise: 'Illimité agents, API complète, support prioritaire'
+    }
+    return features[plan as keyof typeof features] || features.starter
+  }
+
+  const getPlanDisplayName = (plan: string) => {
+    const names = {
+      starter: 'Starter',
+      basic: 'Starter',
+      professional: 'Professional',
+      pro: 'Professional',
+      enterprise: 'Enterprise'
+    }
+    return names[plan as keyof typeof names] || 'Starter'
+  }
+
+  const formatCFAPrice = (price: number) => {
+    return new Intl.NumberFormat('fr-FR').format(price) + ' FCFA'
+  }
 
   const handleLogout = () => {
     dispatch(logout());
@@ -77,7 +115,7 @@ export default function Settings() {
       // Fallback: utiliser les données pending_subscription de l'utilisateur
       if (user?.pending_subscription) {
         setSubscription({
-          plan: user.pending_subscription.plan || 'basic',
+          plan: user.pending_subscription.plan || 'starter',
           status: user.pending_subscription.status || 'active',
           current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         });
@@ -112,7 +150,6 @@ export default function Settings() {
         address: establishmentData.address,
         phone: establishmentData.phone,
         email: establishmentData.email,
-        // Compat: certains backends attendent lat/lng plutôt que latitude/longitude
         latitude: establishmentData.latitude,
         longitude: establishmentData.longitude,
         lat: establishmentData.latitude,
@@ -129,7 +166,6 @@ export default function Settings() {
       );
       setIsEditing(false);
 
-      // Utiliser la réponse si elle contient l'établissement (évite un état transitoire "vide")
       const est = (data && (data.data ?? data)) as any;
       if (est && typeof est === 'object') {
         setEstablishmentData({
@@ -137,32 +173,14 @@ export default function Settings() {
           address: est.address || establishmentData.address || '',
           phone: est.phone || establishmentData.phone || '',
           email: est.email || establishmentData.email || '',
-          latitude:
-            typeof est.lat === 'number'
-              ? est.lat
-              : typeof est.latitude === 'number'
-                ? est.latitude
-                : establishmentData.latitude,
-          longitude:
-            typeof est.lng === 'number'
-              ? est.lng
-              : typeof est.longitude === 'number'
-                ? est.longitude
-                : establishmentData.longitude,
+          latitude: typeof est.lat === 'number' ? est.lat : typeof est.latitude === 'number' ? est.latitude : establishmentData.latitude,
+          longitude: typeof est.lng === 'number' ? est.lng : typeof est.longitude === 'number' ? est.longitude : establishmentData.longitude,
           capacity: est.capacity || establishmentData.capacity || 50,
-          avgServiceTime:
-            est.avg_service_time_minutes || establishmentData.avgServiceTime || 15,
-          priorityQueues:
-            typeof est.priority_queues === 'boolean'
-              ? est.priority_queues
-              : establishmentData.priorityQueues,
-          publicDisplay:
-            typeof est.public_display === 'boolean'
-              ? est.public_display
-              : establishmentData.publicDisplay,
+          avgServiceTime: est.avg_service_time_minutes || establishmentData.avgServiceTime || 15,
+          priorityQueues: typeof est.priority_queues === 'boolean' ? est.priority_queues : establishmentData.priorityQueues,
+          publicDisplay: typeof est.public_display === 'boolean' ? est.public_display : establishmentData.publicDisplay,
         });
       } else {
-        // Fallback: Recharger les données
         await loadEstablishment();
       }
     } catch (error) {
@@ -193,6 +211,9 @@ export default function Settings() {
   }
 
   const isAdmin = user?.role === 'admin'
+  const currentPlanPrice = getPlanPrice(currentPlan)
+  const currentPlanDisplayName = getPlanDisplayName(currentPlan)
+  const currentPlanFeatures = getPlanFeatures(currentPlan)
 
   return (
     <div className="container mx-auto px-4 py-8 ">
@@ -214,10 +235,10 @@ export default function Settings() {
               <div className="flex items-center gap-2">
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                   currentPlan === 'enterprise' ? 'bg-purple-100 text-purple-800' :
-                  currentPlan === 'pro' ? 'bg-green-100 text-green-800' :
+                  currentPlan === 'professional' || currentPlan === 'pro' ? 'bg-green-100 text-green-800' :
                   'bg-gray-100 text-gray-800'
                 }`}>
-                  Plan {String(currentPlan).toUpperCase()}
+                  Plan {currentPlanDisplayName}
                 </span>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                   currentStatus === 'active' ? 'bg-emerald-100 text-emerald-800' :
@@ -234,16 +255,11 @@ export default function Settings() {
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium">Plan actuel</span>
                   <span className="text-2xl font-bold text-primary">
-                    {currentPlan === 'enterprise' ? '€149' :
-                     currentPlan === 'pro' ? '€49' :
-                     currentPlan === 'basic' ? '€19' : '€0'}/mois
+                    {formatCFAPrice(currentPlanPrice)}/mois
                   </span>
                 </div>
                 <div className="text-sm text-muted-foreground mb-3">
-                  {currentPlan === 'enterprise' ? 'Illimité agents, API complète, support prioritaire' :
-                   currentPlan === 'pro' ? 'Jusqu\'à 5 agents, 10 services, analytics avancées' :
-                   currentPlan === 'basic' ? 'Jusqu\'à 2 agents, 3 services, analytics basic' :
-                   'Fonctionnalités limitées'}
+                  {currentPlanFeatures}
                 </div>
                 <Button className="w-full" onClick={handleChangePlan} disabled={loading}>Changer de plan</Button>
               </div>
@@ -254,15 +270,15 @@ export default function Settings() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className={`border rounded-lg p-3 text-center relative ${
-                  currentPlan === 'basic' ? 'border-2 border-primary bg-primary/5' : 'border-border'
+                  currentPlan === 'starter' || currentPlan === 'basic' ? 'border-2 border-primary bg-primary/5' : 'border-border'
                 }`}>
-                  {currentPlan === 'basic' && (
+                  {(currentPlan === 'starter' || currentPlan === 'basic') && (
                     <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">
                       Actuel
                     </span>
                   )}
-                  <h4 className="font-medium mb-1">Basic</h4>
-                  <p className="text-2xl font-bold mb-1">€19</p>
+                  <h4 className="font-medium mb-1">Starter</h4>
+                  <p className="text-2xl font-bold mb-1">{formatCFAPrice(10000)}</p>
                   <p className="text-xs text-muted-foreground">/mois</p>
                   <ul className="text-xs text-muted-foreground mt-2 space-y-1">
                     <li>• 2 agents</li>
@@ -271,15 +287,15 @@ export default function Settings() {
                   </ul>
                 </div>
                 <div className={`border rounded-lg p-3 text-center relative ${
-                  currentPlan === 'pro' ? 'border-2 border-primary bg-primary/5' : 'border-border'
+                  currentPlan === 'professional' || currentPlan === 'pro' ? 'border-2 border-primary bg-primary/5' : 'border-border'
                 }`}>
-                  {currentPlan === 'pro' && (
+                  {(currentPlan === 'professional' || currentPlan === 'pro') && (
                     <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">
                       Actuel
                     </span>
                   )}
-                  <h4 className="font-medium mb-1">Pro</h4>
-                  <p className="text-2xl font-bold mb-1 text-primary">€49</p>
+                  <h4 className="font-medium mb-1">Professional</h4>
+                  <p className="text-2xl font-bold mb-1 text-primary">{formatCFAPrice(30000)}</p>
                   <p className="text-xs text-muted-foreground">/mois</p>
                   <ul className="text-xs text-muted-foreground mt-2 space-y-1">
                     <li>• 5 agents</li>
@@ -296,7 +312,7 @@ export default function Settings() {
                     </span>
                   )}
                   <h4 className="font-medium mb-1">Enterprise</h4>
-                  <p className="text-2xl font-bold mb-1">€149</p>
+                  <p className="text-2xl font-bold mb-1">{formatCFAPrice(80000)}</p>
                   <p className="text-xs text-muted-foreground">/mois</p>
                   <ul className="text-xs text-muted-foreground mt-2 space-y-1">
                     <li>• Illimité</li>
