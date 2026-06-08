@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,21 @@ import {
   Modal,
   Dimensions,
   ScrollView,
+  Animated,
+  Platform,
+  ScaledSize,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
-const { width } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export interface Option {
   label: string;
   value: string | number;
   icon?: keyof typeof Ionicons.glyphMap;
+  description?: string;
 }
 
 export interface CustomActionSheetProps {
@@ -27,25 +32,57 @@ export interface CustomActionSheetProps {
   selectedValue?: string | number;
   onSelect: (value: string | number) => void;
   onClose: () => void;
-  type?: 'info' | 'warning' | 'success';
+  type?: 'info' | 'warning' | 'success' | 'error';
+  showCancel?: boolean;
+  cancelText?: string;
 }
 
-const config = {
+interface ConfigType {
+  icon: keyof typeof Ionicons.glyphMap;
+  gradientColors: [string, string];
+  iconBgColor: string;
+}
+
+const config: Record<string, ConfigType> = {
   info: {
-    icon: 'options' as const,
+    icon: 'information-circle',
+    gradientColors: ['#3B82F6', '#2563EB'],
     iconBgColor: '#3B82F6',
-    headerBgColor: '#93C5FD',
   },
   warning: {
-    icon: 'notifications' as const,
-    iconBgColor: '#F97316',
-    headerBgColor: '#FDBA74',
+    icon: 'warning-outline',
+    gradientColors: ['#F59E0B', '#D97706'],
+    iconBgColor: '#F59E0B',
   },
   success: {
-    icon: 'checkmark-circle' as const,
+    icon: 'checkmark-circle',
+    gradientColors: ['#22C55E', '#16A34A'],
     iconBgColor: '#22C55E',
-    headerBgColor: '#86EFAC',
   },
+  error: {
+    icon: 'close-circle',
+    gradientColors: ['#EF4444', '#DC2626'],
+    iconBgColor: '#EF4444',
+  },
+};
+
+// Fonction responsive
+const getResponsiveSize = (screenW: number, screenH: number) => {
+  const isLandscape = screenW > screenH;
+  const isTablet = screenW >= 768;
+  
+  return {
+    containerMaxHeight: isLandscape ? '90%' : '80%',
+    iconSize: isTablet ? 64 : 56,
+    iconMarginTop: isTablet ? -32 : -28,
+    titleSize: isTablet ? 22 : 18,
+    messageSize: isTablet ? 15 : 13,
+    optionTextSize: isTablet ? 16 : 15,
+    optionPaddingVertical: isTablet ? 18 : 14,
+    cancelPaddingVertical: isTablet ? 18 : 14,
+    contentPaddingHorizontal: isTablet ? 24 : 20,
+    contentPaddingBottom: isTablet ? 32 : 24,
+  };
 };
 
 export const CustomActionSheet: React.FC<CustomActionSheetProps> = ({
@@ -57,39 +94,160 @@ export const CustomActionSheet: React.FC<CustomActionSheetProps> = ({
   onSelect,
   onClose,
   type = 'info',
+  showCancel = true,
+  cancelText = 'Annuler',
 }) => {
   const colors = useThemeColors();
   const isDark = !!colors.dark?.background;
   const theme = config[type];
+  
+  const slideAnim = useRef(new Animated.Value(screenHeight)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [screenWidth, setScreenWidth] = React.useState(screenWidth);
+  const [screenHeightState, setScreenHeightState] = React.useState(screenHeight);
+  const responsive = getResponsiveSize(screenWidth, screenHeightState);
+
+  // Gestion du redimensionnement
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }: { window: ScaledSize }) => {
+      setScreenWidth(window.width);
+      setScreenHeightState(window.height);
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // Animations
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 65,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: screenHeightState,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible, screenHeightState]);
 
   const handleSelect = (value: string | number) => {
     onSelect(value);
-    onClose();
+    setTimeout(onClose, 150);
   };
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="none"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
-      <View style={styles.overlay}>
-        <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        
+        <Animated.View
+          style={[
+            styles.container,
+            {
+              backgroundColor: colors.surface,
+              transform: [{ translateY: slideAnim }],
+              maxHeight: responsive.containerMaxHeight,
+            },
+          ]}
+        >
+          {/* Handle Indicator */}
+          <View style={styles.handleIndicator} />
+
           {/* Header with Icon */}
-          <View style={[styles.header, { backgroundColor: theme.headerBgColor }]}>
-            <View style={[styles.iconContainer, { backgroundColor: theme.iconBgColor }]}>
-              <Ionicons name={theme.icon} size={28} color="#FFFFFF" />
+          <LinearGradient
+            colors={theme.gradientColors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.headerGradient}
+          >
+            <View
+              style={[
+                styles.iconContainer,
+                {
+                  width: responsive.iconSize,
+                  height: responsive.iconSize,
+                  borderRadius: responsive.iconSize / 2,
+                  marginTop: responsive.iconMarginTop,
+                  backgroundColor: theme.iconBgColor,
+                },
+              ]}
+            >
+              <Ionicons
+                name={theme.icon}
+                size={responsive.iconSize * 0.5}
+                color="#FFFFFF"
+              />
             </View>
-          </View>
+          </LinearGradient>
 
           {/* Content */}
-          <View style={styles.content}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
-            {message && <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.content,
+              {
+                paddingHorizontal: responsive.contentPaddingHorizontal,
+                paddingBottom: responsive.contentPaddingBottom,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.title,
+                {
+                  color: colors.textPrimary,
+                  fontSize: responsive.titleSize,
+                },
+              ]}
+            >
+              {title}
+            </Text>
+            
+            {message && (
+              <Text
+                style={[
+                  styles.message,
+                  {
+                    color: colors.textSecondary,
+                    fontSize: responsive.messageSize,
+                    lineHeight: responsive.messageSize * 1.5,
+                  },
+                ]}
+              >
+                {message}
+              </Text>
+            )}
 
             {/* Options List */}
-            <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+            <View style={styles.optionsContainer}>
               {options.map((option, index) => {
                 const isSelected = selectedValue === option.value;
                 const isLast = index === options.length - 1;
@@ -99,146 +257,216 @@ export const CustomActionSheet: React.FC<CustomActionSheetProps> = ({
                     key={`${index}-${String(option.value)}`}
                     style={[
                       styles.optionButton,
-                      { backgroundColor: colors.inputBackground },
-                      isSelected && { backgroundColor: colors.primary + '15', borderWidth: 1, borderColor: colors.primary },
-                      !isLast && { borderColor: colors.primary },
+                      {
+                        paddingVertical: responsive.optionPaddingVertical,
+                        backgroundColor: isSelected ? colors.primary + '10' : colors.surfaceSecondary,
+                        borderBottomWidth: !isLast ? 0.5 : 0,
+                        borderBottomColor: colors.border,
+                      },
                     ]}
                     onPress={() => handleSelect(option.value)}
-                    activeOpacity={0.8}
+                    activeOpacity={0.7}
                   >
                     <View style={styles.optionLeft}>
                       {option.icon && (
-                        <Ionicons
-                          name={option.icon}
-                          size={22}
-                          color={isSelected ? colors.primary : colors.textSecondary}
-                          style={styles.optionIcon}
-                        />
+                        <View
+                          style={[
+                            styles.optionIconContainer,
+                            {
+                              backgroundColor: isSelected ? colors.primary + '20' : colors.border + '30',
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name={option.icon}
+                            size={responsive.optionTextSize + 4}
+                            color={isSelected ? colors.primary : colors.textSecondary}
+                          />
+                        </View>
                       )}
-                      <Text
-                        style={[
-                          styles.optionText,
-                          { color: isSelected ? colors.primary : colors.textPrimary },
-                          isSelected && styles.optionTextSelected,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
+                      <View style={styles.optionTextContainer}>
+                        <Text
+                          style={[
+                            styles.optionText,
+                            {
+                              color: isSelected ? colors.primary : colors.textPrimary,
+                              fontSize: responsive.optionTextSize,
+                              fontWeight: isSelected ? '700' : '500',
+                            },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                        {option.description && (
+                          <Text
+                            style={[
+                              styles.optionDescription,
+                              {
+                                color: colors.textTertiary,
+                                fontSize: responsive.optionTextSize - 2,
+                              },
+                            ]}
+                          >
+                            {option.description}
+                          </Text>
+                        )}
+                      </View>
                     </View>
                     {isSelected && (
-                      <Ionicons name="checkmark" size={22} color={colors.primary} />
+                      <View style={[styles.checkmarkContainer, { backgroundColor: colors.primary + '15' }]}>
+                        <Ionicons name="checkmark" size={18} color={colors.primary} />
+                      </View>
                     )}
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+            </View>
 
             {/* Cancel Button */}
-            <TouchableOpacity
-              style={[styles.cancelButton, { backgroundColor: colors.surfaceSecondary }]}
-              onPress={onClose}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Annuler</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+            {showCancel && (
+              <TouchableOpacity
+                style={[
+                  styles.cancelButton,
+                  {
+                    paddingVertical: responsive.cancelPaddingVertical,
+                    backgroundColor: isDark ? colors.surfaceSecondary : '#F3F4F6',
+                    marginTop: 16,
+                  },
+                ]}
+                onPress={onClose}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.cancelButtonText,
+                    {
+                      color: colors.textSecondary,
+                      fontSize: responsive.optionTextSize,
+                    },
+                  ]}
+                >
+                  {cancelText}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   container: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     overflow: 'hidden',
-    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
   },
-  header: {
-    height: 70,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
+  handleIndicator: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 4,
   },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  headerGradient: {
+    marginTop:-20,
+     paddingTop:22,
+    height: 80,
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'absolute',
-    bottom: -28,
+    overflow: 'hidden',
+  },
+  iconContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
   content: {
-    paddingTop: 40,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingTop: 32,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '800',
     textAlign: 'center',
     marginBottom: 8,
   },
   message: {
-    fontSize: 15,
     textAlign: 'center',
-    lineHeight: 22,
     marginBottom: 20,
   },
-  optionsList: {
-    maxHeight: 300,
-    marginBottom: 16,
+  optionsContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 8,
   },
   optionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
     paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  optionButtonSelected: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#3B82F6',
-  },
-  optionButtonBorder: {
-    borderColor: '#3B82F6',
   },
   optionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
-  optionIcon: {
-    marginRight: 12,
+  optionIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  optionTextContainer: {
+    flex: 1,
   },
   optionText: {
-    fontSize: 16,
     fontWeight: '500',
-    color: '#1F2937',
   },
-  optionTextSelected: {
-    fontWeight: '600',
+  optionDescription: {
+    marginTop: 2,
+  },
+  checkmarkContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cancelButton: {
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   cancelButtonText: {
-    fontSize: 16,
     fontWeight: '600',
   },
 });

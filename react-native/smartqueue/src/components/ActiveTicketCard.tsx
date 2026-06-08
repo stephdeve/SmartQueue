@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   Animated,
   StyleSheet,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -14,66 +15,59 @@ import { useAlertPreferencesStore } from "../store/alertPreferencesStore";
 import { useCustomAlert } from "../hooks/useCustomAlert";
 import { useThemeColors } from "../hooks/useThemeColors";
 import { formatDistance, formatTravelTime } from "../utils/distance";
-import "../../global.css";
 import axiosClient from "../api/axiosClient";
 import { getApiErrorMessage } from "../utils/errors";
+
+const { width } = Dimensions.get("window");
 
 interface ActiveTicketCardProps {
   onPress?: () => void;
   onCancel?: () => void;
   onConfirmPresence?: () => void;
+  compact?: boolean;
 }
 
 export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
   onPress,
   onCancel,
   onConfirmPresence,
+  compact = false,
 }) => {
   const colors = useThemeColors();
 
-  const { activeTicket, position, etaMinutes, isCalled, cancelTicket } =
-    useTicket();
-
+  const { activeTicket, position, etaMinutes, isCalled, cancelTicket } = useTicket();
   const { marginMinutes, preferredTransportMode } = useAlertPreferencesStore();
-  const { AlertComponent, showWarning, showError, showSuccess } =
-    useCustomAlert();
+  const { AlertComponent, showWarning, showError, showSuccess } = useCustomAlert();
 
-  // Debug: log establishment coordinates
-  useEffect(() => {
-    if (activeTicket?.establishment) {
-      console.log(
-        "[ActiveTicketCard] Establishment:",
-        JSON.stringify(activeTicket.establishment),
-      );
-    }
-  }, [activeTicket?.establishment]);
+  const progressAnim = useRef(new Animated.Value(0)).current;
 
-  // Check if establishment has valid coordinates
   const hasValidCoordinates =
     activeTicket?.establishment &&
-    (activeTicket.establishment as any)?.lat !== null &&
-    (activeTicket.establishment as any)?.lat !== undefined &&
-    (activeTicket.establishment as any)?.lng !== null &&
-    (activeTicket.establishment as any)?.lng !== undefined;
+    (activeTicket.establishment as any)?.lat != null &&
+    (activeTicket.establishment as any)?.lng != null;
 
-  // Distance tracking
   const { distanceInfo } = useDistanceTracking({
     targetCoordinates: hasValidCoordinates
       ? {
-        latitude: (activeTicket.establishment as any).lat,
-        longitude: (activeTicket.establishment as any).lng,
-      }
+          latitude: (activeTicket.establishment as any).lat,
+          longitude: (activeTicket.establishment as any).lng,
+        }
       : null,
     enabled: hasValidCoordinates,
   });
 
-  // Animation refs
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  // Queue length (from ticket data from backend)
   const queueLength = (activeTicket as any)?.queue_length || position || 1;
   const processedCount = Math.max(0, queueLength - (position || 0));
+  const progress = queueLength > 0 ? processedCount / queueLength : 0;
+
+  useEffect(() => {
+    Animated.spring(progressAnim, {
+      toValue: progress,
+      friction: 7,
+      tension: 40,
+      useNativeDriver: false,
+    }).start();
+  }, [progress]);
 
   const isTicketCalledState = activeTicket?.status === "called";
   const isTicketEnRoute = activeTicket?.status === "en_route";
@@ -82,209 +76,65 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
   const hasConfirmedPresence = isTicketEnRoute || isTicketPresent;
   const canCancelTicket = activeTicket?.status === "waiting";
   const canConfirmEnRoute = activeTicket?.status === "called";
-  const canMarkPresent =
-    activeTicket?.status === "en_route" || activeTicket?.status === "called";
+  const canMarkPresent = activeTicket?.status === "en_route" || activeTicket?.status === "called";
 
-  const queueState = isTicketPresent
-    ? {
-      label: "Statut du ticket",
-      value: "Présent au point de service",
-      etaLabel: "Priorité conservée",
-    }
-    : isTicketEnRoute
-      ? {
-        label: "Statut du ticket",
-        value: "Usager en route",
-        etaLabel: "En attente d'arrivée",
-      }
-      : isTicketCalledState
-        ? {
-          label: "Statut du ticket",
-          value: "Appelé au guichet",
-          etaLabel: "Présentez-vous maintenant",
-        }
-        : {
-          label: "Position dans la file",
-          value:
-            typeof position === "number" && position > 0
-              ? `${position}ème / ${queueLength}`
-              : "Estimation indisponible",
-          etaLabel:
-            typeof etaMinutes === "number" && etaMinutes > 0
-              ? `≈ ${etaMinutes} minutes`
-              : "—",
-        };
+  const getStatusConfig = () => {
+    if (isTicketPresent) return { label: "Présent", icon: "checkmark-circle", color: colors.success, bg: colors.success + "15" };
+    if (isTicketEnRoute) return { label: "En route", icon: "walk", color: colors.warning, bg: colors.warning + "15" };
+    if (isTicketCalledState) return { label: "Appelé !", icon: "notifications", color: colors.danger, bg: colors.danger + "15" };
+    if (isTicketAbsent) return { label: "Expiré", icon: "close-circle", color: colors.textTertiary, bg: colors.textTertiary + "15" };
+    return { label: "En attente", icon: "time", color: colors.primary, bg: colors.primary + "15" };
+  };
 
-  // Calculate when to leave
-  const getWhenToLeave = useCallback(() => {
-    if (!distanceInfo) return null;
+  const statusConfig = getStatusConfig();
+  const isSpecialStatus = isTicketCalledState || isTicketEnRoute || isTicketPresent;
+  const isSoon = position <= 3 && !isSpecialStatus;
 
-    const travelTime = distanceInfo.travelTimes[preferredTransportMode];
-    const leaveIn = etaMinutes - travelTime - marginMinutes;
-
-    if (leaveIn <= 0) {
-      return { urgent: true, message: "Partez maintenant !" };
-    } else if (leaveIn <= 5) {
-      return { urgent: true, message: `Partez dans ~${leaveIn} min` };
-    }
-    return {
-      urgent: false,
-      message: `Vous devriez partir dans ~${leaveIn} min`,
-    };
-  }, [distanceInfo, etaMinutes, marginMinutes, preferredTransportMode]);
-
-  const whenToLeave =
-    !isTicketAbsent && !hasConfirmedPresence ? getWhenToLeave() : null;
-
-  const getGraceRemainingText = useCallback(() => {
-    if (!activeTicket?.en_route_expires_at) return null;
-    const remainingMs =
-      new Date(activeTicket.en_route_expires_at).getTime() - Date.now();
-    if (remainingMs <= 0) return "Délai expiré";
-    const totalMinutes = Math.ceil(remainingMs / 60000);
-    return `${totalMinutes} min restantes`;
-  }, [activeTicket?.en_route_expires_at]);
-
-  const graceRemainingText = getGraceRemainingText();
-
-  // Progress bar animation
-  useEffect(() => {
-    const progress = queueLength > 0 ? processedCount / queueLength : 0;
-    Animated.spring(progressAnim, {
-      toValue: progress,
-      friction: 7,
-      tension: 40,
-      useNativeDriver: false,
-    }).start();
-  }, [processedCount, queueLength, progressAnim]);
-
-  // Called state animations (pulsing red)
-  useEffect(() => {
-    if (isCalled) {
-      // Haptic feedback
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-
-      // Pulsing animation
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ]),
-      );
-      pulse.start();
-
-      return () => pulse.stop();
-    }
-  }, [isCalled, pulseAnim]);
-
-  // Handle cancel ticket
   const handleCancel = useCallback(() => {
-    showWarning(
-      "Annuler le ticket",
-      "Êtes-vous sûr de vouloir annuler votre ticket ?",
-      "Oui, annuler",
-      async () => {
-        try {
-          if (activeTicket?.id) {
-            await cancelTicket(activeTicket.id);
-          }
-          onCancel?.();
-        } catch (error: any) {
-          const errorMsg =
-            error?.response?.data?.message ||
-            error?.message ||
-            "Impossible d'annuler le ticket";
-          showError("Erreur", errorMsg);
-        }
-      },
-      "Non",
-    );
+    showWarning("Annuler le ticket", "Êtes-vous sûr de vouloir annuler votre ticket ?", "Oui, annuler", async () => {
+      try {
+        if (activeTicket?.id) await cancelTicket(activeTicket.id);
+        onCancel?.();
+      } catch (error: any) {
+        showError("Erreur", error?.response?.data?.message || "Impossible d'annuler");
+      }
+    }, "Non");
   }, [activeTicket, cancelTicket, onCancel, showWarning, showError]);
 
-  // Handle confirm en route
   const handleConfirmPresence = useCallback(async () => {
     try {
       const rawTravel = distanceInfo?.travelTimes?.[preferredTransportMode];
       const payload: { estimated_travel_minutes?: number } = {};
       if (typeof rawTravel === "number" && Number.isFinite(rawTravel)) {
-        // Le backend valide estimated_travel_minutes en integer|min:1|max:60 ;
-        // on borne pour éviter un 422 (qui crashait l'app en build).
-        payload.estimated_travel_minutes = Math.min(
-          60,
-          Math.max(1, Math.round(rawTravel)),
-        );
+        payload.estimated_travel_minutes = Math.min(60, Math.max(1, Math.round(rawTravel)));
       }
       await axiosClient.post(`/tickets/${activeTicket?.id}/en-route`, payload);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      // Optimistic update + sync
       const s = useTicketStore.getState();
       if (s.activeTicket?.id === activeTicket?.id) {
         s.markEnRoute();
-        try {
-          await s.fetchActiveTicket();
-        } catch (err) {
-          console.warn(
-            "[ActiveTicketCard] fetchActiveTicket after en-route failed",
-            err,
-          );
-        }
+        try { await s.fetchActiveTicket(); } catch (err) { console.warn(err); }
       }
-
-      showSuccess(
-        "En route confirmé",
-        "L'agent a été notifié que vous êtes en route",
-      );
+      showSuccess("Confirmation", "L'agent a été notifié que vous êtes en route");
       onConfirmPresence?.();
     } catch (error: any) {
       showError("Erreur", getApiErrorMessage(error, "Impossible de confirmer"));
     }
-  }, [
-    activeTicket,
-    distanceInfo,
-    preferredTransportMode,
-    onConfirmPresence,
-    showSuccess,
-    showError,
-  ]);
+  }, [activeTicket, distanceInfo, preferredTransportMode, onConfirmPresence, showSuccess, showError]);
 
   const handleMarkPresent = useCallback(async () => {
     try {
       await axiosClient.post(`/tickets/${activeTicket?.id}/present`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      // Optimistic update + sync
       const s = useTicketStore.getState();
       if (s.activeTicket?.id === activeTicket?.id) {
         s.markPresent();
-        try {
-          await s.fetchActiveTicket();
-        } catch (err) {
-          console.warn(
-            "[ActiveTicketCard] fetchActiveTicket after present failed",
-            err,
-          );
-        }
+        try { await s.fetchActiveTicket(); } catch (err) { console.warn(err); }
       }
-
-      showSuccess(
-        "Présence confirmée",
-        "Votre priorité est conservée. L'agent sait que vous êtes arrivé.",
-      );
+      showSuccess("Présence confirmée", "Votre priorité est conservée. L'agent sait que vous êtes arrivé.");
       onConfirmPresence?.();
     } catch (error: any) {
-      showError(
-        "Erreur",
-        getApiErrorMessage(error, "Impossible de confirmer votre présence"),
-      );
+      showError("Erreur", getApiErrorMessage(error, "Impossible de confirmer votre présence"));
     }
   }, [activeTicket, onConfirmPresence, showSuccess, showError]);
 
@@ -294,75 +144,94 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
     ? "Vous avez été marqué absent par l'agent. Ce ticket n'est plus actif."
     : "Votre délai de présentation est dépassé. Ce ticket n'est plus actif.";
 
-  // Called state is now handled by global CalledTicketOverlay in tab layout
-  // When ticket is called, the overlay takes over the entire screen
+  const getGraceRemainingText = useCallback(() => {
+    if (!activeTicket?.en_route_expires_at) return null;
+    const remainingMs = new Date(activeTicket.en_route_expires_at).getTime() - Date.now();
+    if (remainingMs <= 0) return "Délai expiré";
+    const totalMinutes = Math.ceil(remainingMs / 60000);
+    return `${totalMinutes} min restantes`;
+  }, [activeTicket?.en_route_expires_at]);
 
-  // Normal state
+  const graceRemainingText = getGraceRemainingText();
+
+  // Calcul du temps pour la moto (environ 30% plus rapide que la voiture)
+  const getMotorcycleTime = () => {
+    if (!distanceInfo?.travelTimes?.car) return null;
+    const carMinutes = distanceInfo.travelTimes.car;
+    const motorcycleMinutes = Math.round(carMinutes * 0.7);
+    return formatTravelTime(motorcycleMinutes);
+  };
+
+  // 4 moyens de transport avec icônes et couleurs
+  const transportModes = [
+    { key: "distance", icon: "location-outline", label: "Distance", value: distanceInfo ? formatDistance(distanceInfo.kilometers) : null, color: colors.primary },
+    { key: "walking", icon: "walk-outline", label: "À pied", value: distanceInfo ? formatTravelTime(distanceInfo.travelTimes.walking) : null, color: colors.success },
+    { key: "car", icon: "car-outline", label: "Voiture", value: distanceInfo ? formatTravelTime(distanceInfo.travelTimes.car) : null, color: colors.warning },
+    { key: "motorcycle", icon: "bicycle-outline", label: "Moto", value: getMotorcycleTime(), color: colors.secondary || "#8B5CF6" },
+  ];
+
+  // Déterminer l'affichage de la position ou du statut
+  const getQueueDisplay = () => {
+    if (isTicketPresent) return { label: "Statut", value: "Présent", color: colors.success };
+    if (isTicketEnRoute) return { label: "Statut", value: "En route", color: colors.warning };
+    if (isTicketCalledState) return { label: "Statut", value: "Appelé", color: colors.danger };
+    return { label: "Position", value: `${position}e / ${queueLength}`, color: colors.primary };
+  };
+
+  const queueDisplay = getQueueDisplay();
+  const etaDisplay = isSpecialStatus ? "—" : `${etaMinutes} min`;
+
+  // When to leave calculation
+  const getWhenToLeave = useCallback(() => {
+    if (!distanceInfo || isSpecialStatus || isTicketAbsent) return null;
+    const travelTime = distanceInfo.travelTimes[preferredTransportMode];
+    const leaveIn = etaMinutes - travelTime - marginMinutes;
+    if (leaveIn <= 0) return { urgent: true, message: "Partez maintenant !" };
+    if (leaveIn <= 5) return { urgent: true, message: `Partez dans ~${leaveIn} min` };
+    return { urgent: false, message: `Partez dans ~${leaveIn} min` };
+  }, [distanceInfo, etaMinutes, marginMinutes, preferredTransportMode, isSpecialStatus, isTicketAbsent]);
+
+  const whenToLeave = getWhenToLeave();
+
   return (
     <>
       <TouchableOpacity
         style={[
           styles.container,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.borderSecondary,
-            borderWidth: 1,
-          },
+          compact && styles.containerCompact,
+          { backgroundColor: colors.surface, borderColor: colors.border },
         ]}
         onPress={onPress}
         activeOpacity={0.95}
+        disabled={!onPress}
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.establishmentInfo}>
-            <Ionicons name="business" size={18} color={colors.primary} />
-            <Text
-              style={[styles.establishmentName, { color: colors.textPrimary }]}
-            >
+          <View style={styles.estabInfo}>
+            <View style={[styles.estabIcon, { backgroundColor: colors.primary + "15" }]}>
+              <Ionicons name="business" size={14} color={colors.primary} />
+            </View>
+            <Text style={[styles.estabName, { color: colors.textPrimary }]} numberOfLines={2} ellipsizeMode="tail">
               {activeTicket.establishment?.name || "Établissement"}
             </Text>
           </View>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: colors.success + "20" },
-            ]}
-          >
-            <View
-              style={[styles.statusDot, { backgroundColor: colors.success }]}
-            />
-            <Text style={[styles.statusText, { color: colors.success }]}>
-              File ouverte
-            </Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+            <Ionicons name={statusConfig.icon as any} size={10} color={statusConfig.color} />
+            <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
           </View>
         </View>
 
         {/* Ticket Info */}
-        <View style={styles.ticketSection}>
-          <View style={styles.ticketNumberContainer}>
-            <Text style={[styles.ticketLabel, { color: colors.textTertiary }]}>
-              VOTRE TICKET
-            </Text>
-            <View
-              style={[
-                styles.ticketNumberBox,
-                { backgroundColor: colors.danger },
-              ]}
-            >
-              <Text style={styles.ticketNumber}>
-                N°{activeTicket.number?.split("-").pop() || position}
-              </Text>
-            </View>
+        <View style={styles.ticketRow}>
+          <View style={[styles.ticketNumberBox, { backgroundColor: colors.danger }]}>
+            <Text style={styles.ticketNumber}>{activeTicket.number || position}</Text>
           </View>
           <View style={styles.serviceInfo}>
-            <Text style={[styles.serviceName, { color: colors.textPrimary }]}>
+            <Text style={[styles.serviceName, { color: colors.textPrimary }]} numberOfLines={1}>
               {activeTicket.service?.name || "Service"}
             </Text>
-            <Text style={[styles.ticketTime, { color: colors.textSecondary }]}>
-              Pris à{" "}
-              {new Date(
-                activeTicket.created_at || Date.now(),
-              ).toLocaleTimeString("fr-FR", {
+            <Text style={[styles.ticketTime, { color: colors.textTertiary }]}>
+              {new Date(activeTicket.created_at || Date.now()).toLocaleTimeString("fr-FR", {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
@@ -373,406 +242,111 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
         {/* Position & ETA */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-              {queueState.label}
-            </Text>
-            <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-              <Text
-                style={[
-                  styles.statHighlight,
-                  {
-                    color: isTicketCalledState ? colors.danger : colors.primary,
-                  },
-                ]}
-              >
-                {queueState.value}
-              </Text>
-            </Text>
+            <Text style={[styles.statLabel, { color: colors.textTertiary }]}>{queueDisplay.label}</Text>
+            <Text style={[styles.statValue, { color: queueDisplay.color }]}>{queueDisplay.value}</Text>
           </View>
-          <View
-            style={[styles.statDivider, { backgroundColor: colors.separator }]}
-          />
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
           <View style={styles.statItem}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-              Temps d&apos;attente estimé
-            </Text>
-            <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-              {isTicketCalledState ? (
-                <Text style={[styles.statHighlight, { color: colors.danger }]}>
-                  {queueState.etaLabel}
-                </Text>
-              ) : (
-                <>
-                  ≈ <Text style={styles.statHighlight}>{etaMinutes}</Text>{" "}
-                  minutes
-                </>
-              )}
-            </Text>
+            <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Estimation</Text>
+            <Text style={[styles.statValue, { color: colors.primary }]}>{etaDisplay}</Text>
           </View>
         </View>
 
-        {/* Progress Bar */}
-        {!isTicketAbsent && (
+        {/* Progress Bar - only if waiting */}
+        {!isSpecialStatus && !isTicketAbsent && (
           <View style={styles.progressSection}>
-            <View
-              style={[
-                styles.progressBar,
-                { backgroundColor: colors.surfaceSecondary },
-              ]}
-            >
+            <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
               <Animated.View
                 style={[
                   styles.progressFill,
-                  { backgroundColor: colors.primary },
-                  {
-                    width: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ["0%", "100%"],
-                    }),
-                  },
+                  { backgroundColor: isSoon ? colors.warning : colors.primary },
+                  { width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) },
                 ]}
               />
             </View>
-            <Text
-              style={[styles.progressText, { color: colors.textSecondary }]}
-            >
-              {processedCount} / {queueLength} traités
-            </Text>
-          </View>
-        )}
-
-        {isTicketAbsent ? (
-          <View
-            style={[
-              styles.absentStateContainer,
-              {
-                backgroundColor: colors.danger + "12",
-                borderColor: colors.danger + "35",
-              },
-            ]}
-          >
-            <View style={styles.absentStateHeader}>
-              <Ionicons name="alert-circle" size={22} color={colors.danger} />
-              <Text style={[styles.absentStateTitle, { color: colors.danger }]}>
-                Ticket marqué absent
-              </Text>
-            </View>
-            <Text
-              style={[styles.absentStateText, { color: colors.textPrimary }]}
-            >
-              {absentMessage}
-            </Text>
-            <Text
-              style={[
-                styles.absentStateSubtext,
-                { color: colors.textSecondary },
-              ]}
-            >
-              Vous ne pouvez plus répondre à l&apos;appel ni confirmer votre
-              présence pour ce ticket. Reprenez un nouveau ticket si vous
-              souhaitez rejoindre à nouveau la file.
-            </Text>
-          </View>
-        ) : isTicketPresent ? (
-          <View
-            style={[
-              styles.confirmedStateContainer,
-              {
-                backgroundColor: colors.primary + "12",
-                borderColor: colors.primary + "35",
-              },
-            ]}
-          >
-            <View style={styles.absentStateHeader}>
-              <Ionicons name="person-circle" size={22} color={colors.primary} />
-              <Text
-                style={[styles.absentStateTitle, { color: colors.primary }]}
-              >
-                Présent au point de service
-              </Text>
-            </View>
-            <Text
-              style={[styles.absentStateText, { color: colors.textPrimary }]}
-            >
-              Votre présence a été enregistrée.
-            </Text>
-            <Text
-              style={[
-                styles.absentStateSubtext,
-                { color: colors.textSecondary },
-              ]}
-            >
-              Vous conservez votre priorité et serez pris en charge dès
-              qu&apos;un agent est disponible.
-            </Text>
-          </View>
-        ) : hasConfirmedPresence ? (
-          <View
-            style={[
-              styles.confirmedStateContainer,
-              {
-                backgroundColor: colors.success + "12",
-                borderColor: colors.success + "35",
-              },
-            ]}
-          >
-            <View style={styles.absentStateHeader}>
-              <Ionicons
-                name="checkmark-circle"
-                size={22}
-                color={colors.success}
-              />
-              <Text
-                style={[styles.absentStateTitle, { color: colors.success }]}
-              >
-                Réponse envoyée à l&apos;agent
-              </Text>
-            </View>
-            <Text
-              style={[styles.absentStateText, { color: colors.textPrimary }]}
-            >
-              Votre réponse a été enregistrée.
-            </Text>
-            <Text
-              style={[
-                styles.absentStateSubtext,
-                { color: colors.textSecondary },
-              ]}
-            >
-              Vous avez indiqué être en route vers le lieu de service. Merci de
-              vous présenter dans les prochaines minutes afin de conserver votre
-              priorité.
-            </Text>
-            {graceRemainingText && (
-              <View
-                style={[
-                  styles.enRouteTimerBadge,
-                  { backgroundColor: colors.warning + "20" },
-                ]}
-              >
-                <Ionicons name="time" size={14} color={colors.warning} />
-                <Text
-                  style={[styles.enRouteTimerText, { color: colors.warning }]}
-                >
-                  Délai de priorité : {graceRemainingText}
-                </Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={[
-                styles.presentButton,
-                { backgroundColor: colors.primary + "18" },
-              ]}
-              onPress={handleMarkPresent}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name="checkmark-done-circle"
-                size={18}
-                color={colors.primary}
-              />
-              <Text
-                style={[styles.presentButtonText, { color: colors.primary }]}
-              >
-                Je suis présent
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : hasValidCoordinates && distanceInfo ? (
-          <View style={styles.distanceGrid}>
-            {[
-              {
-                icon: "navigate",
-                label: "Distance",
-                value: formatDistance(distanceInfo.kilometers),
-              },
-              {
-                icon: "walk",
-                label: "À pied",
-                value: formatTravelTime(distanceInfo.travelTimes.walking),
-              },
-              {
-                icon: "bicycle",
-                label: "À moto",
-                value: formatTravelTime(distanceInfo.travelTimes.car * 0.7), // Moto ~30% plus rapide que voiture
-              },
-              {
-                icon: "car",
-                label: "Voiture",
-                value: formatTravelTime(distanceInfo.travelTimes.car),
-              },
-            ].map((item, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.distanceCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={item.icon as any}
-                  size={24}
-                  color={colors.textSecondary}
-                />
-                <Text
-                  style={[styles.distanceValue, { color: colors.textPrimary }]}
-                >
-                  {item.value}
-                </Text>
-                <Text
-                  style={[styles.distanceLabel, { color: colors.textTertiary }]}
-                >
-                  {item.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View
-            style={[
-              styles.noCoordinatesContainer,
-              { backgroundColor: colors.surfaceSecondary },
-            ]}
-          >
-            <Ionicons
-              name="location-outline"
-              size={24}
-              color={colors.textTertiary}
-            />
-            <Text
-              style={[
-                styles.noCoordinatesText,
-                { color: colors.textSecondary },
-              ]}
-            >
-              Coordonnées non disponibles
-            </Text>
-            <Text
-              style={[
-                styles.noCoordinatesSubtext,
-                { color: colors.textTertiary },
-              ]}
-            >
-              L&apos;établissement n&lsquo;a pas renseigné sa position GPS
-            </Text>
+            {isSoon && <Text style={[styles.soonText, { color: colors.warning }]}>⚡ Bientôt votre tour !</Text>}
           </View>
         )}
 
         {/* When to Leave Alert */}
         {whenToLeave && (
-          <View
-  style={[
-    styles.leaveAlert,
-    {
-      backgroundColor: whenToLeave.urgent
-        ? colors.danger + "20"
-        : colors.warning + "20",
-    },
-  ]}
->
-  <View style={styles.leaveAlertContent}>
-    <Ionicons
-      name={whenToLeave.urgent ? "warning" : "time"}
-      size={16}
-      color={whenToLeave.urgent ? colors.danger : colors.warning}
-    />
-
-    <Text
-      style={[
-        styles.leaveText,
-        {
-          color: whenToLeave.urgent
-            ? colors.danger
-            : colors.warning,
-        },
-      ]}
-    >
-      {whenToLeave.message}
-    </Text>
-  </View>
-</View>
+          <View style={[styles.leaveAlert, { backgroundColor: whenToLeave.urgent ? colors.danger + "20" : colors.warning + "20" }]}>
+            <Ionicons name={whenToLeave.urgent ? "warning" : "time"} size={14} color={whenToLeave.urgent ? colors.danger : colors.warning} />
+            <Text style={[styles.leaveText, { color: whenToLeave.urgent ? colors.danger : colors.warning }]}>{whenToLeave.message}</Text>
+          </View>
         )}
 
-        {/* Actions */}
-        {!isTicketAbsent &&
-          (canConfirmEnRoute || canCancelTicket || canMarkPresent) && (
-            <View style={styles.actionsRow}>
-              {canConfirmEnRoute && (
-                <TouchableOpacity
-                  style={[
-                    styles.confirmPresenceButton,
-                    { backgroundColor: colors.success + "20" },
-                  ]}
-                  onPress={handleConfirmPresence}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={18}
-                    color={colors.success}
-                  />
-                  <Text
-                    style={[
-                      styles.confirmPresenceText,
-                      { color: colors.success },
-                    ]}
-                  >
-                    Je suis en route
-                  </Text>
-                </TouchableOpacity>
-              )}
+        {/* Actions - sans le bouton "Je suis présent" ici */}
+        {!isTicketAbsent && !isTicketPresent && !isTicketEnRoute && (
+          <View style={styles.actionsRow}>
+            {canConfirmEnRoute && (
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.success + "12" }]} onPress={handleConfirmPresence}>
+                <Ionicons name="walk" size={16} color={colors.success} />
+                <Text style={[styles.actionBtnText, { color: colors.success }]}>En route</Text>
+              </TouchableOpacity>
+            )}
+            {canCancelTicket && !isSpecialStatus && (
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.danger + "12" }]} onPress={handleCancel}>
+                <Ionicons name="close-circle" size={16} color={colors.danger} />
+                <Text style={[styles.actionBtnText, { color: colors.danger }]}>Annuler</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
-              {canMarkPresent && !hasConfirmedPresence && (
-                <TouchableOpacity
-                  style={[
-                    styles.presentButton,
-                    { backgroundColor: colors.primary + "18" },
-                  ]}
-                  onPress={handleMarkPresent}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name="checkmark-done-circle"
-                    size={18}
-                    color={colors.primary}
-                  />
-                  <Text
-                    style={[
-                      styles.presentButtonText,
-                      { color: colors.primary },
-                    ]}
-                  >
-                    Je suis présent
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {canCancelTicket && (
-                <TouchableOpacity
-                  style={[
-                    styles.cancelTicketButton,
-                    { backgroundColor: colors.danger + "20" },
-                  ]}
-                  onPress={handleCancel}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name="close-circle"
-                    size={18}
-                    color={colors.danger}
-                  />
-                  <Text
-                    style={[styles.cancelTicketText, { color: colors.danger }]}
-                  >
-                    Annuler
-                  </Text>
-                </TouchableOpacity>
-              )}
+        {/* Timer et bouton présent pour l'état "en route" */}
+        {isTicketEnRoute && (
+          <View style={styles.enRouteContainer}>
+            <View style={[styles.enRouteTimerBadge, { backgroundColor: colors.warning + "15" }]}>
+              <Ionicons name="time" size={14} color={colors.warning} />
+              <Text style={[styles.enRouteTimerText, { color: colors.warning }]}>
+                Délai de priorité : {graceRemainingText || "Expiré"}
+              </Text>
             </View>
-          )}
+            <TouchableOpacity 
+              style={[styles.presentButton, { backgroundColor: colors.primary + "15", marginTop: 10 }]} 
+              onPress={handleMarkPresent}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="checkmark-done-circle" size={18} color={colors.primary} />
+              <Text style={[styles.presentButtonText, { color: colors.primary }]}>Je suis présent</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 4 moyens de transport - compact mode only */}
+        {compact && !isSpecialStatus && hasValidCoordinates && distanceInfo && !isTicketAbsent && (
+          <View style={styles.distanceContainer}>
+            {transportModes.map((mode) => (
+              <View key={mode.key} style={styles.distanceItem}>
+                <View style={[styles.distanceIconWrapper, { backgroundColor: mode.color + "15" }]}>
+                  <Ionicons name={mode.icon as any} size={18} color={mode.color} />
+                </View>
+                <Text style={[styles.distanceValue, { color: colors.textPrimary }]}>{mode.value || "—"}</Text>
+                <Text style={[styles.distanceLabel, { color: colors.textTertiary }]}>{mode.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Absent State */}
+        {isTicketAbsent && (
+          <View style={[styles.stateMsg, { backgroundColor: colors.danger + "10", borderColor: colors.danger + "20" }]}>
+            <Ionicons name="alert-circle" size={16} color={colors.danger} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.stateMsgText, { color: colors.danger }]}>Ticket expiré ou absent</Text>
+              <Text style={[styles.stateMsgSubtext, { color: colors.textSecondary }]}>{absentMessage}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Present State */}
+        {isTicketPresent && (
+          <View style={[styles.stateMsg, { backgroundColor: colors.success + "10", borderColor: colors.success + "20" }]}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+            <Text style={[styles.stateMsgText, { color: colors.success }]}>Présent - Priorité conservée</Text>
+          </View>
+        )}
       </TouchableOpacity>
       {AlertComponent}
     </>
@@ -780,431 +354,229 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
 };
 
 const styles = StyleSheet.create({
-  // Normal state
   container: {
     borderRadius: 20,
-    padding: 20,
-    marginHorizontal: 16,
-    marginTop: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 12,
+    marginTop:18,
+  },
+  containerCompact: {
+    padding: 14,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  establishmentInfo: {
+  estabInfo: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
     flex: 1,
   },
-  establishmentName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-    marginLeft: 8,
+  estabIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  estabName: {
+    fontSize: 13,
+    fontWeight: "600",
     flex: 1,
+    flexWrap: "wrap",
   },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#16A34A",
-    marginRight: 6,
+    gap: 4,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#16A34A",
-  },
-  ticketSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  ticketNumberContainer: {
-    alignItems: "center",
-  },
-  ticketLabel: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#6B7280",
-    letterSpacing: 1,
-    marginBottom: 6,
+  },
+  ticketRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent:"space-between",
+    gap: 12,
+    marginBottom: 12,
   },
   ticketNumberBox: {
-    backgroundColor: "#EF4444",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   ticketNumber: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "800",
-    color: "white",
+    color: "#FFF",
   },
   serviceInfo: {
-    marginLeft: 16,
-    flex: 1,
+   maxWidth: "70%",
+    flexShrink: 1,
   },
   serviceName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
-    color: "#111827",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   ticketTime: {
-    fontSize: 13,
-    color: "#6B7280",
+    fontSize: 11,
   },
   statsRow: {
     flexDirection: "row",
-    marginBottom: 16,
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
   statItem: {
     flex: 1,
     alignItems: "center",
   },
   statLabel: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 4,
+    fontSize: 10,
+    marginBottom: 2,
   },
   statValue: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#111827",
-  },
-  statHighlight: {
+    fontSize: 14,
     fontWeight: "700",
-    color: "#3B82F6",
   },
   statDivider: {
     width: 1,
-    backgroundColor: "#E5E7EB",
-    marginHorizontal: 16,
+    height: 30,
   },
   progressSection: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   progressBar: {
-    height: 8,
-    backgroundColor: "#E5E7EB",
-    borderRadius: 4,
+    height: 4,
+    borderRadius: 2,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#3B82F6",
-    borderRadius: 4,
+    borderRadius: 2,
   },
-  progressText: {
-    fontSize: 11,
-    color: "#6B7280",
+  soonText: {
+    fontSize: 10,
+    fontWeight: "600",
     textAlign: "center",
     marginTop: 6,
   },
-  distanceRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 12,
-    paddingVertical: 12,
-    marginBottom: 12,
-  },
-  distanceItem: {
-    flexDirection: "column",
-    alignItems: "center",
-  },
-
   leaveAlert: {
     flexDirection: "row",
-    justifyContent: "center",
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 5,
-    paddingVertical: 12,
-    alignItems: "center", // centre le contenu horizontalement
-  },
-
-
-leaveAlertContent: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-},
-
-
-  leaveAlertUrgent: {
-    backgroundColor: "#FEE2E2",
-  },
-  leaveText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#B45309",
-    marginLeft: 8,
-    textAlign: "center",
-    alignItems: "center"
-  },
-  leaveTextUrgent: {
-    color: "#DC2626",
-  },
-  noCoordinatesContainer: {
-    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 12,
-    paddingVertical: 16,
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 10,
     marginBottom: 12,
   },
-  noCoordinatesText: {
-    fontSize: 14,
+  leaveText: {
+    fontSize: 11,
     fontWeight: "600",
-    color: "#6B7280",
-    marginTop: 8,
   },
-  noCoordinatesSubtext: {
-    fontSize: 12,
-    textAlign: "center",
+  actionsRow: {
+    flexDirection: "row",
+    gap: 10,
     marginTop: 4,
   },
-  absentStateContainer: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  confirmedStateContainer: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  absentStateHeader: {
+  actionBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 10,
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
   },
-  absentStateTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  absentStateText: {
-    fontSize: 14,
-    fontWeight: "600",
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  absentStateSubtext: {
+  actionBtnText: {
     fontSize: 13,
-    lineHeight: 19,
+    fontWeight: "600",
+  },
+  distanceContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 0.5,
+    borderTopColor: "rgba(0,0,0,0.05)",
+    flexWrap: "wrap",
+  },
+  distanceItem: {
+    alignItems: "center",
+    flex: 1,
+    minWidth: 70,
+  },
+  distanceIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+  },
+  distanceValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  distanceLabel: {
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  stateMsg: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  stateMsgText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  stateMsgSubtext: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  enRouteContainer: {
+    marginTop: 8,
   },
   enRouteTimerBadge: {
-    marginTop: 10,
-    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: 12,
   },
   enRouteTimerText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
   },
   presentButton: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    marginTop: 10,
     gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   presentButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  actionsRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
-  },
-  confirmPresenceButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#DCFCE7",
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  confirmPresenceText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    color: "#16A34A",
-    marginLeft: 6,
-  },
-  cancelTicketButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  cancelTicketText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#EF4444",
-    marginLeft: 6,
-  },
-
-  // Called state
-  calledContainer: {
-    backgroundColor: "#DC2626",
-    borderRadius: 20,
-    padding: 24,
-    marginHorizontal: 16,
-    marginTop: 16,
-    shadowColor: "#DC2626",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  calledContent: {
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  calledIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  calledTitle: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "white",
-    textAlign: "center",
-    letterSpacing: 1,
-  },
-  counterBadge: {
-    backgroundColor: "rgba(255,255,255,0.25)",
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginTop: 12,
-  },
-  counterText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "white",
-  },
-  calledSubtext: {
-    fontSize: 16,
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 12,
-  },
-  calledActions: {
-    gap: 12,
-  },
-  confirmButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "white",
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  confirmButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#16A34A",
-    marginLeft: 8,
-  },
-  recallButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.4)",
-  },
-  recallButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "white",
-    marginLeft: 8,
-  },
-  cancelButtonSmall: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.7)",
-    marginLeft: 6,
-  },
-  distanceGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginBottom: 12,
-    paddingHorizontal: 16,
-  },
-  distanceCard: {
-    backgroundColor: "white",
-    width: "48%", // deux cartes par ligne
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    borderColor: "#E5E7EB",
-    borderWidth: 1,
-  },
-  distanceValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-    marginTop: 8,
-  },
-  distanceLabel: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 4,
   },
 });
 

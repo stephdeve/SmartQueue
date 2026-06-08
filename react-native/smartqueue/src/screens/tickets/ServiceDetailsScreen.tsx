@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, ReactNode } from "react";
+import React, { useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import {
   View,
   Text,
@@ -9,10 +9,14 @@ import {
   Platform,
   Image,
   Share,
+  Animated,
+  Dimensions,
+  StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Theme } from "../../theme";
 import { useThemeColors } from "../../hooks/useThemeColors";
 import { establishmentsApi, Establishment } from "../../api/establishmentsApi";
@@ -24,6 +28,8 @@ import { useDistanceTracking } from "../../hooks/useDistanceTracking";
 import { useCustomAlert } from "../../hooks/useCustomAlert";
 import { formatDistance, formatTravelTime } from "../../utils/distance";
 import { getApiErrorMessage } from "../../utils/errors";
+
+const { width, height } = Dimensions.get("window");
 
 interface ServiceData {
   description: ReactNode;
@@ -39,60 +45,153 @@ interface EstablishmentData extends Omit<Establishment, "services"> {
   services?: ServiceData[];
 }
 
+// Composant Stat Card
+const StatCard: React.FC<{
+  icon: string;
+  value: string | number;
+  label: string;
+  color: string;
+  colors: any;
+}> = ({ icon, value, label, color, colors }) => (
+  <View style={[styles.statCard, { backgroundColor: color + "10", borderColor: color + "30" }]}>
+    <Ionicons name={icon as any} size={22} color={color} />
+    <Text style={[styles.statValue, { color: colors.textPrimary }]}>{value}</Text>
+    <Text style={[styles.statLabel, { color: colors.textTertiary }]}>{label}</Text>
+  </View>
+);
+
+// Composant Service Item
+const ServiceItem: React.FC<{
+  service: ServiceData;
+  isSelected: boolean;
+  colors: any;
+  onSelect: () => void;
+}> = ({ service, isSelected, colors, onSelect }) => (
+  <TouchableOpacity
+    style={[
+      styles.serviceItem,
+      {
+        backgroundColor: isSelected ? colors.primary + "10" : colors.surfaceSecondary,
+        borderColor: isSelected ? colors.primary + "40" : colors.border,
+      },
+    ]}
+    onPress={onSelect}
+    activeOpacity={0.7}
+  >
+    <View style={styles.serviceContent}>
+      <View style={styles.serviceHeader}>
+        <Text style={[styles.serviceName, { color: isSelected ? colors.primary : colors.textPrimary }]}>
+          {service.name}
+        </Text>
+        {service.status === "open" && (
+          <View style={[styles.openBadge, { backgroundColor: colors.success + "15" }]}>
+            <Text style={[styles.openBadgeText, { color: colors.success }]}>Ouvert</Text>
+          </View>
+        )}
+      </View>
+      
+      {service.description && (
+        <Text style={[styles.serviceDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+          {service.description}
+        </Text>
+      )}
+      
+      <View style={styles.serviceStats}>
+        <View style={styles.serviceStat}>
+          <Ionicons name="people-outline" size={12} color={colors.textTertiary} />
+          <Text style={[styles.serviceStatText, { color: colors.textTertiary }]}>
+            {service.people_waiting ?? 0} en attente
+          </Text>
+        </View>
+        {service.avg_service_time_minutes > 0 && (
+          <View style={styles.serviceStat}>
+            <Ionicons name="time-outline" size={12} color={colors.textTertiary} />
+            <Text style={[styles.serviceStatText, { color: colors.textTertiary }]}>
+              ~{service.avg_service_time_minutes} min
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+    
+    {isSelected && (
+      <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+    )}
+  </TouchableOpacity>
+);
+
+// Composant Info Row
+const InfoRow: React.FC<{
+  icon: string;
+  label: string;
+  value: string;
+  color: string;
+  colors: any;
+  onPress?: () => void;
+}> = ({ icon, label, value, color, colors, onPress }) => (
+  <TouchableOpacity
+    style={[styles.infoRow, { borderBottomColor: colors.border }]}
+    onPress={onPress}
+    disabled={!onPress}
+    activeOpacity={0.7}
+  >
+    <View style={[styles.infoIcon, { backgroundColor: color + "15" }]}>
+      <Ionicons name={icon as any} size={20} color={color} />
+    </View>
+    <View style={styles.infoContent}>
+      <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>{label}</Text>
+      <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{value}</Text>
+    </View>
+    {onPress && <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />}
+  </TouchableOpacity>
+);
+
+// Fonction pour calculer le temps en moto (environ 30% plus rapide que voiture)
+const getMotorcycleTime = (carMinutes: number): number => {
+  return Math.round(carMinutes * 0.7);
+};
+
 export const ServiceDetailsScreen: React.FC = () => {
   const params = useLocalSearchParams();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
 
   const establishmentId = Number(params.establishmentId);
   const serviceId = params.serviceId ? Number(params.serviceId) : undefined;
   const fromQr = params.fromQr === "true";
   const { isAuthenticated } = useAuth();
-  const { hasActiveTicket, activeTicket, fetchActiveTicket, isInitialized } =
-    useTicket();
+  const { hasActiveTicket, activeTicket, fetchActiveTicket, isInitialized } = useTicket();
   const { AlertComponent, showError, showInfo, showWarning } = useCustomAlert();
+  const { notifyTicketCreated, notifyCrowdLevelChange } = useSimpleNotification();
 
-  // Fetch fresh ticket data on mount to avoid showing stale data from other users
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchActiveTicket().catch((err) =>
-        console.error("Error fetching active ticket:", err),
-      );
-    }
-  }, [fetchActiveTicket, isAuthenticated]);
-
-  const [establishment, setEstablishment] = useState<EstablishmentData | null>(
-    null,
-  );
+  const [establishment, setEstablishment] = useState<EstablishmentData | null>(null);
   const [services, setServices] = useState<ServiceData[]>([]);
-  const [selectedServiceId, setSelectedServiceId] = useState<number | null>(
-    serviceId || null,
-  );
+  const [selectedServiceId, setSelectedServiceId] = useState<number | null>(serviceId || null);
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
 
-  // Notifications
-  const { notifyTicketCreated, notifyCrowdLevelChange } =
-    useSimpleNotification();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
-  // Track crowd level changes for notifications
-  const previousCrowdLevelRef = React.useRef<string | null>(null);
-  const previousPeopleCountRef = React.useRef<number>(0);
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 50, friction: 7, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
-  // Distance tracking
-  const { distanceInfo, hasPermission: hasLocationPermission } =
-    useDistanceTracking({
-      targetCoordinates:
-        establishment && establishment.lat != null && establishment.lng != null
-          ? {
-              latitude: establishment.lat,
-              longitude: establishment.lng,
-            }
-          : null,
-      enabled:
-        !!establishment &&
-        establishment.lat != null &&
-        establishment.lng != null,
-    });
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchActiveTicket().catch(err => console.error("Error fetching active ticket:", err));
+    }
+  }, [fetchActiveTicket, isAuthenticated]);
+
+  const { distanceInfo, hasPermission: hasLocationPermission } = useDistanceTracking({
+    targetCoordinates: establishment && establishment.lat != null && establishment.lng != null
+      ? { latitude: establishment.lat, longitude: establishment.lng }
+      : null,
+    enabled: !!establishment && establishment.lat != null && establishment.lng != null,
+  });
 
   const loadData = useCallback(async () => {
     try {
@@ -102,30 +201,16 @@ export const ServiceDetailsScreen: React.FC = () => {
         establishmentsApi.getEstablishmentServices(establishmentId),
       ]);
       setEstablishment(estData as EstablishmentData);
-      // Services are now embedded in establishment response
       const servicesList = estData.services || servicesData || [];
-      setServices(
-        Array.isArray(servicesList)
-          ? servicesList
-          : (servicesList as any)?.data || [],
-      );
-      // Only auto-select first open service if no service is pre-selected from params
-      if (
-        !serviceId &&
-        servicesList &&
-        (servicesList as unknown as ServiceData[]).length > 0
-      ) {
-        const firstOpen = (servicesList as unknown as ServiceData[]).find(
-          (s) => s.status === "open",
-        );
+      setServices(Array.isArray(servicesList) ? servicesList : (servicesList as any)?.data || []);
+      
+      if (!serviceId && servicesList && (servicesList as unknown as ServiceData[]).length > 0) {
+        const firstOpen = (servicesList as unknown as ServiceData[]).find(s => s.status === "open");
         if (firstOpen) setSelectedServiceId(firstOpen.id);
       }
     } catch (error) {
       console.error("Error loading establishment:", error);
-      showError(
-        "Erreur",
-        "Impossible de charger les détails de l'établissement.",
-      );
+      showError("Erreur", "Impossible de charger les détails de l'établissement.");
     } finally {
       setIsLoading(false);
     }
@@ -135,83 +220,30 @@ export const ServiceDetailsScreen: React.FC = () => {
     loadData();
   }, [loadData]);
 
-  // Monitor crowd level changes
-  useEffect(() => {
-    if (!establishment) return;
-
-    const currentCrowdLevel = establishment.crowd_level || null;
-    const currentPeopleCount = establishment.total_people_waiting || 0;
-
-    if (
-      previousCrowdLevelRef.current &&
-      previousCrowdLevelRef.current !== currentCrowdLevel
-    ) {
-      notifyCrowdLevelChange(
-        establishment.name,
-        previousCrowdLevelRef.current,
-        currentCrowdLevel || "moderate",
-        currentPeopleCount,
-      );
-    }
-
-    previousCrowdLevelRef.current = currentCrowdLevel;
-    previousPeopleCountRef.current = currentPeopleCount;
-  }, [
-    establishment?.crowd_level,
-    establishment?.total_people_waiting,
-    establishment?.name,
-    notifyCrowdLevelChange,
-  ]);
-
   const handleJoinQueue = async () => {
     if (!isAuthenticated) {
-      showInfo(
-        "Connexion requise",
-        "Vous devez être connecté pour rejoindre une file d'attente.",
-        "Se connecter",
-        () => router.push("/onboarding"),
-      );
+      showInfo("Connexion requise", "Vous devez être connecté pour rejoindre une file.", "Se connecter", () => router.push("/onboarding"));
       return;
     }
 
-    // If still loading, wait
     if (!isInitialized) {
-      showInfo(
-        "Chargement",
-        "Vérification de vos tickets en cours...",
-        "OK",
-        () => {},
-      );
+      showInfo("Chargement", "Vérification de vos tickets en cours...", "OK", () => {});
       return;
     }
 
     if (!selectedServiceId) {
-      showError(
-        "Sélection requise",
-        "Veuillez choisir un service avant de rejoindre la file.",
-      );
+      showError("Sélection requise", "Veuillez choisir un service avant de rejoindre la file.");
       return;
     }
 
-    // Only block if user has a ticket on THIS SPECIFIC service
-    const hasTicketOnThisService =
-      activeTicket?.service_id === selectedServiceId;
+    const hasTicketOnThisService = activeTicket?.service_id === selectedServiceId;
 
-    if (
-      isInitialized &&
-      hasTicketOnThisService &&
-      hasActiveTicket &&
-      activeTicket
-    ) {
+    if (isInitialized && hasTicketOnThisService && hasActiveTicket && activeTicket) {
       showWarning(
         "Ticket actif",
-        "Vous avez déjà un ticket actif pour ce service. Voulez-vous le suivre ?",
+        "Vous avez déjà un ticket actif pour ce service.",
         "Voir mon ticket",
-        () =>
-          router.push({
-            pathname: "/(tabs)/live-ticket",
-            params: { ticketId: String(activeTicket.id) },
-          }),
+        () => router.push({ pathname: "/(tabs)/live-ticket", params: { ticketId: String(activeTicket.id) } }),
         "Annuler",
       );
       return;
@@ -227,30 +259,13 @@ export const ServiceDetailsScreen: React.FC = () => {
         lng: establishment?.lng ? Number(establishment.lng) : undefined,
       });
 
-      // Extract ticket data (API wraps in {data: ...})
       const ticketData = (ticket as any)?.data || ticket;
-
-      // Re-synchroniser le store complet pour garder activeTicket, activeTickets
-      // et le ticket principal cohérents.
       await fetchActiveTicket();
+      notifyTicketCreated(ticketData.number, ticketData.establishment?.name || establishment?.name || "Établissement");
 
-      // Send notification
-      notifyTicketCreated(
-        ticketData.number,
-        ticketData.establishment?.name ||
-          establishment?.name ||
-          "Établissement",
-      );
-
-      router.push({
-        pathname: "/(tabs)/live-ticket",
-        params: { ticketId: String(ticketData.id) },
-      });
+      router.push({ pathname: "/(tabs)/live-ticket", params: { ticketId: String(ticketData.id) } });
     } catch (error: any) {
-      showError(
-        "Erreur",
-        getApiErrorMessage(error, "Impossible de rejoindre la file."),
-      );
+      showError("Erreur", getApiErrorMessage(error, "Impossible de rejoindre la file."));
     } finally {
       setIsJoining(false);
     }
@@ -259,10 +274,9 @@ export const ServiceDetailsScreen: React.FC = () => {
   const handleGetDirections = () => {
     if (!establishment) return;
     const { lat, lng, address } = establishment;
-    const url =
-      Platform.OS === "ios"
-        ? `maps:0,0?q=${address}&ll=${lat},${lng}`
-        : `geo:${lat},${lng}?q=${address}`;
+    const url = Platform.OS === "ios"
+      ? `maps:0,0?q=${address}&ll=${lat},${lng}`
+      : `geo:${lat},${lng}?q=${address}`;
     Linking.openURL(url);
   };
 
@@ -278,27 +292,16 @@ export const ServiceDetailsScreen: React.FC = () => {
     }
   };
 
-  const isOpenNow = (establishment: Establishment) => {
-    if (!establishment.open_at || !establishment.close_at) return null;
-    const now = new Date();
-    const [openH, openM] = establishment.open_at.split(":").map(Number);
-    const [closeH, closeM] = establishment.close_at.split(":").map(Number);
-    const currentTime = now.getHours() * 60 + now.getMinutes();
-    const openTime = openH * 60 + openM;
-    const closeTime = closeH * 60 + closeM;
-    return currentTime >= openTime && currentTime <= closeTime;
+  // Calcul du temps moto
+  const getMotorcycleTravelTime = () => {
+    if (!distanceInfo?.travelTimes?.car) return null;
+    const motorcycleMinutes = getMotorcycleTime(distanceInfo.travelTimes.car);
+    return formatTravelTime(motorcycleMinutes);
   };
 
   if (isLoading) {
     return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: colors.background,
-        }}
-      >
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
@@ -306,606 +309,491 @@ export const ServiceDetailsScreen: React.FC = () => {
 
   if (!establishment) return null;
 
-  //const isOpen = isOpenNow(establishment);
-
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {AlertComponent}
-      <ScrollView
-        style={{ flex: 1 }}
-        showsVerticalScrollIndicator={false}
-        bounces
-      >
-        {/* Banner Image Section */}
-        <View
-          style={{
-            position: "relative",
-            height: 320,
-            backgroundColor: colors.surfaceSecondary,
-          }}
-        >
-          <Image
-            source={{
-              uri: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80",
-            }}
-            style={{ width: "100%", height: "100%" }}
-            resizeMode="cover"
-          />
-          <View
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              top: 0,
-              paddingTop: 48,
-              paddingHorizontal: 20,
-              flexDirection: "row",
-              justifyContent: "space-between",
-              zIndex: 10,
-            }}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header Image avec overlay */}
+      <View style={styles.imageContainer}>
+        <Image
+          source={{ uri: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80" }}
+          style={styles.headerImage}
+          resizeMode="cover"
+        />
+        <LinearGradient
+          colors={["rgba(0,0,0,0.4)", "rgba(0,0,0,0.2)", "transparent"]}
+          style={styles.imageOverlay}
+        />
+        
+        {/* Boutons header */}
+        <View style={[styles.headerButtons, { paddingTop: insets.top + 16 }]}>
+          <TouchableOpacity
+            style={[styles.headerButton, { backgroundColor: "rgba(0,0,0,0.5)" }]}
+            onPress={() => fromQr ? router.replace("/") : router.back()}
           >
-            <TouchableOpacity
-              style={{
-                width: 40,
-                height: 40,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 999,
-                backgroundColor: "rgba(255,255,255,0.3)",
-              }}
-              onPress={() => {
-                // If coming from ExploreScreen (not from QR scan), go back to explore tab
-                if (!fromQr && establishmentId) {
-                  router.replace("/");
-                } else {
-                  router.back();
-                }
-              }}
-            >
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{
-                width: 40,
-                height: 40,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 999,
-                backgroundColor: "rgba(255,255,255,0.3)",
-              }}
-            >
-              <Ionicons name="heart-outline" size={24} color="white" />
-            </TouchableOpacity>
-          </View>
+            <Ionicons name="arrow-back" size={22} color="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerButton, { backgroundColor: "rgba(0,0,0,0.5)" }]}
+            onPress={handleShare}
+          >
+            <Ionicons name="share-outline" size={20} color="#FFF" />
+          </TouchableOpacity>
         </View>
+      </View>
 
-        {/* Content Section with Rounded Corners */}
-        <View
-          style={{
-            backgroundColor: colors.surface,
-            marginTop: -32,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            paddingHorizontal: 20,
-            paddingTop: 32,
-          }}
+      {/* Content Container avec coins du haut arrondis */}
+      <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
+        <Animated.ScrollView
+          style={[styles.scrollContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContentContainer}
         >
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              marginBottom: 8,
-            }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  fontSize: 24,
-                  fontWeight: "bold",
-                  color: colors.textPrimary,
-                }}
-              >
-                {establishment.name}
-              </Text>
-              <Text
-                style={{
-                  color: colors.textTertiary,
-                  fontSize: 14,
-                  marginTop: 4,
-                }}
-              >
+          {/* Header Info */}
+          <View style={styles.infoHeader}>
+            <Text style={[styles.establishmentName, { color: colors.textPrimary }]}>
+              {establishment.name}
+            </Text>
+            <View style={styles.addressRow}>
+              <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
+              <Text style={[styles.addressText, { color: colors.textSecondary }]}>
                 {establishment.address}
               </Text>
             </View>
           </View>
 
-          {/* Crowd level indicator row */}
-          {/* <View style={{ flexDirection: 'row', marginTop: 24, marginBottom: 16, justifyContent: 'space-between' }}>
-            {['low', 'moderate', 'high'].map((level) => {
-              const isSelected = establishment.crowd_level === level;
-              const levelColors = {
-                low: { bg: colors.success + '10', border: colors.success + '30', dot: colors.success, text: colors.success },
-                moderate: { bg: colors.warning + '10', border: colors.warning + '30', dot: colors.warning, text: colors.warning },
-                high: { bg: colors.danger + '10', border: colors.danger + '30', dot: colors.danger, text: colors.danger },
-              };
-              const colors_for_level = levelColors[level as keyof typeof levelColors];
-              const defaultColors = { bg: colors.surfaceSecondary, border: colors.border, dot: colors.textTertiary, text: colors.textTertiary };
-              const activeColors = isSelected ? colors_for_level : defaultColors;
-
-              return (
-                <View
-                  key={level}
-                  style={{
-                    flex: 1,
-                    marginHorizontal: 4,
-                    padding: 12,
-                    borderRadius: 16,
-                    alignItems: 'center',
-                    borderWidth: 1,
-                    backgroundColor: activeColors.bg,
-                    borderColor: activeColors.border,
-                  }}
-                >
-                  <View style={{ width: 8, height: 8, borderRadius: 4, marginBottom: 4, backgroundColor: activeColors.dot }} />
-                  <Text style={{ fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5, color: activeColors.text }}>
-                    {level}
-                  </Text>
-                </View>
-              );
-            })}
-          </View> */}
-
-          {/* Total People in Queue */}
-          <View
-            style={{
-              marginBottom: 24,
-              backgroundColor: colors.warning + "10",
-              borderRadius: 16,
-              padding: 16,
-              borderWidth: 1,
-              borderColor: colors.warning + "30",
-              marginTop: 10,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                marginBottom: 12,
-              }}
-            >
-              <Ionicons name="people" size={20} color={colors.warning} />
-              <Text
-                style={{
-                  color: colors.warning,
-                  fontWeight: "bold",
-                  marginLeft: 8,
-                }}
-              >
-                File d&apos;attente
-              </Text>
-            </View>
-            <View
-              style={{ flexDirection: "row", justifyContent: "space-between" }}
-            >
-              <View style={{ alignItems: "center", flex: 1 }}>
-                <Ionicons
-                  name="people"
-                  size={18}
-                  color={colors.textSecondary}
-                />
-                <Text
-                  style={{
-                    color: colors.textPrimary,
-                    fontWeight: "bold",
-                    fontSize: 18,
-                    marginTop: 4,
-                  }}
-                >
-                  {establishment.total_people_waiting ?? 0}
-                </Text>
-                <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
-                  Total
-                </Text>
-              </View>
-              <View style={{ alignItems: "center", flex: 1 }}>
-                <Ionicons
-                  name="business"
-                  size={18}
-                  color={colors.textSecondary}
-                />
-                <Text
-                  style={{
-                    color: colors.textPrimary,
-                    fontWeight: "bold",
-                    fontSize: 18,
-                    marginTop: 4,
-                  }}
-                >
-                  {services.length}
-                </Text>
-                <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
-                  Services
-                </Text>
-              </View>
-              <View style={{ alignItems: "center", flex: 1 }}>
-                <Ionicons
-                  name="time-outline"
-                  size={18}
-                  color={colors.textSecondary}
-                />
-                <Text
-                  style={{
-                    color: colors.textPrimary,
-                    fontWeight: "bold",
-                    fontSize: 18,
-                    marginTop: 4,
-                  }}
-                >
-                  {services.filter((s) => s.status === "open").length}
-                </Text>
-                <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
-                  Actifs
-                </Text>
-              </View>
-            </View>
+          {/* Stats Grid */}
+          <View style={styles.statsGrid}>
+            <StatCard
+              icon="people-outline"
+              value={establishment.total_people_waiting ?? 0}
+              label="En file"
+              color={colors.warning}
+              colors={colors}
+            />
+            <StatCard
+              icon="business-outline"
+              value={services.length}
+              label="Services"
+              color={colors.primary}
+              colors={colors}
+            />
+            <StatCard
+              icon="checkmark-circle-outline"
+              value={services.filter(s => s.status === "open").length}
+              label="Actifs"
+              color={colors.success}
+              colors={colors}
+            />
           </View>
 
-          {/* Distance Info */}
+          {/* Distance Section - AVEC MOTO */}
           {distanceInfo && hasLocationPermission && (
-            <View
-              style={{
-                marginBottom: 24,
-                backgroundColor: colors.primary + "10",
-                borderRadius: 16,
-                padding: 16,
-                borderWidth: 1,
-                borderColor: colors.primary + "30",
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginBottom: 12,
-                }}
-              >
-                <Ionicons name="location" size={20} color={colors.primary} />
-                <Text
-                  style={{
-                    color: colors.primary,
-                    fontWeight: "bold",
-                    marginLeft: 8,
-                  }}
-                >
-                  Distance
-                </Text>
-              </View>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                }}
-              >
-                <View style={{ alignItems: "center", flex: 1 }}>
-                  <Ionicons
-                    name="navigate"
-                    size={18}
-                    color={colors.textSecondary}
-                  />
-                  <Text
-                    style={{
-                      color: colors.textPrimary,
-                      fontWeight: "bold",
-                      fontSize: 18,
-                      marginTop: 4,
-                    }}
-                  >
-                    {formatDistance(distanceInfo.kilometers)}
-                  </Text>
-                  <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
-                    Distance
-                  </Text>
+            <View style={styles.distanceSectionWrapper}>
+              <View style={[styles.distanceSection, { backgroundColor: colors.primary + "08" }]}>
+                <View style={styles.distanceSectionHeader}>
+                  <Ionicons name="navigate-circle" size={20} color={colors.primary} />
+                  <Text style={[styles.distanceSectionTitle, { color: colors.textPrimary }]}>Distance & trajet</Text>
                 </View>
-                <View style={{ alignItems: "center", flex: 1 }}>
-                  <Ionicons
-                    name="walk"
-                    size={18}
-                    color={colors.textSecondary}
-                  />
-                  <Text
-                    style={{
-                      color: colors.textPrimary,
-                      fontWeight: "bold",
-                      fontSize: 18,
-                      marginTop: 4,
-                    }}
-                  >
-                    {formatTravelTime(distanceInfo.travelTimes.walking)}
-                  </Text>
-                  <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
-                    À pied
-                  </Text>
-                </View>
-                <View style={{ alignItems: "center", flex: 1 }}>
-                  <Ionicons name="car" size={18} color={colors.textSecondary} />
-                  <Text
-                    style={{
-                      color: colors.textPrimary,
-                      fontWeight: "bold",
-                      fontSize: 18,
-                      marginTop: 4,
-                    }}
-                  >
-                    {formatTravelTime(distanceInfo.travelTimes.car)}
-                  </Text>
-                  <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
-                    Voiture
-                  </Text>
+                
+                <View style={styles.distanceItemsContainer}>
+                  {/* Distance */}
+                  <View style={styles.distanceItemCentered}>
+                    <View style={[styles.distanceIconCircle, { backgroundColor: colors.primary + "15" }]}>
+                      <Ionicons name="location" size={22} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.distanceValueCentered, { color: colors.textPrimary }]}>
+                      {formatDistance(distanceInfo.kilometers)}
+                    </Text>
+                    <Text style={[styles.distanceLabelCentered, { color: colors.textTertiary }]}>Distance</Text>
+                  </View>
+
+                  {/* Séparateur */}
+                  <View style={[styles.distanceSeparator, { backgroundColor: colors.border }]} />
+
+                  {/* À pied */}
+                  <View style={styles.distanceItemCentered}>
+                    <View style={[styles.distanceIconCircle, { backgroundColor: colors.success + "15" }]}>
+                      <Ionicons name="walk" size={22} color={colors.success} />
+                    </View>
+                    <Text style={[styles.distanceValueCentered, { color: colors.textPrimary }]}>
+                      {formatTravelTime(distanceInfo.travelTimes.walking)}
+                    </Text>
+                    <Text style={[styles.distanceLabelCentered, { color: colors.textTertiary }]}>À pied</Text>
+                  </View>
+
+                  {/* Séparateur */}
+                  <View style={[styles.distanceSeparator, { backgroundColor: colors.border }]} />
+
+                  {/* Voiture */}
+                  <View style={styles.distanceItemCentered}>
+                    <View style={[styles.distanceIconCircle, { backgroundColor: colors.warning + "15" }]}>
+                      <Ionicons name="car" size={22} color={colors.warning} />
+                    </View>
+                    <Text style={[styles.distanceValueCentered, { color: colors.textPrimary }]}>
+                      {formatTravelTime(distanceInfo.travelTimes.car)}
+                    </Text>
+                    <Text style={[styles.distanceLabelCentered, { color: colors.textTertiary }]}>Voiture</Text>
+                  </View>
+
+                  {/* Séparateur */}
+                  <View style={[styles.distanceSeparator, { backgroundColor: colors.border }]} />
+
+                  {/* Moto */}
+                  <View style={styles.distanceItemCentered}>
+                    <View style={[styles.distanceIconCircle, { backgroundColor: colors.secondary + "15" }]}>
+                      <Ionicons name="bicycle" size={22} color={colors.secondary} />
+                    </View>
+                    <Text style={[styles.distanceValueCentered, { color: colors.textPrimary }]}>
+                      {getMotorcycleTravelTime() || "—"}
+                    </Text>
+                    <Text style={[styles.distanceLabelCentered, { color: colors.textTertiary }]}>Moto</Text>
+                  </View>
                 </View>
               </View>
             </View>
           )}
 
-          {/* Service Selection */}
+          {/* Services Section */}
           {services.length > 0 && (
-            <View style={{ marginBottom: 24 }}>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontWeight: "bold",
-                  color: colors.textPrimary,
-                  marginBottom: 12,
-                }}
-              >
-                Choisissez un service
-              </Text>
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Services disponibles</Text>
               {services.map((service) => (
-                <TouchableOpacity
+                <ServiceItem
                   key={service.id}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    padding: 16,
-                    borderRadius: 12,
-                    marginBottom: 8,
-                    borderWidth: 1,
-                    backgroundColor:
-                      selectedServiceId === service.id
-                        ? colors.primary + "10"
-                        : colors.surfaceSecondary,
-                    borderColor:
-                      selectedServiceId === service.id
-                        ? colors.primary + "40"
-                        : colors.border,
-                  }}
-                  onPress={() => setSelectedServiceId(service.id)}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        fontWeight: "600",
-                        color:
-                          selectedServiceId === service.id
-                            ? colors.primary
-                            : colors.textPrimary,
-                      }}
-                    >
-                      {service.name}
-                    </Text>
-                    {service.description && (
-                      <Text
-                        style={{
-                          color: colors.textSecondary,
-                          fontSize: 14,
-                          marginTop: 4,
-                        }}
-                      >
-                        {service.description}
-                      </Text>
-                    )}
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        marginTop: 8,
-                      }}
-                    >
-                      <Ionicons
-                        name="people-outline"
-                        size={14}
-                        color={colors.textTertiary}
-                      />
-                      <Text
-                        style={{
-                          color: colors.textTertiary,
-                          fontSize: 12,
-                          marginLeft: 4,
-                        }}
-                      >
-                        {service.people_waiting ?? 0} dans la file
-                        d&apos;attente
-                      </Text>
-                      {service.avg_service_time_minutes && (
-                        <>
-                          <Ionicons
-                            name="time-outline"
-                            size={14}
-                            color={colors.textTertiary}
-                            style={{ marginLeft: 12 }}
-                          />
-                          <Text
-                            style={{
-                              color: colors.textTertiary,
-                              fontSize: 12,
-                              marginLeft: 4,
-                            }}
-                          >
-                            ~{service.avg_service_time_minutes} min/service
-                          </Text>
-                        </>
-                      )}
-                    </View>
-                  </View>
-                  {selectedServiceId === service.id && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={24}
-                      color={colors.primary}
-                    />
-                  )}
-                </TouchableOpacity>
+                  service={service}
+                  isSelected={selectedServiceId === service.id}
+                  colors={colors}
+                  onSelect={() => setSelectedServiceId(service.id)}
+                />
               ))}
             </View>
           )}
 
-          {/* Join Queue Button */}
+          {/* Join Button */}
           <TouchableOpacity
-            style={{
-              width: "100%",
-              height: 64,
-              borderRadius: 16,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 32,
-              backgroundColor: isJoining
-                ? colors.primary + "80"
-                : colors.primary,
-              shadowColor: colors.primary,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-            }}
+            style={[
+              styles.joinButton,
+              { backgroundColor: isJoining ? colors.primary + "80" : colors.primary },
+            ]}
             onPress={handleJoinQueue}
             disabled={isJoining}
+            activeOpacity={0.8}
           >
-            {isJoining ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons
-                  name="enter-outline"
-                  size={24}
-                  color="#FFFFFF"
-                  style={{ marginRight: 8 }}
-                />
-                <Text
-                  style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 18 }}
-                >
-                  Joindre la file
-                </Text>
-              </>
-            )}
+            <LinearGradient
+              colors={[colors.primary, colors.secondary]}
+              style={styles.joinButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              {isJoining ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="enter-outline" size={22} color="#FFF" />
+                  <Text style={styles.joinButtonText}>Rejoindre la file</Text>
+                </>
+              )}
+            </LinearGradient>
           </TouchableOpacity>
 
-          {/* General Information Section */}
-          <View style={{ marginBottom: 40 }}>
-            <Text
-              style={{
-                fontSize: 20,
-                fontWeight: "bold",
-                color: colors.textPrimary,
-                marginBottom: 16,
-              }}
-            >
-              Information Generale
-            </Text>
-
-            <View
-              style={{
-                backgroundColor: colors.surfaceSecondary,
-                borderRadius: 16,
-                padding: 16,
-              }}
-            >
-              <TouchableOpacity
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  borderBottomWidth: 0.5,
-                  borderBottomColor: colors.border,
-                  paddingBottom: 16,
-                  marginBottom: 16,
-                }}
-              >
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: colors.primary + "15",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginRight: 16,
-                  }}
-                >
-                  <Ionicons
-                    name="call-outline"
-                    size={20}
-                    color={colors.primary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={{ color: colors.textPrimary, fontWeight: "600" }}
-                  >
-                    Telephone
-                  </Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 14 }}>
-                    {(establishment as any).phone || "+229 9723456789"}
-                  </Text>
-                </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={colors.textTertiary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={{ flexDirection: "row", alignItems: "center" }}
-              >
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: colors.primary + "15",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginRight: 16,
-                  }}
-                >
-                  <Ionicons
-                    name="globe-outline"
-                    size={20}
-                    color={colors.primary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={{ color: colors.textPrimary, fontWeight: "600" }}
-                  >
-                    Site web
-                  </Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 14 }}>
-                    {(establishment as any).website || "www.smartqueue.com"}
-                  </Text>
-                </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={colors.textTertiary}
-                />
-              </TouchableOpacity>
+          {/* Informations */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Informations</Text>
+            <View style={[styles.infoCard, { backgroundColor: colors.surfaceSecondary }]}>
+              <InfoRow
+                icon="call-outline"
+                label="Téléphone"
+                value={(establishment as any).phone || "+229 XX XXX XXXX"}
+                color={colors.primary}
+                colors={colors}
+                onPress={() => Linking.openURL(`tel:${(establishment as any).phone || ""}`)}
+              />
+              <InfoRow
+                icon="globe-outline"
+                label="Site web"
+                value={(establishment as any).website || "www.smartqueue.com"}
+                color={colors.secondary}
+                colors={colors}
+                onPress={() => (establishment as any).website && Linking.openURL((establishment as any).website)}
+              />
+              <InfoRow
+                icon="time-outline"
+                label="Horaires"
+                value={`${establishment.open_at || "08:00"} - ${establishment.close_at || "18:00"}`}
+                color={colors.warning}
+                colors={colors}
+              />
             </View>
           </View>
-        </View>
-      </ScrollView>
+
+          <View style={styles.bottomSpace} />
+        </Animated.ScrollView>
+      </View>
+
+      {AlertComponent}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  imageContainer: {
+    height: height * 0.3,
+    position: "relative",
+  },
+  headerImage: {
+    width: "100%",
+    height: "100%",
+  },
+  imageOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  headerButtons: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Conteneur avec coins du haut arrondis
+  contentContainer: {
+    flex: 1,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+    marginTop: -20,
+    overflow: "hidden",
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    paddingBottom: 40,
+  },
+  infoHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  establishmentName: {
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+  addressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  addressText: {
+    fontSize: 13,
+    flex: 1,
+  },
+  statsGrid: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: "800",
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  distanceSectionWrapper: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  distanceSection: {
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+  },
+  distanceSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
+  distanceSectionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  distanceItemsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  distanceItemCentered: {
+    alignItems: "center",
+    flex: 1,
+    minWidth: 70,
+  },
+  distanceIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  distanceValueCentered: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  distanceLabelCentered: {
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  distanceSeparator: {
+    width: 1,
+    height: 40,
+  },
+  section: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+  serviceItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+  },
+  serviceContent: {
+    flex: 1,
+  },
+  serviceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  serviceName: {
+    fontSize: 15,
+    fontWeight: "700",
+    flex: 1,
+  },
+  openBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  openBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  serviceDescription: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  serviceStats: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  serviceStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  serviceStatText: {
+    fontSize: 11,
+  },
+  joinButton: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  joinButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    gap: 8,
+  },
+  joinButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  infoCard: {
+    borderRadius: 16,
+    overflow: "hidden",
+    marginHorizontal: 1,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderBottomWidth: 0.5,
+  },
+  infoIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+  infoContent: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 11,
+    marginBottom: 2,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  bottomSpace: {
+    height: 20,
+  },
+});
 
 export default ServiceDetailsScreen;

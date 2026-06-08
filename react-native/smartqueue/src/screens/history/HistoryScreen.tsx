@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,9 @@ import {
   RefreshControl,
   ActivityIndicator,
   ScrollView,
+  Animated,
+  Dimensions,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,29 +21,289 @@ import { useCustomAlert } from '../../hooks/useCustomAlert';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { router } from 'expo-router';
 
-type HistoryNavigationProp = NativeStackNavigationProp<TabParamList, 'History'>;
+const { width } = Dimensions.get('window');
 
-// Types pour les filtres
+type HistoryNavigationProp = NativeStackNavigationProp<TabParamList, 'History'>;
 type FilterType = 'weekly' | 'monthly' | 'custom';
 type StatusFilter = 'all' | 'active' | 'waiting' | 'called' | 'completed' | 'cancelled' | 'expired' | 'served' | 'closed' | 'absent' | 'created';
 
-interface FilterOption {
-  id: FilterType;
-  label: string;
-  icon: React.ReactNode;
-}
+// Composant Header compact
+const HistoryHeader: React.FC<{
+  selectedFilter: FilterType;
+  selectedStatus: StatusFilter;
+  colors: any;
+  onFilterPress: (filter: FilterType) => void;
+  onStatusPress: (status: StatusFilter) => void;
+}> = ({ selectedFilter, selectedStatus, colors, onFilterPress, onStatusPress }) => {
+  const filters = [
+    { id: 'weekly', label: 'Semaine', icon: 'calendar-outline' },
+    { id: 'monthly', label: 'Mois', icon: 'calendar-number-outline' },
+    { id: 'custom', label: 'Personnalisé', icon: 'options-outline' },
+  ];
 
-interface StatusOption {
-  id: StatusFilter;
-  label: string;
-  color: string;
-}
+  const statusOptions = [
+    { id: 'all', label: 'Tous' },
+    { id: 'waiting', label: 'Attente' },
+    { id: 'called', label: 'Appelés' },
+    { id: 'served', label: 'Servis' },
+    { id: 'cancelled', label: 'Annulés' },
+  ];
 
-// Composant HistoryScreen
+  return (
+    <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+      <View style={styles.headerTop}>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Historique</Text>
+        <View style={[styles.headerBadge, { backgroundColor: colors.primary + '10' }]}>
+          <Ionicons name="time-outline" size={14} color={colors.primary} />
+          <Text style={[styles.headerBadgeText, { color: colors.primary }]}>90 jours</Text>
+        </View>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+        {filters.map((filter) => (
+          <TouchableOpacity
+            key={filter.id}
+            style={[
+              styles.filterChip,
+              {
+                backgroundColor: selectedFilter === filter.id ? colors.primary : colors.surfaceSecondary,
+                borderColor: selectedFilter === filter.id ? colors.primary : colors.border,
+              },
+            ]}
+            onPress={() => onFilterPress(filter.id as FilterType)}
+          >
+            <Ionicons name={filter.icon as any} size={14} color={selectedFilter === filter.id ? '#FFF' : colors.textSecondary} />
+            <Text style={[styles.filterChipText, { color: selectedFilter === filter.id ? '#FFF' : colors.textSecondary }]}>
+              {filter.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusScroll}>
+        {statusOptions.map((status) => (
+          <TouchableOpacity
+            key={status.id}
+            style={[
+              styles.statusChip,
+              {
+                backgroundColor: selectedStatus === status.id ? colors.textPrimary : colors.surfaceSecondary,
+              },
+            ]}
+            onPress={() => onStatusPress(status.id as StatusFilter)}
+          >
+            <Text style={[styles.statusChipText, { color: selectedStatus === status.id ? colors.surface : colors.textSecondary }]}>
+              {status.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+};
+
+// Carte Ticket compacte
+const TicketHistoryCard: React.FC<{
+  ticket: Ticket;
+  colors: any;
+  isExpanded: boolean;
+  onPress: () => void;
+  onRejoin: () => void;
+}> = ({ ticket, colors, isExpanded, onPress, onRejoin }) => {
+  const getStatusConfig = () => {
+    const status = ticket.status;
+    if (status === 'served' || status === 'completed')
+      return { label: 'Servi', icon: 'checkmark-circle', color: colors.success, bg: colors.success + '15' };
+    if (status === 'cancelled' || status === 'expired' || status === 'absent')
+      return { label: 'Annulé', icon: 'close-circle', color: colors.danger, bg: colors.danger + '15' };
+    if (status === 'called')
+      return { label: 'Appelé', icon: 'notifications', color: colors.primary, bg: colors.primary + '15' };
+    if (status === 'waiting' || status === 'created')
+      return { label: 'En attente', icon: 'time', color: colors.warning, bg: colors.warning + '15' };
+    return { label: status, icon: 'help-circle', color: colors.textTertiary, bg: colors.border };
+  };
+
+  const statusConfig = getStatusConfig();
+  const date = new Date(ticket.created_at);
+  const formattedDate = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  const formattedTime = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <TouchableOpacity
+      style={[styles.ticketCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.ticketCardHeader}>
+        <View style={styles.ticketInfo}>
+          <View style={[styles.ticketNumberBadge, { backgroundColor: colors.primary + '10' }]}>
+            <Text style={[styles.ticketNumber, { color: colors.primary }]}>#{ticket.number}</Text>
+          </View>
+          <View style={styles.ticketMeta}>
+            <Text style={[styles.ticketName, { color: colors.textPrimary }]} numberOfLines={1}>
+              {ticket.establishment?.name || 'Établissement'}
+            </Text>
+            <Text style={[styles.ticketService, { color: colors.textSecondary }]} numberOfLines={1}>
+              {ticket.service?.name || 'Service'}
+            </Text>
+          </View>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+          <Ionicons name={statusConfig.icon as any} size={12} color={statusConfig.color} />
+          <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+        </View>
+      </View>
+
+      <View style={styles.ticketCardFooter}>
+        <View style={styles.dateInfo}>
+          <Ionicons name="calendar-outline" size={12} color={colors.textTertiary} />
+          <Text style={[styles.dateText, { color: colors.textSecondary }]}>{formattedDate}</Text>
+          <Text style={[styles.timeText, { color: colors.textTertiary }]}>{formattedTime}</Text>
+        </View>
+        <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textTertiary} />
+      </View>
+
+      {isExpanded && (
+        <View style={[styles.expandedContent, { borderTopColor: colors.border }]}>
+          <View style={styles.expandedRow}>
+            <Text style={[styles.expandedLabel, { color: colors.textTertiary }]}>Temps d'attente</Text>
+            <Text style={[styles.expandedValue, { color: colors.textPrimary }]}>
+              {getWaitTime(ticket) || 'N/A'}
+            </Text>
+          </View>
+          {ticket.counter_id && (
+            <View style={styles.expandedRow}>
+              <Text style={[styles.expandedLabel, { color: colors.textTertiary }]}>Guichet</Text>
+              <Text style={[styles.expandedValue, { color: colors.textPrimary }]}>{ticket.counter_id}</Text>
+            </View>
+          )}
+          <TouchableOpacity style={[styles.rejoinButton, { backgroundColor: colors.primary + '10' }]} onPress={onRejoin}>
+            <Ionicons name="refresh-outline" size={16} color={colors.primary} />
+            <Text style={[styles.rejoinButtonText, { color: colors.primary }]}>Reprendre la file</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+};
+
+// Carte Ticket actif avec affichage du statut correct
+const ActiveTicketCardCompact: React.FC<{
+  activeTicket: Ticket | null;
+  isCalled: boolean;
+  counterNumber: number | null;
+  colors: any;
+  onPress: () => void;
+}> = ({ activeTicket, isCalled, counterNumber, colors, onPress }) => {
+  if (!activeTicket) return null;
+
+  // Déterminer le statut et l'affichage
+  const ticketStatus = activeTicket.status;
+  const isTicketPresent = ticketStatus === 'present';
+  const isTicketEnRoute = ticketStatus === 'en_route';
+  const isTicketCalled = ticketStatus === 'called';
+  const isTicketWaiting = ticketStatus === 'waiting';
+
+  const getStatusDisplay = () => {
+    if (isTicketPresent) return { text: 'Présent', icon: 'checkmark-circle' };
+    if (isTicketEnRoute) return { text: 'En route', icon: 'walk' };
+    if (isTicketCalled) return { text: 'Appelé', icon: 'notifications' };
+    return { text: 'En attente', icon: 'hourglass-outline' };
+  };
+
+  const statusDisplay = getStatusDisplay();
+  const statusColor = isTicketPresent ? colors.success : isTicketEnRoute ? colors.warning : isTicketCalled ? colors.danger : colors.primary;
+
+  // Message supplémentaire selon le statut
+  const getStatusMessage = () => {
+    if (isTicketPresent) return 'Présent au point de service';
+    if (isTicketEnRoute) return 'En route vers l\'établissement';
+    if (isTicketCalled) return `Guichet ${counterNumber || 'N/A'}`;
+    return `${activeTicket.position || '?'}e position`;
+  };
+
+  return (
+    <TouchableOpacity style={[styles.activeCard, { backgroundColor: colors.primary }]} onPress={onPress} activeOpacity={0.8}>
+      <View style={styles.activeCardHeader}>
+        <View>
+          <Text style={styles.activeCardLabel}>Ticket actif</Text>
+          <Text style={styles.activeCardName}>{activeTicket.establishment?.name || 'Établissement'}</Text>
+          <Text style={[styles.activeCardService, { color: 'rgba(255,255,255,0.85)' }]}>
+            {activeTicket.service?.name || 'Service'}
+          </Text>
+        </View>
+        <View style={styles.activeCardNumber}>
+          <Text style={styles.activeCardNumberText}>{activeTicket.number}</Text>
+        </View>
+      </View>
+      
+      <View style={styles.activeCardStats}>
+        <View style={styles.activeStat}>
+          <Ionicons name={statusDisplay.icon as any} size={16} color="#FFF" />
+          <Text style={styles.activeStatValue}>{statusDisplay.text}</Text>
+          <Text style={styles.activeStatLabel}>Statut</Text>
+        </View>
+        <View style={styles.activeStatDivider} />
+        <View style={styles.activeStat}>
+          <Ionicons name="time-outline" size={16} color="#FFF" />
+          <Text style={styles.activeStatValue}>{getStatusMessage()}</Text>
+          <Text style={styles.activeStatLabel}>Info</Text>
+        </View>
+        <View style={styles.activeStatDivider} />
+        <View style={styles.activeStat}>
+          <Ionicons name="arrow-forward" size={16} color="#FFF" />
+          <Text style={styles.activeStatValue}>Voir</Text>
+          <Text style={styles.activeStatLabel}>Détails</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// États vides
+const EmptyState: React.FC<{ colors: any; onScanPress: () => void }> = ({ colors, onScanPress }) => (
+  <View style={styles.emptyContainer}>
+    <View style={[styles.emptyIconContainer, { backgroundColor: colors.primary + '10' }]}>
+      <Ionicons name="time-outline" size={56} color={colors.primary} />
+    </View>
+    <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Aucun ticket</Text>
+    <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+      Vos tickets apparaîtront ici une fois servis ou annulés
+    </Text>
+    <TouchableOpacity style={[styles.emptyButton, { backgroundColor: colors.primary }]} onPress={onScanPress}>
+      <Ionicons name="qr-code-outline" size={18} color="#FFF" />
+      <Text style={styles.emptyButtonText}>Scanner un QR code</Text>
+    </TouchableOpacity>
+  </View>
+);
+
+const ErrorState: React.FC<{ colors: any; error: string; onRetry: () => void }> = ({ colors, error, onRetry }) => (
+  <View style={styles.emptyContainer}>
+    <View style={[styles.errorIconContainer, { backgroundColor: colors.danger + '10' }]}>
+      <Ionicons name="alert-circle-outline" size={56} color={colors.danger} />
+    </View>
+    <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Erreur de chargement</Text>
+    <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>{error}</Text>
+    <TouchableOpacity style={[styles.emptyButton, { backgroundColor: colors.primary }]} onPress={onRetry}>
+      <Ionicons name="refresh-outline" size={18} color="#FFF" />
+      <Text style={styles.emptyButtonText}>Réessayer</Text>
+    </TouchableOpacity>
+  </View>
+);
+
+// Helper functions
+const getWaitTime = (ticket: Ticket): string | null => {
+  if (!ticket.created_at || !ticket.closed_at) return null;
+  const created = new Date(ticket.created_at);
+  const closed = new Date(ticket.closed_at);
+  const diffMins = Math.round((closed.getTime() - created.getTime()) / (1000 * 60));
+  return `${diffMins} min`;
+};
+
+// Composant principal
 export const HistoryScreen: React.FC = () => {
-  const navigation = useNavigation<HistoryNavigationProp>();
   const colors = useThemeColors();
-  const { hasActiveTicket, activeTicket, setActiveTicket, isCalled, counterNumber, fetchActiveTicket, isInitialized } = useTicket();
+  const { hasActiveTicket, activeTicket, isCalled, counterNumber, fetchActiveTicket, isInitialized } = useTicket();
   const { AlertComponent, showSuccess, showError } = useCustomAlert();
   
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -50,89 +313,38 @@ export const HistoryScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [expandedTickets, setExpandedTickets] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const pageRef = useRef(1);
+  const hasMoreRef = useRef(true);
+  const isLoadingRef = useRef(false);
 
-  // Fetch fresh ticket data on mount to avoid showing stale data from other users
   useEffect(() => {
-    fetchActiveTicket().catch(err => console.error('Error fetching active ticket:', err));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
 
-  // Refs pour éviter les boucles de dépendances
-  const pageRef = React.useRef(1);
-  const hasMoreRef = React.useRef(true);
-  const isLoadingRef = React.useRef(false);
-  const onEndReachedCalledDuringMomentumRef = React.useRef(true);
-  const lastEndReachedAtRef = React.useRef(0);
+  useEffect(() => {
+    fetchActiveTicket().catch(err => console.error('Error fetching active ticket:', err));
+  }, []);
 
-  // Filtres disponibles
-  const filters: FilterOption[] = [
-    {
-      id: 'weekly',
-      label: 'Semaine',
-      icon: <Ionicons name="calendar-outline" size={16} />,
-    },
-    {
-      id: 'monthly',
-      label: 'Mois',
-      icon: <Ionicons name="calendar-number-outline" size={16} />,
-    },
-    {
-      id: 'custom',
-      label: 'Custom',
-      icon: <Ionicons name="options-outline" size={16} />,
-    },
-  ];
-
-  // Status filter options - tous les statuts possibles
-  const statusOptions: StatusOption[] = [
-    { id: 'all', label: 'Tous', color: '#6B7280' },
-    { id: 'active', label: 'Actifs', color: '#2563EB' },
-    { id: 'created', label: 'Créés', color: '#8B5CF6' },
-    { id: 'waiting', label: 'En attente', color: '#F59E0B' },
-    { id: 'called', label: 'Appelés', color: '#10B981' },
-    { id: 'served', label: 'Servis', color: '#059669' },
-    { id: 'completed', label: 'Terminés', color: '#059669' },
-    { id: 'closed', label: 'Fermés', color: '#6B7280' },
-    { id: 'cancelled', label: 'Annulés', color: '#EF4444' },
-    { id: 'expired', label: 'Expirés', color: '#9CA3AF' },
-    { id: 'absent', label: 'Absents', color: '#DC2626' },
-  ];
-
-  // Obtenir les dates selon le filtre
   const getFilterDates = useCallback(() => {
     const now = new Date();
     const endDate = now.toISOString().split('T')[0];
-    
     let startDate: string;
-    
     switch (selectedFilter) {
-      case 'weekly': {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        startDate = weekAgo.toISOString().split('T')[0];
+      case 'weekly':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         break;
-      }
-      case 'monthly': {
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        startDate = monthAgo.toISOString().split('T')[0];
+      case 'monthly':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         break;
-      }
-      case 'custom': {
-        const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        startDate = threeMonthsAgo.toISOString().split('T')[0];
-        break;
-      }
-      default: {
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        startDate = monthAgo.toISOString().split('T')[0];
-      }
+      default:
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     }
-    
     return { startDate, endDate };
   }, [selectedFilter]);
 
-  // Charger les tickets - version stable sans dépendances changeantes
   const loadTickets = useCallback(async (reset: boolean = false) => {
-    // Utiliser une ref pour vérifier l'état sans causer de re-render
     if (isLoadingRef.current) return;
     if (!reset && !hasMoreRef.current) return;
 
@@ -144,22 +356,15 @@ export const HistoryScreen: React.FC = () => {
       const { startDate, endDate } = getFilterDates();
       const currentPage = reset ? 1 : pageRef.current;
       
-      console.log('[HistoryScreen] Loading tickets:', { startDate, endDate, page: currentPage, status: selectedStatus });
-      
       const response = await ticketsApi.getTicketHistory({
         from: startDate,
         to: endDate,
         page: currentPage,
-        per_page: 20,
+        per_page: 15,
         status: selectedStatus === 'all' ? undefined : selectedStatus,
       });
 
-      console.log('[HistoryScreen] Response:', JSON.stringify(response).substring(0, 500));
-
-      // Laravel API wraps data in 'data' key
       const newTickets = response.data || [];
-      
-      console.log('[HistoryScreen] Tickets found:', newTickets.length);
       
       if (reset) {
         setTickets(newTickets);
@@ -169,12 +374,10 @@ export const HistoryScreen: React.FC = () => {
         pageRef.current = currentPage + 1;
       }
       
-      // Laravel pagination is in 'meta' key
       const pagination = response.meta || (response as any).pagination;
       hasMoreRef.current = pagination ? pagination.current_page < pagination.last_page : false;
     } catch (error: any) {
-      console.error('[HistoryScreen] Error:', error.response?.status, error.response?.data, error.message);
-      const errorMessage = error.response?.data?.message || 'Impossible de charger l\'historique des tickets.';
+      const errorMessage = error.response?.data?.message || 'Impossible de charger l\'historique.';
       setError(errorMessage);
     } finally {
       isLoadingRef.current = false;
@@ -182,46 +385,25 @@ export const HistoryScreen: React.FC = () => {
     }
   }, [getFilterDates, selectedStatus]);
 
-  // Effet pour charger les tickets au montage et quand le filtre change
   useEffect(() => {
-    // Réinitialiser les refs quand le filtre change
     pageRef.current = 1;
     hasMoreRef.current = true;
     isLoadingRef.current = false;
-    onEndReachedCalledDuringMomentumRef.current = true;
-    lastEndReachedAtRef.current = 0;
     loadTickets(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFilter, selectedStatus]);
 
-  // Rafraîchir les données
   const handleRefresh = async () => {
     setRefreshing(true);
-    try {
-      onEndReachedCalledDuringMomentumRef.current = true;
-      lastEndReachedAtRef.current = 0;
-      await loadTickets(true);
-    } catch (error) {
-      console.error('Error refreshing tickets:', error);
-    } finally {
-      setRefreshing(false);
-    }
+    await loadTickets(true);
+    setRefreshing(false);
   };
 
-  // Charger plus de tickets (infinite scroll)
   const handleLoadMore = () => {
-    if (onEndReachedCalledDuringMomentumRef.current) return;
-    const now = Date.now();
-    if (now - lastEndReachedAtRef.current < 800) return;
-    lastEndReachedAtRef.current = now;
-
     if (!isLoadingRef.current && hasMoreRef.current) {
-      onEndReachedCalledDuringMomentumRef.current = true;
       loadTickets(false);
     }
   };
 
-  // Basculer l'expansion d'un ticket
   const toggleTicketExpansion = (ticketId: number) => {
     const newExpanded = new Set(expandedTickets);
     if (newExpanded.has(ticketId)) {
@@ -232,419 +414,148 @@ export const HistoryScreen: React.FC = () => {
     setExpandedTickets(newExpanded);
   };
 
-  // Obtenir le texte du statut en français
-  const getStatusText = (status: string) => {
-    const statusMap: Record<string, string> = {
-      'closed': 'Fermé',
-      'served': 'Servi',
-      'cancelled': 'Annulé',
-      'canceled': 'Annulé',
-      'expired': 'Expiré',
-      'absent': 'Absent',
-      'called': 'Appelé',
-      'waiting': 'En attente',
-      'created': 'Créé',
-      'pending': 'En attente',
-      'completed': 'Terminé',
-    };
-    return statusMap[status] || status;
-  };
-
-  // Obtenir la couleur selon le statut
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'served':
-      case 'completed':
-        return { bg: colors.success + '20', text: colors.success }; // Vert
-      case 'cancelled':
-      case 'canceled':
-      case 'expired':
-      case 'absent':
-        return { bg: colors.danger + '20', text: colors.danger }; // Rouge
-      case 'called':
-        return { bg: colors.primary + '20', text: colors.primary }; // Bleu
-      case 'waiting':
-      case 'created':
-      case 'pending':
-        return { bg: colors.warning + '20', text: colors.warning }; // Orange
-      case 'closed':
-        return { bg: colors.textTertiary + '20', text: colors.textSecondary }; // Gris
-      default:
-        return { bg: colors.warning + '20', text: colors.warning };
-    }
-  };
-
-  // Calculer la durée d'attente
-  const getWaitTime = (ticket: Ticket) => {
-    if (!ticket.created_at || !ticket.closed_at) return null;
-    
-    const created = new Date(ticket.created_at);
-    const closed = new Date(ticket.closed_at);
-    const diffMs = closed.getTime() - created.getTime();
-    const diffMins = Math.round(diffMs / (1000 * 60));
-    
-    return `${diffMins} min`;
-  };
-
-  // Rejoindre à nouveau la file
   const handleRejoinQueue = async (ticket: Ticket) => {
     if (!ticket.service_id) return;
-    
     try {
       const newTicket = await ticketsApi.rejoinQueue(ticket.service_id);
-      showSuccess(
-        'Ticket Created',
-        `Your ticket ${newTicket.number} was created for ${ticket.service?.name || 'Service'}.`,
-        'OK',
-        () => navigation.navigate('tickets' as any)
-      );
+      showSuccess('Ticket créé', `Votre ticket ${newTicket.number} a été créé.`, 'OK');
+      router.push('/(tabs)/tickets');
     } catch (error) {
-      console.error('Error rejoining queue:', error);
-      showError('Error', 'Impossible de rejoindre la file.');
+      showError('Erreur', 'Impossible de rejoindre la file.');
     }
   };
 
-  // Rendu du footer
   const renderFooter = () => {
     if (!hasMoreRef.current) return null;
-    
     return (
-      <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-        {isLoading ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : (
-          <Text style={{ color: colors.textTertiary, fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 2 }}>
-            Load More...
-          </Text>
-        )}
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={[styles.footerText, { color: colors.textTertiary }]}>Chargement...</Text>
       </View>
     );
   };
 
-  // Rendu de l'état vide
-  const renderEmptyState = () => (
-    <View style={{ alignItems: 'center', paddingVertical: 80, paddingHorizontal: 40 }}>
-      <Ionicons
-        name="time-outline"
-        size={80}
-        color={colors.textQuaternary}
-      />
-      <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.textPrimary, marginTop: 24, marginBottom: 8, textAlign: 'center' }}>
-        Aucun ticket terminé
-      </Text>
-      <Text style={{ color: colors.textSecondary, textAlign: 'center', marginBottom: 40 }}>
-        Les tickets apparaissent ici une fois servis, annulés ou expirés.
-      </Text>
-      {isInitialized && hasActiveTicket && activeTicket ? (
-        <TouchableOpacity 
-          style={{ backgroundColor: colors.primary, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center' }}
-          onPress={() => router.push('/(tabs)/live-ticket')}
-        >
-          <Ionicons name="ticket-outline" size={20} color="white" />
-          <Text style={{ color: 'white', fontWeight: 'bold', marginLeft: 8 }}>Voir mon ticket actif</Text>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity 
-          style={{ backgroundColor: colors.primary, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center' }}
-          onPress={() => router.push('/(tabs)/tickets')}
-        >
-          <Ionicons name="qr-code-outline" size={20} color="white" />
-          <Text style={{ color: 'white', fontWeight: 'bold', marginLeft: 8 }}>Scanner un QR Code</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-
-  // Active ticket card component
-  const renderActiveTicketCard = () => {
-    console.log('[HistoryScreen] renderActiveTicketCard - hasActiveTicket:', hasActiveTicket, 'activeTicket:', activeTicket?.id);
-    if (!hasActiveTicket || !activeTicket) return null;
-    
-    return (
-      <TouchableOpacity 
-        style={{ 
-          marginHorizontal: 20, 
-          marginBottom: 16, 
-          backgroundColor: colors.primary, 
-          borderRadius: 24, 
-          padding: 20,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.15,
-          shadowRadius: 8,
-        }}
-        onPress={() => router.push('/(tabs)/live-ticket')}
-      >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: 'white', opacity: 0.8, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 }}>
-              Ticket actif
-            </Text>
-            <Text style={{ color: 'white', fontSize: 20, fontWeight: 'bold', marginTop: 4 }}>
-              {activeTicket.establishment?.name || 'Établissement'}
-            </Text>
-            <Text style={{ color: 'white', opacity: 0.8, fontSize: 14, marginTop: 4 }}>
-              {activeTicket.service?.name || 'Service'}
-            </Text>
-          </View>
-          <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999 }}>
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>{activeTicket.number}</Text>
-          </View>
-        </View>
-        
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 12, marginTop: 8 }}>
-          <View style={{ alignItems: 'center', flex: 1 }}>
-            <Ionicons name="people" size={18} color="white" />
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18, marginTop: 4 }}>{activeTicket.position || '-'}</Text>
-            <Text style={{ color: 'white', opacity: 0.6, fontSize: 12 }}>Position</Text>
-          </View>
-          <View style={{ alignItems: 'center', flex: 1 }}>
-            <Ionicons name={isCalled ? "notifications" : "hourglass"} size={18} color="white" />
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18, marginTop: 4 }}>
-              {isCalled ? 'Appelé!' : 'En attente'}
-            </Text>
-            <Text style={{ color: 'white', opacity: 0.6, fontSize: 12 }}>
-              {isCalled ? `Guichet ${counterNumber || ''}` : 'Statut'}
-            </Text>
-          </View>
-          <View style={{ alignItems: 'center', flex: 1 }}>
-            <Ionicons name="arrow-forward" size={18} color="white" />
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18, marginTop: 4 }}>Voir</Text>
-            <Text style={{ color: 'white', opacity: 0.6, fontSize: 12 }}>Détails</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const showActiveTicketHeader = selectedStatus === 'all' && isInitialized && hasActiveTicket && activeTicket;
+  const hasTickets = tickets.length > 0;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background,paddingBottom:30, }}>
-      {/* Header */}
-      <View style={{ paddingHorizontal: 20, paddingTop: 48, paddingBottom: 16, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <Text style={{ fontSize: 24, fontWeight: 'bold', color: colors.textPrimary, marginBottom: 20 }}>Historique de Ticket</Text>
-        
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flexDirection: 'row' }}
-          contentContainerStyle={{ paddingRight: 20 }}
-        >
-          {filters.map((filter) => (
-            <TouchableOpacity
-              key={filter.id}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                borderRadius: 999,
-                marginRight: 8,
-                borderWidth: 1,
-                borderColor: selectedFilter === filter.id ? colors.primary : colors.border,
-                backgroundColor: selectedFilter === filter.id ? colors.primary : colors.background,
-              }}
-              onPress={() => {
-                setSelectedFilter(filter.id);
-                setExpandedTickets(new Set());
-              }}
-            >
-              {React.cloneElement(filter.icon as React.ReactElement<any>, { 
-                color: selectedFilter === filter.id ? 'white' : colors.textSecondary 
-              })}
-              <Text style={{ 
-                marginLeft: 8, 
-                fontWeight: '600',
-                color: selectedFilter === filter.id ? 'white' : colors.textSecondary 
-              }}>
-                {filter.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <HistoryHeader
+        selectedFilter={selectedFilter}
+        selectedStatus={selectedStatus}
+        colors={colors}
+        onFilterPress={setSelectedFilter}
+        onStatusPress={setSelectedStatus}
+      />
 
-        {/* Status Filter Tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ marginTop: 12 }}
-          contentContainerStyle={{  paddingRight: 40 }}
-        >
-          {statusOptions.map((status) => (
-            <TouchableOpacity
-              key={status.id}
-              style={{
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                borderRadius: 999,
-                marginRight: 8,
-                backgroundColor: selectedStatus === status.id ? colors.textPrimary : colors.background,
-              }}
-              onPress={() => {
-                setSelectedStatus(status.id);
-                setExpandedTickets(new Set());
-              }}
-            >
-              <Text style={{ 
-                fontWeight: '600',
-                color: selectedStatus === status.id ? colors.surface : colors.textSecondary
-              }}>
-                {status.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Tickets List */}
-      <FlatList
+      <Animated.FlatList
         data={tickets}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        onMomentumScrollBegin={() => {
-          onEndReachedCalledDuringMomentumRef.current = false;
-        }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
         onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
+        onEndReachedThreshold={0.3}
         ListHeaderComponent={
-          selectedStatus === 'all' && isInitialized && hasActiveTicket && activeTicket ? (
-            <>
-              {renderActiveTicketCard()}
-              {tickets.length > 0 && (
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.textPrimary, marginBottom: 12, marginHorizontal: 20, marginTop: 8 }}>Tous les tickets</Text>
-              )}
-            </>
-          ) : tickets.length > 0 ? (
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.textPrimary, marginBottom: 12, marginHorizontal: 20, marginTop: 16 }}>
-              {selectedStatus === 'active' ? 'Tickets actifs' :
-               selectedStatus === 'completed' ? 'Tickets terminés' :
-               selectedStatus === 'waiting' ? 'En attente' :
-               selectedStatus === 'called' ? 'Appelés' :
-               selectedStatus === 'cancelled' ? 'Annulés' :
-               selectedStatus === 'expired' ? 'Expirés' : 'Tickets'}
-            </Text>
-          ) : null
+          <Animated.View style={{ opacity: fadeAnim }}>
+            {showActiveTicketHeader && (
+              <ActiveTicketCardCompact
+                activeTicket={activeTicket}
+                isCalled={isCalled}
+                counterNumber={counterNumber}
+                colors={colors}
+                onPress={() => router.push('/(tabs)/live-ticket')}
+              />
+            )}
+            {showActiveTicketHeader && hasTickets && (
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Tickets passés</Text>
+            )}
+          </Animated.View>
         }
         ListFooterComponent={renderFooter}
         ListEmptyComponent={
-          isLoading ? () => (
-            <View style={{ alignItems: 'center', paddingVertical: 80 }}>
+          isLoading ? (
+            <View style={styles.loaderContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
           ) : error ? (
-            <View style={{ alignItems: 'center', paddingVertical: 80, paddingHorizontal: 40 }}>
-              <Ionicons name="alert-circle-outline" size={80} color={colors.danger} />
-              <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.textPrimary, marginTop: 24, marginBottom: 8, textAlign: 'center' }}>
-                Oups ! Une erreur est survenue
-              </Text>
-              <Text style={{ color: colors.textSecondary, textAlign: 'center', marginBottom: 40 }}>
-                {error.includes('401') ? 'Veuillez vous reconnecter pour voir votre historique.' : error}
-              </Text>
-              <TouchableOpacity 
-                style={{ backgroundColor: colors.primary, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center' }}
-                onPress={() => loadTickets(true)}
-              >
-                <Ionicons name="refresh-outline" size={20} color="white" />
-                <Text style={{ color: 'white', fontWeight: 'bold', marginLeft: 8 }}>Réessayer</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (selectedStatus === 'all' && isInitialized && hasActiveTicket && activeTicket) ? null : renderEmptyState
+            <ErrorState colors={colors} error={error} onRetry={() => loadTickets(true)} />
+          ) : (
+            <EmptyState colors={colors} onScanPress={() => router.push('/(tabs)/scan')} />
+          )
         }
-        renderItem={({ item: ticket }) => {
-          const isExpanded = expandedTickets.has(ticket.id);
-          const waitTime = getWaitTime(ticket);
-          
-          return (
-            <View style={{ backgroundColor: colors.surface, borderRadius: 24, padding: 20, marginBottom: 16, marginHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, borderWidth: 1, borderColor: colors.border }}>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}
-                onPress={() => toggleTicketExpansion(ticket.id)}
-                activeOpacity={0.7}
-              >
-                <View style={{ flex: 1, marginRight: 16 }}>
-                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.textPrimary }} numberOfLines={1}>
-                    {ticket.establishment?.name || 'Establishment'}
-                  </Text>
-                  <Text style={{ color: colors.textSecondary, fontWeight: '500', marginBottom: 4 }}>
-                    {ticket.service?.name || 'Service'}
-                  </Text>
-                  <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
-                    {new Date(ticket.created_at).toLocaleDateString('fr-FR', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </Text>
-                </View>
-                
-                <View style={{ alignItems: 'flex-end' }}>
-                  <View style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 4,
-                    borderRadius: 999,
-                    marginBottom: 8,
-                    backgroundColor: getStatusColor(ticket.status).bg,
-                  }}>
-                    <Text style={{
-                      fontSize: 12,
-                      fontWeight: 'bold',
-                      color: getStatusColor(ticket.status).text,
-                    }}>
-                      {getStatusText(ticket.status)}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color={colors.textTertiary}
-                  />
-                </View>
-              </TouchableOpacity>
-
-              {isExpanded && (
-                <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.separator, gap: 12 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: colors.textTertiary }}>Numéro du Ticket</Text>
-                    <Text style={{ color: colors.textPrimary, fontWeight: 'bold' }}>{ticket.number}</Text>
-                  </View>
-                  {waitTime && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: colors.textTertiary }}>Durée d&apos;attente</Text>
-                      <Text style={{ color: colors.textPrimary, fontWeight: 'bold' }}>{waitTime}</Text>
-                    </View>
-                  )}
-                  {ticket.counter_id && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: colors.textTertiary }}>Guichet</Text>
-                      <Text style={{ color: colors.textPrimary, fontWeight: 'bold' }}>{ticket.counter_id}</Text>
-                    </View>
-                  )}
-                  
-                  <TouchableOpacity 
-                    style={{ marginTop: 8, backgroundColor: colors.primary + '10', paddingVertical: 12, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-                    onPress={() => handleRejoinQueue(ticket)}
-                  >
-                    <Ionicons name="refresh-outline" size={18} color={colors.primary} />
-                    <Text style={{ color: colors.primary, fontWeight: 'bold', marginLeft: 8 }}>Joindre la file</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          );
-        }}
+        renderItem={({ item }) => (
+          <TicketHistoryCard
+            ticket={item}
+            colors={colors}
+            isExpanded={expandedTickets.has(item.id)}
+            onPress={() => toggleTicketExpansion(item.id)}
+            onRejoin={() => handleRejoinQueue(item)}
+          />
+        )}
       />
+      {AlertComponent}
     </View>
   );
+};
+
+const styles = {
+  container: { flex: 1 },
+  header: { paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 50 : 40, paddingBottom: 12, borderBottomWidth: 1 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  headerTitle: { fontSize: 28, fontWeight: '800' },
+  headerBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
+  headerBadgeText: { fontSize: 11, fontWeight: '600' },
+  filterScroll: { paddingRight: 16, gap: 8, marginBottom: 12 },
+  filterChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, gap: 6 },
+  filterChipText: { fontSize: 13, fontWeight: '500' },
+  statusScroll: { paddingRight: 16, gap: 8, marginBottom: 4 },
+  statusChip: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
+  statusChipText: { fontSize: 13, fontWeight: '500' },
+  listContent: { paddingHorizontal: 16, paddingBottom: 100, paddingTop: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12, marginTop: 8 },
+  activeCard: { borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
+  activeCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 4 },
+  activeCardLabel: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  activeCardName: { fontSize: 15, fontWeight: '700', color: '#FFF',flexWrap: 'wrap',flexShrink: 1,width: '100%', },
+  activeCardService: { fontSize: 12, marginTop: 2 },
+  activeCardNumber: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12},
+  activeCardNumberText: { fontSize: 15, fontWeight: '800', color: '#FFF' },
+  activeCardStats: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: 12 },
+  activeStat: { flex: 1, alignItems: 'center', gap: 4 },
+  activeStatValue: { fontSize: 14, fontWeight: '700', color: '#FFF', alignItems: 'center',textAlign:"center" },
+  activeStatLabel: { fontSize: 10, color: 'rgba(255,255,255,0.6)' },
+  activeStatDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.2)' },
+  ticketCard: { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 12 },
+  ticketCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
+  ticketInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 12 },
+  ticketNumberBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  ticketNumber: { fontSize: 14, fontWeight: '800' },
+  ticketMeta: { flex: 1 },
+  ticketName: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  ticketService: { fontSize: 12 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, gap: 4 },
+  statusText: { fontSize: 11, fontWeight: '700' },
+  ticketCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  dateInfo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dateText: { fontSize: 12 },
+  timeText: { fontSize: 11 },
+  expandedContent: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, gap: 10 },
+  expandedRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  expandedLabel: { fontSize: 13 },
+  expandedValue: { fontSize: 14, fontWeight: '600' },
+  rejoinButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12, gap: 6, marginTop: 4 },
+  rejoinButtonText: { fontSize: 13, fontWeight: '600' },
+  emptyContainer: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 40 },
+  emptyIconContainer: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  errorIconContainer: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  emptyTitle: { fontSize: 20, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
+  emptySubtitle: { fontSize: 14, textAlign: 'center', marginBottom: 32 },
+  emptyButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 16, gap: 8 },
+  emptyButtonText: { fontSize: 15, fontWeight: '600', color: '#FFF' },
+  loaderContainer: { alignItems: 'center', paddingVertical: 60 },
+  footerLoader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20, gap: 8 },
+  footerText: { fontSize: 12 },
 };
 
 export default HistoryScreen;
