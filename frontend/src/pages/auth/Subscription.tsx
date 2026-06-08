@@ -36,7 +36,7 @@ const plans: Plan[] = [
   {
     id: 'starter',
     name: 'Starter',
-    price: 29,
+    price: 10000, // 10.000 CFA
     period: 'month',
     icon: Users,
     color: 'from-blue-600 to-blue-400',
@@ -53,7 +53,7 @@ const plans: Plan[] = [
   {
     id: 'professional',
     name: 'Professional',
-    price: 79,
+    price: 30000, // 30.000 CFA
     period: 'month',
     icon: Zap,
     popular: true,
@@ -73,7 +73,7 @@ const plans: Plan[] = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 199,
+    price: 80000, // 80.000 CFA
     period: 'month',
     icon: Building,
     color: 'from-emerald-600 to-emerald-400',
@@ -293,6 +293,9 @@ export default function SubscriptionPlan() {
               ? plan.price 
               : getAnnualPrice(plan.price)
             const periodText = billingCycle === 'month' ? '/mois' : '/an'
+            
+            // Formater le prix en CFA
+            const formattedPrice = new Intl.NumberFormat('fr-FR').format(displayPrice)
 
             return (
               <div
@@ -324,12 +327,12 @@ export default function SubscriptionPlan() {
                     <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{plan.name}</h3>
                     <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">{plan.description}</p>
                     <div className="flex items-baseline justify-center">
-                      <span className="text-4xl font-bold text-gray-900 dark:text-white">{displayPrice}€</span>
-                      <span className="text-gray-600 dark:text-gray-300 ml-2">{periodText}</span>
+                      <span className="text-4xl font-bold text-gray-900 dark:text-white">{formattedPrice}</span>
+                      <span className="text-gray-600 dark:text-gray-300 ml-2">FCFA{periodText}</span>
                     </div>
                     {billingCycle === 'year' && (
                       <p className="text-green-600 dark:text-green-400 text-sm mt-2">
-                        Économisez {plan.price * 12 * 0.2}€ par an
+                        Économisez {new Intl.NumberFormat('fr-FR').format(plan.price * 12 * 0.2)} FCFA par an
                       </p>
                     )}
                   </div>
@@ -389,8 +392,8 @@ export default function SubscriptionPlan() {
                 </p>
                 <p className="text-sm text-blue-600">
                   {billingCycle === 'month' 
-                    ? `${plans.find(p => p.id === selectedPlan)?.price}€/mois`
-                    : `${getAnnualPrice(plans.find(p => p.id === selectedPlan)?.price || 0)}€/an`
+                    ? `${new Intl.NumberFormat('fr-FR').format(plans.find(p => p.id === selectedPlan)?.price || 0)} FCFA/mois`
+                    : `${new Intl.NumberFormat('fr-FR').format(getAnnualPrice(plans.find(p => p.id === selectedPlan)?.price || 0))} FCFA/an`
                   }
                 </p>
               </div>
@@ -511,4 +514,3 @@ export default function SubscriptionPlan() {
     </div>
   )
 }
-
