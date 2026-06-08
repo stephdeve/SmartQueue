@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,17 @@ import {
   ScrollView,
   SafeAreaView,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../store/authStore';
 import { useCustomAlert } from '../../hooks/useCustomAlert';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Ionicons } from '@expo/vector-icons';
+
+const { width, height } = Dimensions.get('window');
 
 interface RegisterFormData {
   name: string;
@@ -34,11 +38,89 @@ interface FormErrors {
   general?: string;
 }
 
+// Composant Input personnalisé
+const CustomInput: React.FC<{
+  icon: string;
+  placeholder: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  secureTextEntry?: boolean;
+  keyboardType?: 'email-address' | 'default' | 'phone-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  error?: string;
+  colors: any;
+  onToggleSecure?: () => void;
+  showSecure?: boolean;
+}> = ({ icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize, error, colors, onToggleSecure, showSecure }) => (
+  <View style={styles.inputContainer}>
+    <View style={[styles.inputWrapper, { backgroundColor: colors.surfaceSecondary, borderColor: error ? colors.danger : colors.border }]}>
+      <Ionicons name={icon as any} size={20} color={colors.textTertiary} style={styles.inputIcon} />
+      <TextInput
+        style={[styles.input, { color: colors.textPrimary }]}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textTertiary}
+        value={value}
+        onChangeText={onChangeText}
+        secureTextEntry={secureTextEntry}
+        keyboardType={keyboardType}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={false}
+      />
+      {onToggleSecure && (
+        <TouchableOpacity onPress={onToggleSecure} style={styles.eyeButton}>
+          <Ionicons name={showSecure ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textTertiary} />
+        </TouchableOpacity>
+      )}
+    </View>
+    {error && <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>}
+  </View>
+);
+
+// Composant Checkbox
+const Checkbox: React.FC<{
+  checked: boolean;
+  onPress: () => void;
+  label: string;
+  colors: any;
+}> = ({ checked, onPress, label, colors }) => (
+  <TouchableOpacity style={styles.checkboxContainer} onPress={onPress} activeOpacity={0.7}>
+    <View style={[styles.checkbox, { borderColor: colors.border }, checked && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+      {checked && <Ionicons name="checkmark" size={12} color="#FFF" />}
+    </View>
+    <Text style={[styles.checkboxLabel, { color: colors.textSecondary }]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+// Composant Bouton Social
+const SocialButton: React.FC<{
+  icon: string;
+  label: string;
+  onPress: () => void;
+  loading?: boolean;
+  colors: any;
+}> = ({ icon, label, onPress, loading, colors }) => (
+  <TouchableOpacity
+    style={[styles.socialButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    onPress={onPress}
+    activeOpacity={0.8}
+    disabled={loading}
+  >
+    {loading ? (
+      <ActivityIndicator size="small" color={colors.primary} />
+    ) : (
+      <>
+        <Ionicons name={icon as any} size={20} color={colors.primary} />
+        <Text style={[styles.socialButtonText, { color: colors.textPrimary }]}>{label}</Text>
+      </>
+    )}
+  </TouchableOpacity>
+);
+
 export const RegisterScreen: React.FC = () => {
   const colors = useThemeColors();
   const isDark = !!colors.dark?.background;
   const { register, isLoading, error, clearError } = useAuth();
-  const { AlertComponent, showInfo, showError, showSuccess } = useCustomAlert();
+  const { AlertComponent, showSuccess, showError } = useCustomAlert();
   const { isLoading: googleLoading, handleGoogleRegister } = useGoogleAuth();
   
   const [formData, setFormData] = useState<RegisterFormData>({
@@ -53,67 +135,45 @@ export const RegisterScreen: React.FC = () => {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
-  React.useEffect(() => {
+  useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 50, friction: 7, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
     ]).start();
-  }, [fadeAnim, slideAnim]);
+  }, []);
 
-  React.useEffect(() => {
-    if (error) {
-      clearError();
-    }
+  useEffect(() => {
+    if (error) clearError();
   }, [formData, error, clearError]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'Le nom est requis';
-    } else if (formData.name.trim().length < 2) {
-      newErrors.name = 'Le nom doit contenir au moins 2 caractères';
+    if (!formData.name.trim()) newErrors.name = 'Nom requis';
+    else if (formData.name.trim().length < 2) newErrors.name = 'Nom trop court';
+
+    if (!formData.email.trim()) newErrors.email = 'Email requis';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Email invalide';
+
+    if (formData.phone && !/^[+]?[\d\s-()]{8,}$/.test(formData.phone)) {
+      newErrors.phone = 'Téléphone invalide';
     }
 
-    if (!formData.email.trim()) {
-      newErrors.email = 'L\'email est requis';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'L\'email n\'est pas valide';
-    }
+    if (!formData.password) newErrors.password = 'Mot de passe requis';
+    else if (formData.password.length < 6) newErrors.password = '6 caractères minimum';
 
-    if (formData.phone && !/^[+]?[\d\s-()]+$/.test(formData.phone)) {
-      newErrors.phone = 'Le numéro de téléphone n\'est pas valide';
-    }
-
-    if (!formData.password) {
-      newErrors.password = 'Le mot de passe est requis';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Le mot de passe doit contenir au moins 6 caractères';
-    }
-
-    if (!agreedToTerms) {
-      newErrors.general = 'Vous devez accepter les conditions d\'utilisation';
-    }
+    if (!agreedToTerms) newErrors.general = 'Acceptez les conditions';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) {
-      return;
-    }
-
+    if (!validateForm()) return;
     try {
       await register({
         name: formData.name.trim(),
@@ -123,415 +183,314 @@ export const RegisterScreen: React.FC = () => {
         password_confirmation: formData.password,
       });
       router.replace('/(tabs)');
-    } catch (error) {
-      console.error('Register error:', error);
-    }
+    } catch (error) { console.error('Register error:', error); }
   };
 
   const handleInputChange = (field: keyof RegisterFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-    }
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: undefined }));
   };
 
-  const handleGoToLogin = () => {
-    router.push('/login');
-  };
+  const handleGoToLogin = () => router.push('/login');
 
   const handleGoogleRegisterPress = async () => {
     const result = await handleGoogleRegister(formData.phone || undefined);
     if (result.success) {
       showSuccess('Succès', 'Inscription Google réussie !');
       router.replace('/(tabs)');
-    } else if (result.error) {
-      showError('Erreur', result.error);
-    }
+    } else if (result.error) showError('Erreur', result.error);
   };
 
-  // const handleTermsPress = () => {
-  //   showInfo(
-  //     'Conditions d\'utilisation',
-  //     'En vous inscrivant, vous acceptez nos conditions d\'utilisation et notre politique de confidentialité.'
-  //   );
-  // };
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={handleGoToLogin}
+          {/* Header avec animation */}
+          <Animated.View style={[styles.headerContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+            <LinearGradient
+              colors={isDark ? ['#1E3A5F', '#2563EB'] : ['#3B82F6', '#1D4ED8']}
+              style={styles.headerGradient}
             >
-              <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.titleContainer}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>Créer un compte</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Rejoignez VQS pour la gestion des files d&apos;attente virtuelles{'\n'}
-              et le suivi des tickets en temps réel.
-            </Text>
-          </View>
-
-          <Animated.View
-            style={[
-              styles.formContainer,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-              },
-            ]}
-          >
-
-            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
-              <TextInput
-                style={[styles.input, { color: colors.textPrimary }]}
-                placeholder="Nom complet"
-                placeholderTextColor={colors.textTertiary}
-                value={formData.name}
-                onChangeText={(value) => handleInputChange('name', value)}
-                autoCapitalize="words"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-            </View>
-            {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
-
-            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
-              <TextInput
-                style={[styles.input, { color: colors.textPrimary }]}
-                placeholder="Email"
-                placeholderTextColor={colors.textTertiary}
-                value={formData.email}
-                onChangeText={(value) => handleInputChange('email', value)}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-            </View>
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-
-            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
-              <TextInput
-                style={[styles.input, { color: colors.textPrimary }]}
-                placeholder="Numéro de téléphone"
-                placeholderTextColor={colors.textTertiary}
-                value={formData.phone}
-                onChangeText={(value) => handleInputChange('phone', value)}
-                keyboardType="phone-pad"
-                autoCapitalize="none"
-                editable={!isLoading}
-              />
-            </View>
-            {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
-
-            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
-              <TextInput
-                style={[styles.input, { color: colors.textPrimary }]}
-                placeholder="Mot de passe"
-                placeholderTextColor={colors.textTertiary}
-                value={formData.password}
-                onChangeText={(value) => handleInputChange('password', value)}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                editable={!isLoading}
-              />
-              <TouchableOpacity
-                style={styles.eyeIcon}
-                onPress={() => setShowPassword(!showPassword)}
-                disabled={isLoading}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={colors.textTertiary}
-                />
+              <TouchableOpacity style={styles.backButton} onPress={handleGoToLogin}>
+                <Ionicons name="arrow-back" size={24} color="#FFF" />
               </TouchableOpacity>
-            </View>
-            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
-
-            <TouchableOpacity
-              style={styles.termsContainer}
-              onPress={() => setAgreedToTerms(!agreedToTerms)}
-              disabled={isLoading}
-            >
-              <View style={[
-                styles.checkbox,
-                { borderColor: colors.border },
-                agreedToTerms && [styles.checkboxChecked, { backgroundColor: colors.primary, borderColor: colors.primary }],
-              ]}>
-                {agreedToTerms && (
-                  <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                )}
+              <View style={styles.logoContainer}>
+                <Ionicons name="person-add-outline" size={48} color="#FFF" />
               </View>
-              <Text style={[styles.termsText, { color: colors.textSecondary }]}>
-                J&apos;accepte les <Text style={[styles.termsLink, { color: colors.primary }]}>Conditions d&apos;utilisation</Text> et la{' '}
-                <Text style={[styles.termsLink, { color: colors.primary }]}>Politique de confidentialité</Text>
-              </Text>
-            </TouchableOpacity>
+              <Text style={styles.logoText}>Inscription</Text>
+              <Text style={styles.tagline}>Créez votre compte gratuitement</Text>
+            </LinearGradient>
+          </Animated.View>
 
-            {errors.general && <Text style={styles.errorText}>{errors.general}</Text>}
+          {/* Formulaire */}
+          <Animated.View style={[styles.formContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <Text style={[styles.formTitle, { color: colors.textPrimary }]}>Informations</Text>
+            <Text style={[styles.formSubtitle, { color: colors.textSecondary }]}>Remplissez vos coordonnées</Text>
+
+            <CustomInput
+              icon="person-outline"
+              placeholder="Nom complet"
+              value={formData.name}
+              onChangeText={(text) => handleInputChange('name', text)}
+              autoCapitalize="words"
+              error={errors.name}
+              colors={colors}
+            />
+
+            <CustomInput
+              icon="mail-outline"
+              placeholder="Adresse email"
+              value={formData.email}
+              onChangeText={(text) => handleInputChange('email', text)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+              colors={colors}
+            />
+
+            <CustomInput
+              icon="call-outline"
+              placeholder="Téléphone (optionnel)"
+              value={formData.phone}
+              onChangeText={(text) => handleInputChange('phone', text)}
+              keyboardType="phone-pad"
+              error={errors.phone}
+              colors={colors}
+            />
+
+            <CustomInput
+              icon="lock-closed-outline"
+              placeholder="Mot de passe"
+              value={formData.password}
+              onChangeText={(text) => handleInputChange('password', text)}
+              secureTextEntry={!showPassword}
+              error={errors.password}
+              colors={colors}
+              onToggleSecure={() => setShowPassword(!showPassword)}
+              showSecure={showPassword}
+            />
+
+            <Checkbox
+              checked={agreedToTerms}
+              onPress={() => setAgreedToTerms(!agreedToTerms)}
+              label="J'accepte les conditions d'utilisation"
+              colors={colors}
+            />
+
+            {errors.general && (
+              <View style={[styles.errorContainer, { backgroundColor: colors.danger + '10' }]}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+                <Text style={[styles.errorContainerText, { color: colors.danger }]}>{errors.general}</Text>
+              </View>
+            )}
 
             {error && (
-              <View style={[styles.errorContainer, { backgroundColor: isDark ? '#451a1a' : '#FEF2F2' }]}>
+              <View style={[styles.errorContainer, { backgroundColor: colors.danger + '10' }]}>
                 <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
                 <Text style={[styles.errorContainerText, { color: colors.danger }]}>{error}</Text>
               </View>
             )}
 
             <TouchableOpacity
-              style={[styles.createButton, { backgroundColor: colors.primary }, isLoading && styles.createButtonDisabled]}
+              style={[styles.registerButton, { backgroundColor: colors.primary }, (isLoading || googleLoading) && styles.disabledButton]}
               onPress={handleSubmit}
-              disabled={isLoading}
+              disabled={isLoading || googleLoading}
               activeOpacity={0.8}
             >
               {isLoading ? (
-                <Text style={styles.createButtonText}>Création...</Text>
+                <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                <Text style={styles.createButtonText}>Créer un compte</Text>
+                <Text style={styles.registerButtonText}>S'inscrire</Text>
               )}
             </TouchableOpacity>
 
-            <View style={styles.dividerContainer}>
+            <View style={styles.divider}>
               <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>Ou s&apos;inscrire avec</Text>
+              <Text style={[styles.dividerText, { color: colors.textTertiary }]}>ou</Text>
               <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
             </View>
 
-            <TouchableOpacity
-              style={[styles.googleButton, { backgroundColor: colors.surface, borderColor: colors.border }, googleLoading && styles.googleButtonLoading]}
+            <SocialButton
+              icon="logo-google"
+              label="S'inscrire avec Google"
               onPress={handleGoogleRegisterPress}
-              activeOpacity={0.8}
-              disabled={googleLoading || isLoading}
-            >
-              {googleLoading ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <>
-                  <View style={styles.googleIconContainer}>
-                    <Ionicons name="logo-google" size={18} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.googleButtonText, { color: colors.textPrimary }]}>S&apos;inscrire avec Google</Text>
-                </>
-              )}
-            </TouchableOpacity>
+              loading={googleLoading}
+              colors={colors}
+            />
 
             <View style={styles.loginContainer}>
-              <Text style={[styles.loginText, { color: colors.textSecondary }]}>Vous avez déjà un compte ? </Text>
-              <TouchableOpacity onPress={handleGoToLogin} disabled={isLoading}>
+              <Text style={[styles.loginText, { color: colors.textSecondary }]}>Déjà inscrit ? </Text>
+              <TouchableOpacity onPress={handleGoToLogin}>
                 <Text style={[styles.loginLink, { color: colors.primary }]}>Se connecter</Text>
               </TouchableOpacity>
             </View>
-
           </Animated.View>
 
           {AlertComponent}
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
 
-// Styles
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
+  container: { flex: 1 },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
+  
+  headerContainer: { marginBottom: -20, zIndex: 1 },
+  headerGradient: {
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 50,
     paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 10,
+    alignItems: 'center',
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
   },
   backButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30,
+    left: 20,
     width: 40,
     height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  titleContainer: {
-    marginBottom: 32,
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
-  title: {
+  logoText: {
     fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 1,
     marginBottom: 8,
   },
-  subtitle: {
+  tagline: {
     fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 20,
+    color: 'rgba(255,255,255,0.85)',
   },
+  
   formContainer: {
-    width: '100%',
+    flex: 1,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 40,
   },
+  formTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  formSubtitle: {
+    fontSize: 14,
+    marginBottom: 32,
+  },
+  
+  inputContainer: { marginBottom: 8 },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: '#F9FAFB',
-    height: 52,
+    height: 54,
   },
+  inputIcon: { marginRight: 12 },
   input: {
     flex: 1,
-    fontSize: 16,
-    color: '#111827',
+    fontSize: 15,
     height: '100%',
   },
-  eyeIcon: {
-    padding: 4,
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: -12,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-  termsContainer: {
+  eyeButton: { padding: 4 },
+  errorText: { fontSize: 11, marginTop: 4, marginLeft: 4 },
+  
+  checkboxContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 24,
-    marginTop: 8,
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 20,
   },
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    justifyContent: 'center',
+    borderRadius: 5,
+    borderWidth: 1.5,
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
-    marginTop: 2,
   },
-  checkboxChecked: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-  termsText: {
+  checkboxLabel: {
+    fontSize: 13,
     flex: 1,
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 20,
   },
-  termsLink: {
-    color: '#2563EB',
-    fontWeight: '500',
-  },
+  
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    gap: 8,
   },
-  errorContainerText: {
-    fontSize: 14,
-    color: '#EF4444',
-    marginLeft: 8,
-    flex: 1,
-  },
-  createButton: {
-    backgroundColor: '#60A5FA',
-    borderRadius: 25,
-    height: 52,
+  errorContainerText: { fontSize: 13, flex: 1 },
+  
+  registerButton: {
+    borderRadius: 14,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  createButtonDisabled: {
-    opacity: 0.7,
-  },
-  createButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  dividerContainer: {
+  disabledButton: { opacity: 0.7 },
+  registerButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  
+  divider: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 24,
+    gap: 12,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  dividerText: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginHorizontal: 12,
-  },
-  googleButton: {
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { fontSize: 13 },
+  
+  socialButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 25,
-    height: 48,
-    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    height: 54,
+    gap: 12,
     marginBottom: 24,
   },
-  googleButtonLoading: {
-    opacity: 0.7,
-  },
-  googleIconContainer: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  googleButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-  },
+  socialButtonText: { fontSize: 15, fontWeight: '500' },
+  
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loginText: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  loginLink: {
-    fontSize: 14,
-    color: '#2563EB',
-    fontWeight: '600',
-  },
+  loginText: { fontSize: 14 },
+  loginLink: { fontSize: 14, fontWeight: '700' },
 });
 
 export default RegisterScreen;
