@@ -9,6 +9,7 @@ use App\Events\ServiceStatsUpdated;
 use App\Events\ServiceTicketCalled;
 use App\Events\ServiceTicketAbsent;
 use App\Events\ServiceTicketEnqueued;
+use App\Events\TicketLifecycle\TicketCreated as TicketLifecycleCreated;
 use App\Jobs\SendPushNotification;
 use App\Jobs\SendSmsNotification;
 use App\Models\Service;
@@ -24,8 +25,10 @@ class TicketService
 {
     private const ACTIVE_STATUSES = ['waiting','called','en_route','present','absent'];
 
-    public function __construct(private readonly ?ServiceAvailabilityService $availability = null)
-    {
+    public function __construct(
+        private readonly ?ServiceAvailabilityService $availability = null,
+        private readonly ?SmartQueueEngine $smartQueue = null,
+    ) {
     }
 
     private function availability(): ServiceAvailabilityService
@@ -33,20 +36,9 @@ class TicketService
         return $this->availability ?? app(ServiceAvailabilityService::class);
     }
 
-    /**
-     * Map a closed-reason code (from ServiceAvailabilityService) to a user-facing message.
-     */
-    private function unavailableMessageFor(?string $reason): string
+    private function smartQueue(): SmartQueueEngine
     {
-        return match ($reason) {
-            'manually_closed'         => 'Service is closed',
-            'holiday'                 => 'Service is closed for a public holiday',
-            'exceptional_closure'     => 'Service is exceptionally closed today',
-            'temporarily_unavailable' => 'Service is temporarily unavailable',
-            'day_off'                 => 'Service is closed on this day of the week',
-            'outside_hours'           => 'Service is closed outside business hours',
-            default                   => 'Service is unavailable at this time',
-        };
+        return $this->smartQueue ?? app(SmartQueueEngine::class);
     }
 
     /**
@@ -64,9 +56,12 @@ class TicketService
 
     public function recomputePositions(Service $service): void
     {
+        // Only re-rank today's active queue. Deferred tickets (valid_date in the future)
+        // keep their pre-set position and become active when the day flips.
         $waiting = Ticket::query()
             ->where('service_id', $service->id)
             ->where('status', 'waiting')
+            ->whereDate('valid_date', Carbon::today())
             ->orderBy('created_at')
             ->orderBy('id')
             ->get(['id', 'user_id', 'position', 'eta_minutes']);
@@ -129,17 +124,18 @@ class TicketService
                         ->lockForUpdate()
                         ->firstOrFail();
 
-            // Vérifier que le service est ouvert (statut + horaires + jours ouvrables + exceptions)
-            $reason = $this->availability()->reasonClosedAt($service, Carbon::now());
-            if ($reason !== null) {
-                abort(422, $this->unavailableMessageFor($reason));
-            }
+            // SmartQueueEngine: décide entre file active du jour ou file différée.
+            // Aborte si le service est manuellement fermé (override admin).
+            $placement = $this->smartQueue()->decidePlacement($service, Carbon::now());
+            $isDeferred = $placement['mode'] === 'deferred';
+            $targetDate = $placement['valid_date'];
 
-            // Vérifier la capacité max de la file (si définie)
+            // Capacité: appliquée uniquement à la file active du jour cible.
             if (!is_null($service->capacity)) {
                 $waitingCount = Ticket::query()
                     ->where('service_id', $serviceId)
                     ->where('status', 'waiting')
+                    ->whereDate('valid_date', $targetDate)
                     ->count();
                 if ($waitingCount >= (int) $service->capacity) {
                     abort(422, 'Service queue is full');
@@ -156,24 +152,25 @@ class TicketService
                 abort(422, 'You already have an active ticket for this service');
             }
 
-            // Génération d'un numéro lisible (jour + incrément local au service)
+            // Génération d'un numéro lisible (jour cible + incrément local au service)
             $prefix = strtoupper(substr($service->name, 0, 1));
-            $today = Carbon::now()->format('Ymd');
+            $targetDateKey = str_replace('-', '', $targetDate);
             $last = Ticket::query()
                 ->where('service_id', $serviceId)
-                ->whereDate('created_at', Carbon::today())
+                ->whereDate('valid_date', $targetDate)
                 ->orderByDesc('id')
                 ->value('number');
             $seq = 1;
-            if ($last && preg_match('/^[A-Z]-(\d+)-'.$today.'$/', $last, $m)) {
+            if ($last && preg_match('/^[A-Z]-(\d+)-'.$targetDateKey.'$/', $last, $m)) {
                 $seq = ((int) $m[1]) + 1;
             }
-            $number = sprintf('%s-%03d-%s', $prefix, $seq, $today);
+            $number = sprintf('%s-%03d-%s', $prefix, $seq, $targetDateKey);
 
-            // Position = nombre de waiting actuelle + 1
+            // Position = rang dans la file du jour cible
             $position = Ticket::query()
                 ->where('service_id', $serviceId)
                 ->where('status', 'waiting')
+                ->whereDate('valid_date', $targetDate)
                 ->count() + 1;
 
                     $ticket = Ticket::create([
@@ -184,13 +181,15 @@ class TicketService
                         'priority' => 'normal',
                         'position' => $position,
                         'source' => 'app',
-                        'valid_date' => Carbon::today()->toDateString(),
+                        'valid_date' => $targetDate,
+                        'auto_deferred' => $isDeferred,
+                        'defer_reason' => $placement['reason'],
                         'last_distance_m' => $this->estimateDistanceMeters($lat, $lng, $service),
                         'last_seen_at' => Carbon::now(),
                     ]);
 
-            // Calculate initial ETA and persist it
-            $eta = $this->estimateWaitTime($service, $ticket);
+            // ETA only meaningful for today's active queue. Deferred tickets show as "reported".
+            $eta = $isDeferred ? null : $this->estimateWaitTime($service, $ticket);
             $ticket->update(['eta_minutes' => $eta]);
 
             // Broadcast mise à jour initiale
@@ -210,20 +209,30 @@ class TicketService
             ])));
 
             // Diffusion sur le canal de présence du service: nouveau ticket en file
-            $this->broadcastSafely(fn() => event(new ServiceTicketEnqueued($service->id, [
-                'service_id' => $service->id,
-                'ticket_id' => $ticket->id,
-                'ticket_number' => $ticket->number,
-                'priority' => $ticket->priority,
-                'ticket' => [
-                    'id' => $ticket->id,
-                    'number' => $ticket->number,
+            // (uniquement pour les tickets actifs du jour; les différés ne modifient pas la file en cours)
+            if (!$isDeferred) {
+                $this->broadcastSafely(fn() => event(new ServiceTicketEnqueued($service->id, [
+                    'service_id' => $service->id,
+                    'ticket_id' => $ticket->id,
+                    'ticket_number' => $ticket->number,
                     'priority' => $ticket->priority,
-                ]
-            ])));
+                    'ticket' => [
+                        'id' => $ticket->id,
+                        'number' => $ticket->number,
+                        'priority' => $ticket->priority,
+                    ]
+                ])));
 
-            // Mise à jour des stats de file
-            $this->recomputePositions($service);
+                // Mise à jour des stats de file actives
+                $this->recomputePositions($service);
+            }
+
+            // Événement de cycle de vie → listener envoie une notification adaptée
+            event(new TicketLifecycleCreated(
+                ticketId: $ticket->id,
+                isDeferred: $isDeferred,
+                deferReason: $placement['reason'],
+            ));
 
                     return $ticket->fresh(['service.establishment']);
                 });
@@ -254,30 +263,30 @@ class TicketService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // Vérifier que le service est ouvert (statut + horaires + jours ouvrables + exceptions)
-            $reason = $this->availability()->reasonClosedAt($service, Carbon::now());
-            if ($reason !== null) {
-                abort(422, $this->unavailableMessageFor($reason));
-            }
+            // SmartQueueEngine: décide entre file active du jour ou file différée.
+            $placement = $this->smartQueue()->decidePlacement($service, Carbon::now());
+            $isDeferred = $placement['mode'] === 'deferred';
+            $targetDate = $placement['valid_date'];
 
-            // Génération d'un numéro lisible
+            // Génération d'un numéro lisible (jour cible)
             $prefix = strtoupper(substr($service->name, 0, 1));
-            $today = Carbon::now()->format('Ymd');
+            $targetDateKey = str_replace('-', '', $targetDate);
             $last = Ticket::query()
                 ->where('service_id', $service->id)
-                ->whereDate('created_at', Carbon::today())
+                ->whereDate('valid_date', $targetDate)
                 ->orderByDesc('id')
                 ->value('number');
             $seq = 1;
-            if ($last && preg_match('/^[A-Z]-(\d+)-'.$today.'$/', $last, $m)) {
+            if ($last && preg_match('/^[A-Z]-(\d+)-'.$targetDateKey.'$/', $last, $m)) {
                 $seq = ((int) $m[1]) + 1;
             }
-            $number = sprintf('%s-%03d-%s', $prefix, $seq, $today);
+            $number = sprintf('%s-%03d-%s', $prefix, $seq, $targetDateKey);
 
-            // Position = nombre de waiting actuelle + 1
+            // Position = rang dans la file du jour cible
             $position = Ticket::query()
                 ->where('service_id', $service->id)
                 ->where('status', 'waiting')
+                ->whereDate('valid_date', $targetDate)
                 ->count() + 1;
 
             $ticket = Ticket::create([
@@ -288,12 +297,14 @@ class TicketService
                 'priority' => $user->priority ?? 'normal',
                 'position' => $position,
                 'source' => 'qr_scan',
-                'valid_date' => Carbon::today()->toDateString(),
+                'valid_date' => $targetDate,
+                'auto_deferred' => $isDeferred,
+                'defer_reason' => $placement['reason'],
                 'last_seen_at' => Carbon::now(),
             ]);
 
-            // Calculate initial ETA and persist it
-            $eta = $this->estimateWaitTime($service, $ticket);
+            // ETA only meaningful for today's active queue.
+            $eta = $isDeferred ? null : $this->estimateWaitTime($service, $ticket);
             $ticket->update(['eta_minutes' => $eta]);
 
             // Broadcast mise à jour initiale
@@ -312,20 +323,29 @@ class TicketService
                 'eta_minutes' => $eta,
             ])));
 
-            // Diffusion sur le canal de présence du service
-            $this->broadcastSafely(fn() => event(new ServiceTicketEnqueued($service->id, [
-                'service_id' => $service->id,
-                'ticket_id' => $ticket->id,
-                'ticket_number' => $ticket->number,
-                'priority' => $ticket->priority,
-                'ticket' => [
-                    'id' => $ticket->id,
-                    'number' => $ticket->number,
+            // Diffusion sur le canal de présence du service (uniquement pour les tickets actifs du jour)
+            if (!$isDeferred) {
+                $this->broadcastSafely(fn() => event(new ServiceTicketEnqueued($service->id, [
+                    'service_id' => $service->id,
+                    'ticket_id' => $ticket->id,
+                    'ticket_number' => $ticket->number,
                     'priority' => $ticket->priority,
-                ]
-            ])));
+                    'ticket' => [
+                        'id' => $ticket->id,
+                        'number' => $ticket->number,
+                        'priority' => $ticket->priority,
+                    ]
+                ])));
 
-            $this->recomputePositions($service);
+                $this->recomputePositions($service);
+            }
+
+            // Événement de cycle de vie → listener envoie une notification adaptée
+            event(new TicketLifecycleCreated(
+                ticketId: $ticket->id,
+                isDeferred: $isDeferred,
+                deferReason: $placement['reason'],
+            ));
 
             return $ticket->fresh(['service.establishment']);
         });

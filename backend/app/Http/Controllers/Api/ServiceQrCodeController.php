@@ -118,16 +118,14 @@ class ServiceQrCodeController extends Controller
             ], 404);
         }
 
-        // Vérifier si la file est disponible (statut + horaires + jours ouvrables + exceptions)
-        $availability = app(ServiceAvailabilityService::class);
-        $reason = $availability->reasonClosedAt($service, Carbon::now());
-        if ($reason !== null) {
+        // La décision (active vs différée) est faite par SmartQueueEngine dans
+        // TicketService::createForQrScan. Seul un service manuellement fermé est rejeté
+        // en amont — sinon on laisse l'engine router automatiquement le ticket.
+        if ($service->status !== 'open') {
             return response()->json([
                 'message' => 'La file d\'attente est actuellement fermée',
                 'service_name' => $service->name,
                 'service_status' => $service->status,
-                'reason' => $reason,
-                'availability' => $availability->snapshot($service),
             ], 400);
         }
 

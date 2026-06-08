@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\TicketResource;
 use App\Models\Service;
 use App\Models\ServiceException;
+use App\Models\Ticket;
 use App\Services\ServiceAvailabilityService;
+use App\Services\SmartQueueEngine;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -20,8 +23,10 @@ use Illuminate\Support\Facades\DB;
  */
 class ServiceScheduleController extends Controller
 {
-    public function __construct(private readonly ServiceAvailabilityService $availability)
-    {
+    public function __construct(
+        private readonly ServiceAvailabilityService $availability,
+        private readonly SmartQueueEngine $smartQueue,
+    ) {
     }
 
     /**
@@ -71,6 +76,7 @@ class ServiceScheduleController extends Controller
                     'recurring_yearly' => (bool) $e->recurring_yearly,
                 ])->values(),
                 'availability' => $this->availability->snapshot($service),
+                'capacity' => $this->smartQueue->loadSnapshot($service),
             ],
         ]);
     }
@@ -213,5 +219,40 @@ class ServiceScheduleController extends Controller
         $exception = ServiceException::where('service_id', $service->id)->findOrFail($exceptionId);
         $exception->delete();
         return response()->json(['message' => 'Deleted']);
+    }
+
+    /**
+     * GET /api/admin/services/{service}/deferred-queue
+     * Returns tickets auto-deferred by the SmartQueueEngine, grouped by target date.
+     * Useful to give the admin/agent visibility on what's already booked for upcoming days.
+     */
+    public function deferredQueue(Request $request, int $serviceId)
+    {
+        $service = $this->findScopedService($request, $serviceId);
+
+        $tickets = Ticket::query()
+            ->where('service_id', $service->id)
+            ->where('auto_deferred', true)
+            ->where('status', 'waiting')
+            ->whereDate('valid_date', '>=', now()->toDateString())
+            ->orderBy('valid_date')
+            ->orderBy('position')
+            ->orderBy('created_at')
+            ->with(['service.establishment', 'user'])
+            ->get();
+
+        $byDate = $tickets->groupBy(fn ($t) => $t->valid_date?->toDateString())
+            ->map(fn ($group, $date) => [
+                'date' => $date,
+                'count' => $group->count(),
+                'tickets' => TicketResource::collection($group)->resolve(),
+            ])
+            ->values();
+
+        return response()->json([
+            'service_id' => $service->id,
+            'total' => $tickets->count(),
+            'days' => $byDate,
+        ]);
     }
 }

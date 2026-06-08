@@ -17,6 +17,7 @@ class Ticket extends Model
         'original_called_at', 'grace_period_expires_at',
         'source', 'valid_date',
         'eta_minutes', 'last_lat', 'last_lng',
+        'auto_deferred', 'defer_reason',
     ];
 
     // Casting automatique des dates/horaires
@@ -35,6 +36,7 @@ class Ticket extends Model
         'original_called_at' => 'datetime',
         'grace_period_expires_at' => 'datetime',
         'valid_date' => 'date',
+        'auto_deferred' => 'boolean',
     ];
 
     // Relation vers l'utilisateur détenteur du ticket

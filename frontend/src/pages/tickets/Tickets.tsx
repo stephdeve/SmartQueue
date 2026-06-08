@@ -73,6 +73,10 @@ type TicketData = {
   absent_at: string | null
   created_at: string
   updated_at: string
+  // Smart queue: ticket auto-reporté vers un jour ouvrable ultérieur
+  auto_deferred?: boolean
+  defer_reason?: string | null
+  valid_date?: string | null
 }
 
 type ServiceStats = {
@@ -559,9 +563,19 @@ export default function TicketsPage() {
                               {serviceTickets.map(ticket => (
                                 <tr key={ticket.id} className="hover:bg-muted/30 transition-colors">
                                   <td className="px-4 py-3">
-                                    <span className="font-semibold text-foreground">
-                                      {ticket.number}
-                                    </span>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-semibold text-foreground">
+                                        {ticket.number}
+                                      </span>
+                                      {ticket.auto_deferred && ticket.valid_date && (
+                                        <span
+                                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+                                          title={ticket.defer_reason ?? undefined}
+                                        >
+                                          Reporté au {new Date(ticket.valid_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="px-4 py-3">
                                     {getStatusBadge(ticket.status)}

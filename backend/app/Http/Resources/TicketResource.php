@@ -26,9 +26,11 @@ class TicketResource extends JsonResource
             $eta = ($avg !== null && $pos !== null) ? (int) max(0, ($pos - 1) * $avg) : null;
         }
 
+        // Compte la file du *jour cible* du ticket (today pour un actif, jour futur pour un différé)
         $waitingCount = Ticket::query()
             ->where('service_id', $this->service_id)
             ->where('status', 'waiting')
+            ->whereDate('valid_date', $this->valid_date ?? now()->toDateString())
             ->count();
 
         // Cohérence métier :
@@ -47,6 +49,10 @@ class TicketResource extends JsonResource
             'position' => $this->position,
             'queue_length' => $queueLength,
             'eta_minutes' => $eta,
+            // Smart queue: ticket auto-reporté à un jour ouvrable ultérieur
+            'auto_deferred' => (bool) $this->auto_deferred,
+            'defer_reason' => $this->defer_reason,
+            'valid_date' => $this->valid_date?->toDateString(),
             'called_at' => $this->called_at,
             'closed_at' => $this->closed_at,
             'present_at' => $this->present_at,

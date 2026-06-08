@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Service;
 use App\Http\Resources\ServiceResource;
 use App\Services\ServiceAvailabilityService;
+use App\Services\SmartQueueEngine;
 use Illuminate\Support\Facades\DB;
 
 class ServiceController extends Controller
@@ -194,7 +195,7 @@ class ServiceController extends Controller
      * Disponibilité publique du service (basée sur la configuration backend).
      * Source unique de vérité — utilisée par le mobile/web pour informer l'usager.
      */
-    public function availability(int $id, ServiceAvailabilityService $availability)
+    public function availability(int $id, ServiceAvailabilityService $availability, SmartQueueEngine $smartQueue)
     {
         $service = Service::with(['workingDays','exceptions'])->findOrFail($id);
         return response()->json([
@@ -202,6 +203,7 @@ class ServiceController extends Controller
             'status' => $service->status,
             'avg_service_time_minutes' => (int) $service->avg_service_time_minutes,
             'availability' => $availability->snapshot($service),
+            'capacity' => $smartQueue->loadSnapshot($service),
         ]);
     }
 }

@@ -162,6 +162,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('services/{service}/exceptions', [AdminServiceScheduleController::class, 'storeException']);
         Route::put('services/{service}/exceptions/{exception}', [AdminServiceScheduleController::class, 'updateException']);
         Route::delete('services/{service}/exceptions/{exception}', [AdminServiceScheduleController::class, 'destroyException']);
+        Route::get('services/{service}/deferred-queue', [AdminServiceScheduleController::class, 'deferredQueue']);
 
         // QR Code management for services
         Route::post('services/{service}/qr-code', [ServiceQrCodeController::class, 'generate']);
