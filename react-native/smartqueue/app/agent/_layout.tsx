@@ -68,7 +68,7 @@ export default function AgentTabLayout() {
             }}>
               <Ionicons 
                 name={focused ? 'home' : 'home-outline'} 
-                size={22} 
+                size={20} 
                 color={focused ? '#FFFFFF' : color} 
               />
             </View>
@@ -93,7 +93,7 @@ export default function AgentTabLayout() {
             }}>
               <Ionicons 
                 name={focused ? 'list' : 'list-outline'} 
-                size={22} 
+                size={20} 
                 color={focused ? '#FFFFFF' : color} 
               />
             </View>
@@ -118,7 +118,7 @@ export default function AgentTabLayout() {
             }}>
               <Ionicons 
                 name={focused ? 'megaphone' : 'megaphone-outline'} 
-                size={22} 
+                size={20} 
                 color={focused ? '#FFFFFF' : color} 
               />
             </View>
@@ -143,7 +143,7 @@ export default function AgentTabLayout() {
             }}>
               <Ionicons 
                 name={focused ? 'person' : 'person-outline'} 
-                size={22} 
+                size={20} 
                 color={focused ? '#FFFFFF' : color} 
               />
             </View>

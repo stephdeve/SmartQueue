@@ -104,7 +104,7 @@ export default function TabLayout() {
                 >
                   <Ionicons
                     name="map-outline"
-                    size={22}
+                    size={20}
                     color={focused ? "#FFFFFF" : color}
                   />
                 </View>
@@ -129,7 +129,7 @@ export default function TabLayout() {
                 >
                   <Ionicons
                     name="qr-code-outline"
-                    size={22}
+                    size={20}
                     color={focused ? "#FFFFFF" : color}
                   />
                 </View>
@@ -154,7 +154,7 @@ export default function TabLayout() {
                 >
                   <Ionicons
                     name="ticket-outline"
-                    size={22}
+                    size={20}
                     color={focused ? "#FFFFFF" : color}
                   />
                 </View>
@@ -179,7 +179,7 @@ export default function TabLayout() {
                 >
                   <Ionicons
                     name="time-outline"
-                    size={22}
+                    size={20}
                     color={focused ? "#FFFFFF" : color}
                   />
                 </View>
@@ -204,7 +204,7 @@ export default function TabLayout() {
                 >
                   <Ionicons
                     name="person-outline"
-                    size={22}
+                    size={20}
                     color={focused ? "#FFFFFF" : color}
                   />
                 </View>

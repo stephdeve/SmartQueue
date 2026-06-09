@@ -648,18 +648,20 @@ const styles = StyleSheet.create({
   destMarker: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FFF" },
 
   // Section Établissements
-  establishmentsSection: { flex: 1 },
+  establishmentsSection: { flex: 1 ,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,elevation:4,},
   sectionHeader: { 
     flexDirection: "row", 
     justifyContent: "space-between", 
     alignItems: "center", 
     paddingHorizontal: 16, 
     paddingVertical: 12, 
-    borderBottomWidth: 1,
+    borderBottomWidth: 0.3,
     // Pas de backgroundColor spécifié, il hérite de celui du parent via colors.background
   },
   sectionTitle: { fontSize: 17, fontWeight: "700" as const },
-  sectionActions: { flexDirection: "row", gap: 8 },
+  sectionActions: { flexDirection: "row", gap: 8, },
   refreshBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   sortBtn: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 },
   sortBtnText: { color: "#FFF", fontSize: 11, fontWeight: "600" },
