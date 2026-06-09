@@ -368,7 +368,7 @@ const TabButton = ({ label, active, onPress, colors }: any) => (
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1 , paddingBottom:100 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 55, paddingBottom: 12, borderBottomWidth: 1 },
   backButton: { padding: 6, width: 36 },
   headerContent: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
   tab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   tabText: { fontSize: 13, fontWeight: '600' },
   content: { flex: 1, padding: 16 },
-  tabContent: { gap: 16 },
+  tabContent: { gap: 16, paddingBottom:100 },
   
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statCard: { width: (width - 52) / 2, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center' },
