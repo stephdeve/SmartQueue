@@ -1,3 +1,4 @@
+// ActiveTicketCard.tsx - Version modifiée
 import React, { useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -17,10 +18,12 @@ import { useThemeColors } from "../hooks/useThemeColors";
 import { formatDistance, formatTravelTime } from "../utils/distance";
 import axiosClient from "../api/axiosClient";
 import { getApiErrorMessage } from "../utils/errors";
+import type { Ticket } from "../api/ticketsApi";
 
 const { width } = Dimensions.get("window");
 
 interface ActiveTicketCardProps {
+  ticket?: Ticket;  // <-- NOUVEAU: ticket optionnel passé en prop
   onPress?: () => void;
   onCancel?: () => void;
   onConfirmPresence?: () => void;
@@ -28,6 +31,7 @@ interface ActiveTicketCardProps {
 }
 
 export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
+  ticket: propTicket,  // <-- Renommer pour éviter confusion
   onPress,
   onCancel,
   onConfirmPresence,
@@ -35,7 +39,22 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
 }) => {
   const colors = useThemeColors();
 
-  const { activeTicket, position, etaMinutes, isCalled, cancelTicket } = useTicket();
+  // Récupérer le ticket du store comme fallback
+  const { 
+    activeTicket: storeTicket, 
+    position: storePosition, 
+    etaMinutes: storeEtaMinutes, 
+    isCalled, 
+    cancelTicket 
+  } = useTicket();
+  
+  // Utiliser le ticket passé en prop, sinon celui du store
+  const activeTicket = propTicket || storeTicket;
+  
+  // Pour la position/ETA, on utilise celles du ticket si dispo, sinon celles du store
+  const position = activeTicket?.position ?? storePosition;
+  const etaMinutes = activeTicket?.eta_minutes ?? storeEtaMinutes;
+
   const { marginMinutes, preferredTransportMode } = useAlertPreferencesStore();
   const { AlertComponent, showWarning, showError, showSuccess } = useCustomAlert();
 
@@ -49,9 +68,9 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
   const { distanceInfo } = useDistanceTracking({
     targetCoordinates: hasValidCoordinates
       ? {
-          latitude: (activeTicket.establishment as any).lat,
-          longitude: (activeTicket.establishment as any).lng,
-        }
+        latitude: (activeTicket.establishment as any).lat,
+        longitude: (activeTicket.establishment as any).lng,
+      }
       : null,
     enabled: hasValidCoordinates,
   });
@@ -303,8 +322,8 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
                 Délai de priorité : {graceRemainingText || "Expiré"}
               </Text>
             </View>
-            <TouchableOpacity 
-              style={[styles.presentButton, { backgroundColor: colors.primary + "15", marginTop: 10 }]} 
+            <TouchableOpacity
+              style={[styles.presentButton, { backgroundColor: colors.primary + "15", marginTop: 10 }]}
               onPress={handleMarkPresent}
               activeOpacity={0.8}
             >
@@ -348,6 +367,14 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
           </View>
         )}
       </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.followBtn, { backgroundColor: colors.primary }]}
+        onPress={onPress}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="eye-outline" size={14} color="#FFF" />
+        <Text style={styles.followBtnText}>Suivre ce ticket</Text>
+      </TouchableOpacity>
       {AlertComponent}
     </>
   );
@@ -359,7 +386,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     marginBottom: 12,
-    marginTop:18,
+    marginTop: 18,
   },
   containerCompact: {
     padding: 14,
@@ -404,7 +431,7 @@ const styles = StyleSheet.create({
   ticketRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent:"space-between",
+    justifyContent: "space-between",
     gap: 12,
     marginBottom: 12,
   },
@@ -419,7 +446,7 @@ const styles = StyleSheet.create({
     color: "#FFF",
   },
   serviceInfo: {
-   maxWidth: "70%",
+    maxWidth: "70%",
     flexShrink: 1,
   },
   serviceName: {
@@ -578,6 +605,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
+  followBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9, borderRadius: 10 },
+  followBtnText: { color: "#FFF", fontSize: 13, fontWeight: "600" },
 });
 
 export default ActiveTicketCard;

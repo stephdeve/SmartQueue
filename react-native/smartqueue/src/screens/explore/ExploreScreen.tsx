@@ -39,6 +39,7 @@ import useExploreCacheStore, {
 } from "../../store/exploreCacheStore";
 import { useUnreadNotifications } from "../../hooks/useUnreadNotifications";
 import { CustomActionSheet } from "../../components/ui/CustomActionSheet";
+import {ActiveTicketCard} from "../../components/ActiveTicketCard";
 
 const { width, height } = Dimensions.get("window");
 
@@ -53,17 +54,17 @@ const TicketCarouselCard: React.FC<{
 }> = ({ ticket, colors, onPress }) => {
   const getStatusConfig = () => {
     switch (ticket.status) {
-      case "called":   return { label: "Appelé !",   color: colors.danger,   icon: "notifications" };
-      case "present":  return { label: "Présent",    color: colors.success,  icon: "checkmark-circle" };
-      case "en_route": return { label: "En route",   color: colors.warning,  icon: "walk" };
-      default:         return { label: "En attente", color: colors.primary,  icon: "time" };
+      case "called": return { label: "Appelé !", color: colors.danger, icon: "notifications" };
+      case "present": return { label: "Présent", color: colors.success, icon: "checkmark-circle" };
+      case "en_route": return { label: "En route", color: colors.warning, icon: "walk" };
+      default: return { label: "En attente", color: colors.primary, icon: "time" };
     }
   };
   const cfg = getStatusConfig();
   const queueInfo = ticket.status === "called" ? "Appelé"
     : ticket.status === "present" ? "Présent"
-    : ticket.status === "en_route" ? "En route"
-    : ticket.position ? `${ticket.position}e place` : "En attente";
+      : ticket.status === "en_route" ? "En route"
+        : ticket.position ? `${ticket.position}e place` : "En attente";
 
   return (
     <TouchableOpacity
@@ -210,6 +211,7 @@ const ActiveTicketBottomSheet: React.FC<{
                 offset: SNAP_INTERVAL * index,
                 index,
               })}
+              // Dans ActiveTicketBottomSheet, le renderItem devient :
               renderItem={({ item, index }) => (
                 <View
                   key={item.id}
@@ -218,9 +220,9 @@ const ActiveTicketBottomSheet: React.FC<{
                     marginRight: index === tickets.length - 1 ? 0 : 8,
                   }}
                 >
-                  <TicketCarouselCard
-                    ticket={item}
-                    colors={colors}
+                  <ActiveTicketCard
+                    ticket={item}  // <-- PASSER LE TICKET EN PROP
+                    compact={true}
                     onPress={() => {
                       onClose();
                       router.push({ pathname: "/(tabs)/live-ticket", params: { ticketId: String(item.id) } });
