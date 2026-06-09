@@ -81,7 +81,7 @@ const ProgressCard: React.FC<{
   );
 };
 
-// Carte de ticket secondaire compacte
+// Carte de ticket secondaire compacte - CORRIGÉE
 const TicketCard: React.FC<{
   ticket: Ticket;
   colors: any;
@@ -103,13 +103,15 @@ const TicketCard: React.FC<{
     >
       <View style={styles.ticketCardLeft}>
         <View style={[styles.ticketNumberBadge, { backgroundColor: colors.primary + "15" }]}>
-          <Text style={[styles.ticketNumber, { color: colors.primary }]}>{ticket.number}</Text>
+          <Text style={[styles.ticketNumber, { color: colors.primary }]} numberOfLines={1}>
+            {ticket.number}
+          </Text>
         </View>
         <View style={styles.ticketDetails}>
           <Text style={[styles.ticketService, { color: colors.textPrimary }]} numberOfLines={1}>
             {ticket.service?.name || "Service"}
           </Text>
-          <Text style={[styles.ticketQueueInfo, { color: colors.textTertiary }]}>
+          <Text style={[styles.ticketQueueInfo, { color: colors.textTertiary }]} numberOfLines={1}>
             {getQueueInfo()}
           </Text>
         </View>
@@ -420,13 +422,45 @@ const styles = StyleSheet.create({
   sectionBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
   sectionBadgeText: { fontSize: 13, fontWeight: "700" },
   
-  ticketCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10 },
-  ticketCardLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  ticketNumberBadge: { width: 50, height: 50, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  ticketNumber: { fontSize: 16, fontWeight: "800" as any },
-  ticketDetails: { flex: 1 },
-  ticketService: { fontSize: 14, fontWeight: "600", marginBottom: 2 },
-  ticketQueueInfo: { fontSize: 11 },
+  ticketCard: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    borderWidth: 1, 
+    borderRadius: 14, 
+    padding: 12, 
+    marginBottom: 10 
+  },
+  ticketCardLeft: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 10, 
+    flex: 1 
+  },
+  ticketNumberBadge: { 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    borderRadius: 10, 
+    alignItems: "center", 
+    justifyContent: "center",
+    minWidth: 60
+  },
+  ticketNumber: { 
+    fontSize: 16, 
+    fontWeight: "800" as any,
+    textAlign: "center"
+  },
+  ticketDetails: { 
+    flex: 1 
+  },
+  ticketService: { 
+    fontSize: 14, 
+    fontWeight: "600", 
+    marginBottom: 2 
+  },
+  ticketQueueInfo: { 
+    fontSize: 11 
+  },
   
   statusBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, gap: 5 },
   statusBadgeText: { fontSize: 11, fontWeight: "700" },

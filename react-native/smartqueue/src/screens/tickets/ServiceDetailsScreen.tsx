@@ -28,6 +28,8 @@ import { useDistanceTracking } from "../../hooks/useDistanceTracking";
 import { useCustomAlert } from "../../hooks/useCustomAlert";
 import { formatDistance, formatTravelTime } from "../../utils/distance";
 import { getApiErrorMessage } from "../../utils/errors";
+import { CustomActionSheet } from "../../components/ui/CustomActionSheet";
+import { CustomAlert } from "../../components/ui/CustomAlert";
 
 const { width, height } = Dimensions.get("window");
 
@@ -38,11 +40,24 @@ interface ServiceData {
   status: string;
   avg_service_time_minutes: number;
   people_waiting: number;
+  opening_time?: string;
+  closing_time?: string;
 }
 
 interface EstablishmentData extends Omit<Establishment, "services"> {
   total_people_waiting?: number;
   services?: ServiceData[];
+  opening_time?: string;
+  closing_time?: string;
+}
+
+interface Option {
+  label: string;
+  value: string | number;
+  icon?: keyof typeof Ionicons.glyphMap;
+  description?: string;
+  section?: string;
+  type?: 'status' | 'hours' | 'day' | 'info';
 }
 
 // Composant Stat Card
@@ -151,6 +166,18 @@ const InfoRow: React.FC<{
   </TouchableOpacity>
 );
 
+// Fonction pour formater l'heure (ex: "08:00:00" -> "08:00")
+const formatTimeDisplay = (timeStr?: string | null): string => {
+  if (!timeStr) return "--:--";
+  return timeStr.substring(0, 5);
+};
+
+// Traduction des jours
+const getDayName = (dayOfWeek: number): string => {
+  const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+  return days[dayOfWeek - 1];
+};
+
 // Fonction pour calculer le temps en moto (environ 30% plus rapide que voiture)
 const getMotorcycleTime = (carMinutes: number): number => {
   return Math.round(carMinutes * 0.7);
@@ -166,7 +193,7 @@ export const ServiceDetailsScreen: React.FC = () => {
   const fromQr = params.fromQr === "true";
   const { isAuthenticated } = useAuth();
   const { hasActiveTicket, activeTicket, fetchActiveTicket, isInitialized } = useTicket();
-  const { AlertComponent, showError, showInfo, showWarning } = useCustomAlert();
+  const { AlertComponent, showError, showInfo, showWarning, showSuccess } = useCustomAlert();
   const { notifyTicketCreated, notifyCrowdLevelChange } = useSimpleNotification();
 
   const [establishment, setEstablishment] = useState<EstablishmentData | null>(null);
@@ -174,6 +201,9 @@ export const ServiceDetailsScreen: React.FC = () => {
   const [selectedServiceId, setSelectedServiceId] = useState<number | null>(serviceId || null);
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
+  const [showScheduleSheet, setShowScheduleSheet] = useState(false);
+  const [showConfirmAlert, setShowConfirmAlert] = useState(false);
+  const [selectedServiceForSchedule, setSelectedServiceForSchedule] = useState<ServiceData | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -225,7 +255,23 @@ export const ServiceDetailsScreen: React.FC = () => {
     loadData();
   }, [loadData]);
 
-  const handleJoinQueue = async () => {
+  // Récupérer le service sélectionné pour afficher ses horaires
+  useEffect(() => {
+    if (selectedServiceId) {
+      const service = services.find(s => s.id === selectedServiceId);
+      setSelectedServiceForSchedule(service || null);
+    }
+  }, [selectedServiceId, services]);
+
+  // Fonction pour rejoindre la file avec confirmation
+  const confirmJoinQueue = () => {
+    setShowConfirmAlert(true);
+  };
+
+  // Exécution réelle de la rejointe de file
+  const executeJoinQueue = async () => {
+    setShowConfirmAlert(false);
+    
     if (!isAuthenticated) {
       showInfo("Connexion requise", "Vous devez être connecté pour rejoindre une file.", "Se connecter", () => router.push("/onboarding"));
       return;
@@ -302,6 +348,122 @@ export const ServiceDetailsScreen: React.FC = () => {
     if (!distanceInfo?.travelTimes?.car) return null;
     const motorcycleMinutes = getMotorcycleTime(distanceInfo.travelTimes.car);
     return formatTravelTime(motorcycleMinutes);
+  };
+
+  // Construction des options pour l'action sheet des horaires (basé sur les données disponibles)
+  const getScheduleOptions = (): Option[] => {
+    const options: Option[] = [];
+    
+    const target = selectedServiceForSchedule || establishment;
+    if (!target) return [];
+    
+    // Section STATUT
+    const isOpen = target.status === "open";
+    options.push({
+      label: isOpen ? "Ouvert maintenant" : "Fermé maintenant",
+      value: 'status',
+      icon: isOpen ? 'checkmark-circle' : 'close-circle',
+      type: 'status',
+      section: 'status',
+    });
+    
+    // Section HORAIRES GÉNÉRAUX
+    const openingTime = (target as any).opening_time || (target as any).open_at;
+    const closingTime = (target as any).closing_time || (target as any).close_at;
+    
+    if (openingTime && closingTime) {
+      options.push({
+        label: `Horaires : ${formatTimeDisplay(openingTime)} - ${formatTimeDisplay(closingTime)}`,
+        value: 'hours',
+        icon: 'time-outline',
+        type: 'hours',
+        section: 'hours',
+      });
+    } else {
+      options.push({
+        label: "Horaires non définis",
+        value: 'hours',
+        icon: 'time-outline',
+        type: 'hours',
+        section: 'hours',
+      });
+    }
+    
+    // Temps de service moyen
+    if ((target as any).avg_service_time_minutes) {
+      options.push({
+        label: `Temps moyen : ~${(target as any).avg_service_time_minutes} min par ticket`,
+        value: 'avg_time',
+        icon: 'timer-outline',
+        type: 'hours',
+        section: 'hours',
+      });
+    }
+    
+    // Section INFORMATION FILE D'ATTENTE
+    if ((target as any).people_waiting !== undefined) {
+      options.push({
+        label: `${(target as any).people_waiting || 0} personne(s) en attente pour ce service`,
+        value: 'waiting',
+        icon: 'people-outline',
+        type: 'info',
+        section: 'info',
+      });
+    }
+    
+    if (establishment?.total_people_waiting !== undefined) {
+      options.push({
+        label: `${establishment.total_people_waiting || 0} personne(s) au total dans l'établissement`,
+        value: 'total_waiting',
+        icon: 'business-outline',
+        type: 'info',
+        section: 'info',
+      });
+    }
+    
+    // Section JOURS OUVRABLES
+    const weekDays = [
+      { day: 1, name: 'Lundi' },
+      { day: 2, name: 'Mardi' },
+      { day: 3, name: 'Mercredi' },
+      { day: 4, name: 'Jeudi' },
+      { day: 5, name: 'Vendredi' },
+      { day: 6, name: 'Samedi' },
+      { day: 7, name: 'Dimanche' },
+    ];
+    
+    weekDays.forEach(day => {
+      const isWeekend = day.day === 6 || day.day === 7;
+      const isOpenDay = !isWeekend;
+      
+      if (openingTime && closingTime && isOpenDay) {
+        options.push({
+          label: `${day.name} : ${formatTimeDisplay(openingTime)} - ${formatTimeDisplay(closingTime)}`,
+          value: `day_${day.day}`,
+          icon: 'calendar-outline',
+          type: 'day',
+          section: 'days',
+        });
+      } else if (isOpenDay) {
+        options.push({
+          label: `${day.name} : Ouvert`,
+          value: `day_${day.day}`,
+          icon: 'checkmark-circle-outline',
+          type: 'day',
+          section: 'days',
+        });
+      } else {
+        options.push({
+          label: `${day.name} : Fermé`,
+          value: `day_${day.day}`,
+          icon: 'close-circle-outline',
+          type: 'day',
+          section: 'days',
+        });
+      }
+    });
+    
+    return options;
   };
 
   if (isLoading) {
@@ -479,7 +641,7 @@ export const ServiceDetailsScreen: React.FC = () => {
               styles.joinButton,
               { backgroundColor: isJoining ? colors.primary + "80" : colors.primary },
             ]}
-            onPress={handleJoinQueue}
+            onPress={confirmJoinQueue}
             disabled={isJoining}
             activeOpacity={0.8}
           >
@@ -522,10 +684,11 @@ export const ServiceDetailsScreen: React.FC = () => {
               />
               <InfoRow
                 icon="time-outline"
-                label="Horaires"
-                value={`${establishment.open_at || "08:00"} - ${establishment.close_at || "18:00"}`}
+                label="Horaires & disponibilités"
+                value="Voir les détails"
                 color={colors.warning}
                 colors={colors}
+                onPress={() => setShowScheduleSheet(true)}
               />
             </View>
           </View>
@@ -533,6 +696,37 @@ export const ServiceDetailsScreen: React.FC = () => {
           <View style={styles.bottomSpace} />
         </Animated.ScrollView>
       </View>
+
+      {/* Action Sheet pour les horaires */}
+      <CustomActionSheet
+        visible={showScheduleSheet}
+        title={`Horaires - ${selectedServiceForSchedule?.name || establishment?.name || "Service"}`}
+        message="Consultez les disponibilités"
+        options={getScheduleOptions()}
+        selectedValue={undefined}
+        onSelect={() => {}}
+        onClose={() => setShowScheduleSheet(false)}
+        type="info"
+        showCancel={true}
+        cancelText="Fermer"
+      />
+
+      {/* Custom Alert pour confirmation avant de rejoindre la file */}
+      <CustomAlert
+        visible={showConfirmAlert}
+        type="warning"
+        title="Confirmation"
+        message="Voulez-vous vraiment rejoindre cette file d'attente ? Vous recevrez une notification quand ce sera votre tour."
+        primaryButton={{
+          text: "Oui, rejoindre",
+          onPress: executeJoinQueue,
+        }}
+        secondaryButton={{
+          text: "Annuler",
+          onPress: () => setShowConfirmAlert(false),
+        }}
+        onClose={() => setShowConfirmAlert(false)}
+      />
 
       {AlertComponent}
     </View>
@@ -579,7 +773,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Conteneur avec coins du haut arrondis
   contentContainer: {
     flex: 1,
     borderTopLeftRadius: 15,

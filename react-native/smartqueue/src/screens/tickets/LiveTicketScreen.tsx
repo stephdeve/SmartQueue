@@ -32,7 +32,7 @@ import { getApiErrorMessage } from "../../utils/errors";
 
 const { width } = Dimensions.get("window");
 
-// Composant de statut compact
+// Composant de statut compact - Version avec fond opaque
 const LiveStatusBadge: React.FC<{
   status: string;
   isCalled: boolean;
@@ -51,8 +51,14 @@ const LiveStatusBadge: React.FC<{
   const config = getConfig();
 
   return (
-    <View style={[styles.statusBadge, { backgroundColor: config.color + "15", borderColor: config.color + "30" }]}>
-      <Ionicons name={config.icon as any} size={14} color={config.color} />
+    <View style={[
+      styles.statusBadge, 
+      { 
+        backgroundColor: colors.surface + "CC",
+        borderColor: config.color,
+      }
+    ]}>
+      <Ionicons name={config.icon as any} size={12} color={config.color} />
       <Text style={[styles.statusBadgeText, { color: config.color }]}>
         {config.label}
       </Text>
@@ -60,7 +66,7 @@ const LiveStatusBadge: React.FC<{
   );
 };
 
-// Badge Live pour le header
+// Badge Live pour le header - Version avec fond plein
 const LiveIndicator: React.FC<{ colors: any }> = ({ colors }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -68,7 +74,7 @@ const LiveIndicator: React.FC<{ colors: any }> = ({ colors }) => {
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.3,
+          toValue: 1.1,
           duration: 800,
           useNativeDriver: true,
         }),
@@ -84,10 +90,16 @@ const LiveIndicator: React.FC<{ colors: any }> = ({ colors }) => {
   }, [pulseAnim]);
 
   return (
-    <Animated.View style={[styles.liveIndicator, { transform: [{ scale: pulseAnim }] }]}>
-      <View style={[styles.liveDot, { backgroundColor: colors.danger }]} />
+    <Animated.View style={[
+      styles.liveIndicator, 
+      { 
+        backgroundColor: colors.danger,
+        transform: [{ scale: pulseAnim }],
+      }
+    ]}>
+      <View style={[styles.liveDot, { backgroundColor: "#FFF" }]} />
       <Text style={styles.liveIndicatorText}>LIVE</Text>
-      <Ionicons name="radio" size={12} color={colors.danger} />
+      <Ionicons name="radio" size={10} color="#FFF" />
     </Animated.View>
   );
 };
@@ -372,15 +384,16 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({
     >
       <View style={styles.headerTop}>
         <TouchableOpacity
-          style={[styles.backButton, { backgroundColor: "rgba(255,255,255,0.2)" }]}
+          style={[styles.backButton, { backgroundColor: "rgba(0,0,0,0.3)" }]}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
+          <Ionicons name="arrow-back" size={22} color="#FFF" />
         </TouchableOpacity>
         
-        {/* Badge LIVE */}
+        {/* Badge LIVE amélioré */}
         <LiveIndicator colors={colors} />
         
+        {/* Status Badge amélioré avec fond opaque */}
         <LiveStatusBadge 
           status={activeTicket?.status || "waiting"} 
           isCalled={isCalled}
@@ -626,55 +639,66 @@ const styles = StyleSheet.create({
   },
   headerMain: {
     marginTop: 8,
-    alignItems:"center",
+    alignItems: "center",
   },
   ticketLabel: {
     fontSize: 12,
-    color: "rgba(255,255,255,0.7)",
+    color: "rgba(255,255,255,0.8)",
     marginBottom: 4,
+    fontWeight: "500",
   },
   ticketNumberHeader: {
     fontSize: 32,
     fontWeight: "800",
     color: "#FFFFFF",
     letterSpacing: 1,
+    textShadowColor: "rgba(0,0,0,0.2)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
+  // Status Badge amélioré
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 1,
     borderRadius: 20,
-    gap: 6,
+    gap: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
   statusBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
   },
+  // Live Indicator amélioré
   liveIndicator: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.95)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 20,
-    gap: 6,
+    gap: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
   },
   liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   liveIndicatorText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "800",
-    color: "#EF4444",
+    color: "#FFFFFF",
     letterSpacing: 1,
   },
   scrollContent: {
