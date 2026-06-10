@@ -127,6 +127,10 @@ export interface TicketState {
   // Defer actions
   setDeferred: () => void;
   resetDeferred: () => void;
+
+  // Évaluation post-service
+  pendingReviewTicket: { id: number; serviceName: string } | null;
+  setPendingReviewTicket: (ticket: { id: number; serviceName: string } | null) => void;
 }
 
 // Store de tickets avec Zustand
@@ -149,6 +153,7 @@ export const useTicketStore = create<TicketState>()(
       isLoading: false,
       isInitialized: false,
       error: null,
+      pendingReviewTicket: null,
 
       // Définir le ticket actif
       setActiveTicket: (ticket: Ticket | null) => {
@@ -514,6 +519,9 @@ export const useTicketStore = create<TicketState>()(
         const targetId = ticketId ?? activeTicket?.id;
         if (!targetId) return;
 
+        // Chercher le ticket avant la mise à jour pour garder les infos du service
+        const targetTicket = activeTickets.find(t => t.id === targetId) ?? activeTicket;
+
         const updatedTickets = sortActiveTickets(
           activeTickets.map((t) => {
             if (t.id !== targetId) return t;
@@ -525,10 +533,20 @@ export const useTicketStore = create<TicketState>()(
           }),
         );
 
-        set({
+        const updates: Partial<TicketState> = {
           ...buildPrimaryTicketState(updatedTickets),
           lastUpdate: new Date(),
-        });
+        };
+
+        // Déclencher l'évaluation quand le ticket est servi ou clos
+        if ((status === 'closed' || status === 'served') && targetTicket) {
+          updates.pendingReviewTicket = {
+            id: targetTicket.id,
+            serviceName: (targetTicket as any).service?.name ?? "Service",
+          };
+        }
+
+        set(updates);
       },
 
       setWebSocketConnected: (connected: boolean) => {
@@ -568,6 +586,10 @@ export const useTicketStore = create<TicketState>()(
       resetDeferred: () => {
         set({ hasDeferred: false });
       },
+
+      setPendingReviewTicket: (ticket) => {
+        set({ pendingReviewTicket: ticket });
+      },
     }),
     {
       name: "ticket-storage",
@@ -600,6 +622,7 @@ export const useTicket = () => {
   const isLoading = useTicketStore((state) => state.isLoading);
   const isInitialized = useTicketStore((state) => state.isInitialized);
   const error = useTicketStore((state) => state.error);
+  const pendingReviewTicket = useTicketStore((state) => state.pendingReviewTicket);
 
   // Actions - use getState() to avoid subscription
   const actions = useTicketStore.getState();
@@ -648,6 +671,10 @@ export const useTicket = () => {
     // Defer actions
     setDeferred: actions.setDeferred,
     resetDeferred: actions.resetDeferred,
+
+    // Évaluation post-service
+    pendingReviewTicket,
+    setPendingReviewTicket: actions.setPendingReviewTicket,
 
     // Computed properties (reactive because they depend on reactive state)
     hasActiveTicket: activeTicket !== null,

@@ -14,9 +14,6 @@ import {
   StyleSheet,
   Dimensions,
   Platform,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
 } from "react-native";
 import { router } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -32,7 +29,6 @@ import { useCustomAlert } from "../../hooks/useCustomAlert";
 import { useThemeColors } from "../../hooks/useThemeColors";
 import axiosClient from "../../api/axiosClient";
 import { getApiErrorMessage } from "../../utils/errors";
-import { ticketsApi } from "../../api/ticketsApi";
 
 const { width } = Dimensions.get("window");
 
@@ -204,94 +200,6 @@ const DistanceCard: React.FC<{
   );
 };
 
-// Composant modal d'évaluation post-service
-const ReviewModal: React.FC<{
-  visible: boolean;
-  ticketId: number;
-  serviceName: string;
-  colors: any;
-  onDone: () => void;
-}> = ({ visible, ticketId, serviceName, colors, onDone }) => {
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async () => {
-    if (rating === 0) return;
-    setSubmitting(true);
-    try {
-      await ticketsApi.submitReview(ticketId, rating, comment.trim() || undefined);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      // ignore errors silently — review already submitted or network issue
-    } finally {
-      setSubmitting(false);
-      onDone();
-    }
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
-      <KeyboardAvoidingView
-        style={reviewStyles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <View style={[reviewStyles.card, { backgroundColor: colors.surface }]}>
-          <View style={reviewStyles.handle} />
-
-          <Ionicons name="star" size={40} color="#F59E0B" style={{ alignSelf: "center", marginBottom: 8 }} />
-          <Text style={[reviewStyles.title, { color: colors.textPrimary }]}>
-            Comment s'est passé votre visite ?
-          </Text>
-          <Text style={[reviewStyles.subtitle, { color: colors.textSecondary }]}>
-            {serviceName}
-          </Text>
-
-          {/* Étoiles */}
-          <View style={reviewStyles.stars}>
-            {[1, 2, 3, 4, 5].map((s) => (
-              <TouchableOpacity key={s} onPress={() => setRating(s)} activeOpacity={0.7}>
-                <Ionicons
-                  name={s <= rating ? "star" : "star-outline"}
-                  size={44}
-                  color={s <= rating ? "#F59E0B" : colors.textTertiary}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Commentaire optionnel */}
-          <TextInput
-            style={[reviewStyles.input, { backgroundColor: colors.surfaceSecondary, color: colors.textPrimary, borderColor: colors.border }]}
-            placeholder="Ajouter un commentaire (facultatif)"
-            placeholderTextColor={colors.textTertiary}
-            value={comment}
-            onChangeText={setComment}
-            multiline
-            maxLength={500}
-          />
-
-          {/* Boutons */}
-          <TouchableOpacity
-            style={[reviewStyles.submitBtn, { backgroundColor: rating > 0 ? "#F59E0B" : colors.border, opacity: submitting ? 0.7 : 1 }]}
-            onPress={handleSubmit}
-            disabled={rating === 0 || submitting}
-            activeOpacity={0.8}
-          >
-            <Text style={[reviewStyles.submitText, { color: rating > 0 ? "#FFF" : colors.textTertiary }]}>
-              {submitting ? "Envoi…" : "Envoyer l'évaluation"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={reviewStyles.skipBtn} onPress={onDone} activeOpacity={0.7}>
-            <Text style={[reviewStyles.skipText, { color: colors.textTertiary }]}>Passer</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-};
-
 interface LiveTicketScreenProps {
   ticketId?: string;
 }
@@ -375,36 +283,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({
     useUserStatsStore();
 
   const [countdownSeconds, setCountdownSeconds] = useState(600);
-
-  // Évaluation post-service
-  const [reviewVisible, setReviewVisible] = useState(false);
-  const pendingReviewRef = useRef<{ ticketId: number; serviceName: string } | null>(null);
-  const prevDisplayTicketIdRef = useRef<number | null>(null);
   const didCancelRef = useRef(false);
-
-  // Mémorise le dernier ticket actif pour l'évaluation
-  useEffect(() => {
-    if (displayTicket && !['closed','served','absent','expired','dismissed','cancelled','canceled'].includes(displayTicket.status)) {
-      pendingReviewRef.current = {
-        ticketId: displayTicket.id,
-        serviceName: displayTicket.service?.name ?? "Service",
-      };
-      prevDisplayTicketIdRef.current = displayTicket.id;
-    }
-  }, [displayTicket]);
-
-  // Déclenche la modal quand le ticket disparaît (= clos par l'agent)
-  useEffect(() => {
-    if (
-      prevDisplayTicketIdRef.current !== null &&
-      !displayTicket &&
-      !didCancelRef.current &&
-      pendingReviewRef.current
-    ) {
-      prevDisplayTicketIdRef.current = null;
-      setReviewVisible(true);
-    }
-  }, [displayTicket]);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -758,19 +637,6 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({
       
       {renderCalledOverlay()}
       {AlertComponent}
-
-      {pendingReviewRef.current && (
-        <ReviewModal
-          visible={reviewVisible}
-          ticketId={pendingReviewRef.current.ticketId}
-          serviceName={pendingReviewRef.current.serviceName}
-          colors={colors}
-          onDone={() => {
-            setReviewVisible(false);
-            pendingReviewRef.current = null;
-          }}
-        />
-      )}
     </View>
   );
 };
@@ -1135,71 +1001,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#EF4444",
-  },
-});
-
-const reviewStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
-  },
-  card: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 28,
-    paddingBottom: Platform.OS === "ios" ? 44 : 28,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#CCC",
-    alignSelf: "center",
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    textAlign: "center",
-    marginBottom: 24,
-  },
-  stars: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-    marginBottom: 20,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    fontSize: 14,
-    minHeight: 80,
-    textAlignVertical: "top",
-    marginBottom: 16,
-  },
-  submitBtn: {
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  submitText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  skipBtn: {
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  skipText: {
-    fontSize: 14,
   },
 });
 
