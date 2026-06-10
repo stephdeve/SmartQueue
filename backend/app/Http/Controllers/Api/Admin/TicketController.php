@@ -17,6 +17,36 @@ use Illuminate\Support\Carbon;
 class TicketController extends Controller
 {
     /**
+     * Liste des services accessibles à l'utilisateur courant (agent = services assignés, admin = tous).
+     */
+    public function services(Request $request)
+    {
+        $user = $request->user();
+
+        if ($user->role === 'agent') {
+            $services = $user->services()
+                ->select('services.id', 'services.name', 'services.status')
+                ->orderBy('services.name')
+                ->get();
+        } else {
+            $scopedId = $request->attributes->get('scoped_establishment_id');
+            $services = Service::query()
+                ->when($scopedId, fn($q) => $q->where('establishment_id', (int) $scopedId))
+                ->select('id', 'name', 'status')
+                ->orderBy('name')
+                ->get();
+        }
+
+        return response()->json([
+            'data' => $services->map(fn($s) => [
+                'id'     => $s->id,
+                'name'   => $s->name,
+                'status' => $s->status,
+            ]),
+        ]);
+    }
+
+    /**
      * Création manuelle d'un ticket par un agent/admin.
      * Aucun compte utilisateur requis (user_id = null).
      */

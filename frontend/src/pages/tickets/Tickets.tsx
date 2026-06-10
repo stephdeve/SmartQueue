@@ -170,9 +170,12 @@ export default function TicketsPage() {
     is_pregnant: false,
   })
   const [creating, setCreating] = useState(false)
+  const [modalServices, setModalServices] = useState<{ id: number; name: string; status: string }[]>([])
+  const [modalServicesLoading, setModalServicesLoading] = useState(false)
 
   // Determine API endpoint based on role
   const apiEndpoint = role === 'agent' ? '/api/agent/tickets' : '/api/admin/tickets'
+  const servicesEndpoint = role === 'agent' ? '/api/agent/services' : '/api/admin/tickets/services'
 
   // Load statistics
   const loadStats = async () => {
@@ -221,6 +224,20 @@ export default function TicketsPage() {
     }
   }
 
+  const openCreateModal = async () => {
+    setShowCreateModal(true)
+    setModalServicesLoading(true)
+    try {
+      const response = await api.get(servicesEndpoint)
+      setModalServices(response.data.data || [])
+    } catch (error: any) {
+      toast.error('Impossible de charger les services')
+      setModalServices([])
+    } finally {
+      setModalServicesLoading(false)
+    }
+  }
+
   const createTicket = async () => {
     if (!createForm.service_id) {
       toast.error('Veuillez sélectionner un service')
@@ -240,6 +257,7 @@ export default function TicketsPage() {
       toast.success('Ticket créé avec succès')
       setShowCreateModal(false)
       setCreateForm({ service_id: '', priority: 'normal', customer_name: '', customer_phone: '', is_senior: false, is_handicap: false, is_pregnant: false })
+      setModalServices([])
       loadTickets(1)
       loadStats()
     } catch (error: any) {
@@ -397,7 +415,7 @@ export default function TicketsPage() {
             </Select>
 
             <Button
-              onClick={() => setShowCreateModal(true)}
+              onClick={openCreateModal}
               className="gap-2"
             >
               <Plus className="h-4 w-4" />
@@ -766,14 +784,31 @@ export default function TicketsPage() {
                   <Select
                     value={createForm.service_id}
                     onValueChange={(v) => setCreateForm(f => ({ ...f, service_id: v }))}
+                    disabled={modalServicesLoading}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un service" />
+                      <SelectValue placeholder={
+                        modalServicesLoading
+                          ? 'Chargement...'
+                          : modalServices.length === 0
+                            ? 'Aucun service disponible'
+                            : 'Sélectionner un service'
+                      } />
                     </SelectTrigger>
                     <SelectContent>
-                      {serviceStats.map(s => (
-                        <SelectItem key={s.service_id} value={String(s.service_id)}>
-                          {s.service_name}
+                      {modalServices.map(s => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          <span className="flex items-center gap-2">
+                            {s.name}
+                            <span className={cn(
+                              'text-xs rounded-full px-1.5 py-0.5',
+                              s.status === 'open'
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                : 'bg-gray-100 text-gray-500 dark:bg-gray-800'
+                            )}>
+                              {s.status === 'open' ? 'Ouvert' : 'Fermé'}
+                            </span>
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -850,7 +885,7 @@ export default function TicketsPage() {
                   <Button
                     variant="outline"
                     className="flex-1"
-                    onClick={() => setShowCreateModal(false)}
+                    onClick={() => { setShowCreateModal(false); setModalServices([]) }}
                     disabled={creating}
                   >
                     Annuler
