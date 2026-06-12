@@ -504,7 +504,6 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
           </View>
         )}
 
-<<<<<<< HEAD
         {/* Bannière ticket reporté */}
         {(activeTicket as any)?.auto_deferred && (activeTicket as any)?.valid_date && (
           <View style={[styles.deferredBanner, { backgroundColor: colors.warning + "18", borderColor: colors.warning + "40" }]}>
@@ -527,8 +526,6 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
         )}
 
         {/* When to Leave Alert */}
-=======
->>>>>>> b1e6145818a6678197ab9eb5a6dca336854b2373
         {whenToLeave && (
           <View style={[styles.leaveAlert, { backgroundColor: whenToLeave.urgent ? colors.danger + "20" : colors.warning + "20" }]}>
             <Ionicons name={whenToLeave.urgent ? "warning" : "time"} size={14} color={whenToLeave.urgent ? colors.danger : colors.warning} />
@@ -819,7 +816,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
-<<<<<<< HEAD
   stateMsgSubtext: {
     fontSize: 11,
     marginTop: 4,
@@ -843,8 +839,6 @@ const styles = StyleSheet.create({
   deferredBannerSub: {
     fontSize: 11,
   },
-=======
->>>>>>> b1e6145818a6678197ab9eb5a6dca336854b2373
   calledCountdownBadge: {
     flexDirection: "row",
     alignItems: "center",
