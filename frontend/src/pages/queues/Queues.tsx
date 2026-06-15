@@ -161,13 +161,7 @@ function useCountdown(expiresAt?: string | null): number | null {
     setSeconds(calc());
 
     const id = setInterval(() => {
-      const newSeconds = calc();
-      setSeconds(newSeconds);
-      // Si expiré, on pourrait forcer un rafraîchissement ici
-      if (newSeconds === 0) {
-        // Optionnel: déclencher un événement personnalisé
-        window.dispatchEvent(new CustomEvent('ticket-expired'));
-      }
+      setSeconds(calc());
     }, 1000);
 
     return () => clearInterval(id);
@@ -184,9 +178,25 @@ function fmtCountdown(s: number): string {
 }
 
 /** Row countdown cell — isolated so only the row re-renders per tick */
-const CountdownCell: React.FC<{ ticket: QueueTicket }> = ({ ticket }) => {
+const CountdownCell: React.FC<{ ticket: QueueTicket; onExpired?: (ticket: QueueTicket) => void }> = ({ ticket, onExpired }) => {
   const calledSeconds = useCountdown(ticket.status === "called" ? (ticket.called_expires_at ?? null) : null);
   const enRouteSeconds = useCountdown(ticket.status === "en_route" ? (ticket.en_route_expires_at ?? null) : null);
+
+  // Keep onExpired stable via ref to avoid triggering the effect on every parent re-render
+  const onExpiredRef = useRef(onExpired);
+  onExpiredRef.current = onExpired;
+  const expiredFiredRef = useRef(false);
+  // Reset when a new expiry timestamp arrives (ticket recalled / re-called)
+  useEffect(() => { expiredFiredRef.current = false; }, [ticket.id, ticket.called_expires_at, ticket.en_route_expires_at]);
+  useEffect(() => {
+    const activeSecs = ticket.status === "called" ? calledSeconds
+                     : ticket.status === "en_route" ? enRouteSeconds
+                     : null;
+    if (activeSecs === 0 && !expiredFiredRef.current) {
+      expiredFiredRef.current = true;
+      onExpiredRef.current?.(ticket);
+    }
+  }, [calledSeconds, enRouteSeconds, ticket]);
 
   if (ticket.status === "called" && calledSeconds !== null) {
     const expiring = calledSeconds <= 30;
@@ -420,6 +430,19 @@ const Queues: React.FC = () => {
       setError(e?.message || "Erreur");
       if (showToast) toast.error("Erreur lors du rafraîchissement");
     }
+  };
+
+  // Ref so CountdownCell's onExpired always sees the latest version (avoids stale closure)
+  const refreshQueueRef = useRef(refreshQueueAndStats);
+  useEffect(() => { refreshQueueRef.current = refreshQueueAndStats; });
+
+  const handleCountdownExpired = (expiredTicket: QueueTicket) => {
+    toast.warning(`Ticket #${expiredTicket.number} expiré`, {
+      description: "Le délai de priorité est écoulé. La file est actualisée.",
+      duration: 6000,
+    });
+    // Small delay so the backend scheduler has time to mark the ticket absent
+    setTimeout(() => refreshQueueRef.current(false), 2000);
   };
 
   const callNext = async () => {
@@ -1310,7 +1333,7 @@ const Queues: React.FC = () => {
                                             <div className="text-xs font-medium text-amber-700 dark:text-amber-300">
                                               Priorité jusqu&apos;à {formatTime(t.en_route_expires_at)}
                                             </div>
-                                            <CountdownCell ticket={t} />
+                                            <CountdownCell ticket={t} onExpired={handleCountdownExpired} />
                                           </div>
                                         )}
                                     </div>
@@ -1321,7 +1344,7 @@ const Queues: React.FC = () => {
                                         En attente de réponse
                                       </span>
                                       <div className="flex items-center gap-1">
-                                        <CountdownCell ticket={t} />
+                                        <CountdownCell ticket={t} onExpired={handleCountdownExpired} />
                                       </div>
                                     </div>
                                   ) : (

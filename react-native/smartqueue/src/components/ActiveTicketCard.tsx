@@ -114,35 +114,26 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
   const handleTicketExpired = useCallback(() => {
     if (alertShownRef.current) return;
     alertShownRef.current = true;
-    
+
     const ticketNumber = activeTicket?.number || "N/A";
     const serviceName = activeTicket?.service?.name || "Service";
-    
-    if (!suppressAutoAlerts) {
-      showWarning(
-        "Ticket expiré",
-        `Le ticket ${ticketNumber} (${serviceName}) n'est plus actif car le délai de réponse est dépassé.`,
-        "OK",
-        () => {
-          if (expiryCheckIntervalRef.current) {
-            clearInterval(expiryCheckIntervalRef.current);
-          }
-          if (activeTicket?.id) {
-            removeExpiredTicket(activeTicket.id);
-          }
-          onTicketExpired?.();
+
+    // Always show — suppressAutoAlerts only blocks non-critical countdown warnings (30s/60s)
+    showWarning(
+      "Ticket expiré",
+      `Le ticket ${ticketNumber} (${serviceName}) n'est plus actif car le délai de réponse est dépassé.`,
+      "OK",
+      () => {
+        if (expiryCheckIntervalRef.current) {
+          clearInterval(expiryCheckIntervalRef.current);
         }
-      );
-    } else {
-      if (expiryCheckIntervalRef.current) {
-        clearInterval(expiryCheckIntervalRef.current);
+        if (activeTicket?.id) {
+          removeExpiredTicket(activeTicket.id);
+        }
+        onTicketExpired?.();
       }
-      if (activeTicket?.id) {
-        removeExpiredTicket(activeTicket.id);
-      }
-      onTicketExpired?.();
-    }
-  }, [activeTicket?.id, activeTicket?.number, activeTicket?.service?.name, showWarning, onTicketExpired, removeExpiredTicket, suppressAutoAlerts]);
+    );
+  }, [activeTicket?.id, activeTicket?.number, activeTicket?.service?.name, showWarning, onTicketExpired, removeExpiredTicket]);
 
   useEffect(() => {
     if (expiryCheckIntervalRef.current) {
@@ -217,22 +208,17 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
           alertShownRef.current = true;
           const ticketNum = activeTicket?.number || "N/A";
           const svcName = activeTicket?.service?.name || "Service";
-          if (!suppressAutoAlerts) {
-            showWarning(
-              "Ticket marqué absent",
-              `Le ticket #${ticketNum} pour le service "${svcName}" a été marqué absent par l'agent.`,
-              "OK",
-              () => {
-                if (expiryCheckIntervalRef.current) clearInterval(expiryCheckIntervalRef.current);
-                if (activeTicket?.id) removeExpiredTicket(activeTicket.id);
-                onTicketExpired?.();
-              }
-            );
-          } else {
-            if (expiryCheckIntervalRef.current) clearInterval(expiryCheckIntervalRef.current);
-            if (activeTicket?.id) removeExpiredTicket(activeTicket.id);
-            onTicketExpired?.();
-          }
+          // Always show — suppressAutoAlerts only blocks non-critical countdown warnings
+          showWarning(
+            "Ticket marqué absent",
+            `Le ticket #${ticketNum} pour le service "${svcName}" a été marqué absent par l'agent.`,
+            "OK",
+            () => {
+              if (expiryCheckIntervalRef.current) clearInterval(expiryCheckIntervalRef.current);
+              if (activeTicket?.id) removeExpiredTicket(activeTicket.id);
+              onTicketExpired?.();
+            }
+          );
         };
 
         channel.listen('.ticket.updated', handleTicketUpdated);
@@ -395,11 +381,11 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
   const isEnRouteExpiredNow = isTicketEnRoute && enRouteCountdown !== null && enRouteCountdown <= 0;
 
   useEffect(() => {
-    if (isEnRouteExpiredNow && !enRouteExpiryAlerted.current && localStatus === "en_route" && !suppressAutoAlerts) {
+    if (isEnRouteExpiredNow && !enRouteExpiryAlerted.current && localStatus === "en_route") {
       enRouteExpiryAlerted.current = true;
       handleTicketExpired();
     }
-  }, [isEnRouteExpiredNow, localStatus, suppressAutoAlerts, handleTicketExpired]);
+  }, [isEnRouteExpiredNow, localStatus, handleTicketExpired]);
 
   const warningShownRef = useRef(false);
   useEffect(() => {
