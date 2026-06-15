@@ -598,7 +598,7 @@ export default function TicketsPage() {
   return (
     <TooltipProvider>
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-4 md:p-6 lg:p-8">
-        <div className="mx-auto w-fullspace-y-6">
+        <div className="mx-auto w-full space-y-6">
 
           {/* ========== HEADER ========== */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
