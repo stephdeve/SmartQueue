@@ -57,9 +57,13 @@ const sortActiveTickets = (tickets: Ticket[]): Ticket[] => {
   });
 };
 
-// Filtrer les tickets absents
+// Filtrer les tickets terminés ou absents
 const filterActiveTickets = (tickets: Ticket[]): Ticket[] => {
-  return tickets.filter(ticket => ticket.status !== 'absent');
+  return tickets.filter(ticket =>
+    ticket.status !== 'absent' &&
+    ticket.status !== 'closed' &&
+    ticket.status !== 'served'
+  );
 };
 
 const buildPrimaryTicketState = (tickets: Ticket[]) => {
@@ -428,7 +432,9 @@ export const useTicketStore = create<TicketState>()(
           const tickets = await ticketsApi.getMyActiveTickets();
           console.log("[ticketStore] fetchActiveTicket got tickets:", tickets.length);
 
-          const activeOnly = tickets.filter(t => t.status !== 'absent');
+          const activeOnly = tickets.filter(t =>
+            t.status !== 'absent' && t.status !== 'closed' && t.status !== 'served'
+          );
           
           if (activeOnly.length > 0) {
             const currentState = get();

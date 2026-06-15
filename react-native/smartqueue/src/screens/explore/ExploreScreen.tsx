@@ -95,21 +95,31 @@ const ActiveTicketBottomSheet: React.FC<{
   const [localTickets, setLocalTickets] = useState<Ticket[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // S'abonner aux changements du store pour mettre à jour localTickets
+  // S'abonner aux changements du store — utiliser state.activeTickets directement
+  // pour éviter la closure périmée sur le prop `tickets`.
   useEffect(() => {
     const unsubscribe = useTicketStore.subscribe((state) => {
-      const activeOnly = tickets.filter(t => t.status !== 'absent' && t.status !== 'closed');
+      const activeOnly = state.activeTickets.filter(
+        t => t.status !== 'absent' && t.status !== 'closed' && t.status !== 'served'
+      );
       setLocalTickets(activeOnly);
       setRefreshKey(prev => prev + 1);
     });
     return () => unsubscribe();
-  }, [tickets]);
+  }, []); // pas de dépendances — lit directement depuis le store
 
-  // Mettre à jour les tickets locaux quand les props changent
+  // Synchroniser avec les props uniquement pour l'initialisation et le cas vide
   useEffect(() => {
-    const activeOnly = tickets.filter(t => t.status !== 'absent' && t.status !== 'closed');
+    const storeState = useTicketStore.getState();
+    const storeActive = storeState.activeTickets.filter(
+      t => t.status !== 'absent' && t.status !== 'closed' && t.status !== 'served'
+    );
+    // Priorité au store (données fraîches) ; fall-back sur les props
+    const activeOnly = storeActive.length > 0
+      ? storeActive
+      : tickets.filter(t => t.status !== 'absent' && t.status !== 'closed' && t.status !== 'served');
     setLocalTickets(activeOnly);
-    
+
     if (currentIndex >= activeOnly.length && activeOnly.length > 0) {
       setCurrentIndex(activeOnly.length - 1);
     } else if (activeOnly.length === 0 && visible) {
@@ -140,16 +150,18 @@ const ActiveTicketBottomSheet: React.FC<{
     flatListRef.current?.scrollToIndex({ index: next, animated: true });
   };
 
-  // Fonction pour rafraîchir après confirmation
+  // Rafraîchir après confirmation — lit directement depuis le store
   const handleTicketAction = useCallback(() => {
     setTimeout(() => {
       const store = useTicketStore.getState();
       store.fetchActiveTicket().catch(console.warn);
-      const activeOnly = tickets.filter(t => t.status !== 'absent' && t.status !== 'closed');
+      const activeOnly = store.activeTickets.filter(
+        t => t.status !== 'absent' && t.status !== 'closed' && t.status !== 'served'
+      );
       setLocalTickets(activeOnly);
       setRefreshKey(prev => prev + 1);
     }, 500);
-  }, [tickets]);
+  }, []);
 
   if (!visible || localTickets.length === 0) return null;
 
@@ -299,7 +311,9 @@ export const ExploreScreen: React.FC = () => {
   }, []);
 
   const getActiveTicketsOnly = useCallback(() => {
-    return activeTickets.filter(ticket => ticket.status !== 'absent');
+    return activeTickets.filter(ticket =>
+      ticket.status !== 'absent' && ticket.status !== 'closed' && ticket.status !== 'served'
+    );
   }, [activeTickets, ticketStoreVersion, fabRefresh]);
 
   const activeTicketsCount = getActiveTicketsOnly().length;
@@ -318,11 +332,12 @@ export const ExploreScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      fetchActiveTicket().catch(console.error);
+      // Appel direct via getState() pour garantir la référence la plus récente
+      useTicketStore.getState().fetchActiveTicket().catch(console.error);
       refreshUnread();
       setTicketStoreVersion(prev => prev + 1);
       setFabRefresh(prev => prev + 1);
-    }, [fetchActiveTicket, refreshUnread]),
+    }, [refreshUnread]),
   );
 
   const [establishments, setEstablishments] = useState<Establishment[]>([]);

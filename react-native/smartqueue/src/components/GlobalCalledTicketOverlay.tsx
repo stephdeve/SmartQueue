@@ -191,9 +191,10 @@ export const GlobalCalledTicketOverlay: React.FC<GlobalCalledTicketOverlayProps>
           const graceMinutes = response.data?.grace_minutes ?? 10;
           showSuccess(
             "En route confirmé !",
-            `Vous avez ${graceMinutes} minute${graceMinutes > 1 ? "s" : ""} pour vous présenter à l'établissement.`
+            `Vous avez ${graceMinutes} minute${graceMinutes > 1 ? "s" : ""} pour vous présenter à l'établissement.`,
+            "OK",
+            () => { fetchActiveTicket().catch(console.warn); }
           );
-          await fetchActiveTicket();
         } catch (error: any) {
           showError("Erreur", getApiErrorMessage(error, "Impossible de confirmer"));
         }
@@ -223,11 +224,11 @@ export const GlobalCalledTicketOverlay: React.FC<GlobalCalledTicketOverlayProps>
           clearCalled();
           resetRecall();
           resetDeferred();
-          showSuccess("Ticket clos ✔", "Merci de votre visite !", "OK", () => {
+          showSuccess("Ticket clos ✔", "Merci de votre visite !", "OK", async () => {
             useTicketStore.setState({ activeTicket: null, activeTickets: [] });
+            try { await fetchActiveTicket(); } catch (e) { /* ignore */ }
             router.replace("/(tabs)");
           });
-          await fetchActiveTicket();
         } catch (error: any) {
           showError("Erreur", getApiErrorMessage(error, "Impossible de confirmer la présence"));
         }

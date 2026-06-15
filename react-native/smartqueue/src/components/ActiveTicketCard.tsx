@@ -86,10 +86,21 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
   const [enRouteExpiresAt, setEnRouteExpiresAt] = useState(activeTicket?.en_route_expires_at);
 
   useEffect(() => {
-    setLocalStatus(activeTicket?.status);
-    setCalledExpiresAt((activeTicket as any)?.called_expires_at);
-    setEnRouteExpiresAt(activeTicket?.en_route_expires_at);
-    alertShownRef.current = false;
+    const newCalledExp = (activeTicket as any)?.called_expires_at;
+    const newEnRouteExp = activeTicket?.en_route_expires_at;
+    const newStatus = activeTicket?.status;
+    setLocalStatus(newStatus);
+    setCalledExpiresAt(newCalledExp);
+    setEnRouteExpiresAt(newEnRouteExp);
+
+    // Only reset the alert flag when the expiry is genuinely in the future (a new call).
+    // If the ticket loads with an already-expired timestamp, keep alertShownRef=true
+    // to prevent a false expiry alert on mount/re-mount.
+    const now = Date.now();
+    const alreadyExpired =
+      (newStatus === "called" && newCalledExp && new Date(newCalledExp).getTime() <= now) ||
+      (newStatus === "en_route" && newEnRouteExp && new Date(newEnRouteExp).getTime() <= now);
+    alertShownRef.current = !!alreadyExpired;
   }, [activeTicket?.id, activeTicket?.status]);
 
   const isCalledExpired = localStatus === "called" && calledExpiresAt 
@@ -202,8 +213,25 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
         };
 
         const handleMarkedAbsent = () => {
-          if (!alertShownRef.current) {
-            handleTicketExpired();
+          if (alertShownRef.current) return;
+          alertShownRef.current = true;
+          const ticketNum = activeTicket?.number || "N/A";
+          const svcName = activeTicket?.service?.name || "Service";
+          if (!suppressAutoAlerts) {
+            showWarning(
+              "Ticket marqué absent",
+              `Le ticket #${ticketNum} pour le service "${svcName}" a été marqué absent par l'agent.`,
+              "OK",
+              () => {
+                if (expiryCheckIntervalRef.current) clearInterval(expiryCheckIntervalRef.current);
+                if (activeTicket?.id) removeExpiredTicket(activeTicket.id);
+                onTicketExpired?.();
+              }
+            );
+          } else {
+            if (expiryCheckIntervalRef.current) clearInterval(expiryCheckIntervalRef.current);
+            if (activeTicket?.id) removeExpiredTicket(activeTicket.id);
+            onTicketExpired?.();
           }
         };
 
@@ -307,13 +335,14 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
           });
         }
         s.markEnRoute();
-        try { await s.fetchActiveTicket(); } catch (err) { console.warn(err); }
       }
       const graceMinutes = response.data?.grace_minutes ?? 10;
-      
+
       showSuccess(
-        "Confirmation envoyée !", 
-        `L'agent a été notifié. Vous avez ${graceMinutes} minute${graceMinutes > 1 ? "s" : ""} pour vous présenter à l'établissement.`
+        "Confirmation envoyée !",
+        `L'agent a été notifié. Vous avez ${graceMinutes} minute${graceMinutes > 1 ? "s" : ""} pour vous présenter à l'établissement.`,
+        "OK",
+        () => { useTicketStore.getState().fetchActiveTicket().catch(console.warn); }
       );
       onConfirmPresence?.();
     } catch (error: any) {
@@ -327,16 +356,15 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
       setLocalStatus("present");
-      
+
       const s = useTicketStore.getState();
-      if (s.activeTicket?.id === activeTicket?.id) {
-        s.markPresent();
-        try { await s.fetchActiveTicket(); } catch (err) { console.warn(err); }
-      }
-      
+      s.markPresent();
+
       showSuccess(
-        "Présence confirmée !", 
-        "Votre priorité est conservée. L'agent sait maintenant que vous êtes arrivé."
+        "Présence confirmée !",
+        "Votre priorité est conservée. L'agent sait maintenant que vous êtes arrivé.",
+        "OK",
+        () => { s.fetchActiveTicket().catch(console.warn); }
       );
       onConfirmPresence?.();
     } catch (error: any) {

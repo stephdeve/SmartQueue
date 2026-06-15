@@ -137,7 +137,13 @@ function useCountdown(expiresAt?: string | null): number | null {
     }
     
     const calc = () => {
-      const expiryDate = new Date(expiresAt);
+      // Normalize MySQL-style "YYYY-MM-DD HH:MM:SS" (no TZ) to UTC ISO-8601.
+      // toIso8601String() now sends "+00:00" form, but guard against legacy data.
+      let str = expiresAt;
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(str)) {
+        str = str.replace(' ', 'T') + 'Z';
+      }
+      const expiryDate = new Date(str);
       const now = new Date();
       const diff = expiryDate.getTime() - now.getTime();
       return Math.max(0, Math.floor(diff / 1000));
