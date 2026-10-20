@@ -46,13 +46,14 @@ class ReviewController extends Controller
     {
         $user = $request->user();
 
-        // Seul le propriétaire du ticket peut l'évaluer (si le ticket a un user_id)
-        if ($ticket->user_id && $ticket->user_id !== $user->id) {
+        // Seul le propriétaire du ticket peut l'évaluer (un ticket créé au guichet,
+        // sans compte, ne peut pas être évalué par un tiers)
+        if ((int) $ticket->user_id !== (int) $user->id) {
             abort(403, 'Accès refusé.');
         }
 
-        // Le ticket doit être terminé
-        if (!in_array($ticket->status, ['closed', 'served', 'absent'])) {
+        // Le ticket doit avoir été servi
+        if ($ticket->status !== 'closed') {
             return response()->json([
                 'error' => 'Le ticket doit être terminé pour être évalué.',
             ], 422);

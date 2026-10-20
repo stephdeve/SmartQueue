@@ -76,11 +76,13 @@ class TicketController extends Controller
             }
         }
 
-        // Only return tickets valid for today
+        // Tickets du jour + tickets reportés à une date future (affichés « reporté au … »
+        // par l'app) : sans eux, un ticket auto-différé disparaissait de l'application.
         $tickets = Ticket::query()
             ->where('user_id', $request->user()->id)
             ->whereIn('status', ['waiting','called','en_route','present','absent'])
-            ->whereDate('valid_date', $today)
+            ->whereDate('valid_date', '>=', $today)
+            ->orderBy('valid_date')
             ->with(['service.establishment'])
             ->orderByDesc('created_at')
             ->get();
@@ -113,6 +115,11 @@ class TicketController extends Controller
         } elseif ($statusFilter === 'completed') {
             // Completed tickets: closed, canceled, served, expired, absent
             $query->whereIn('status', ['closed', 'canceled', 'cancelled', 'served', 'expired', 'absent']);
+        } elseif (in_array($statusFilter, ['cancelled', 'canceled'], true)) {
+            // Statut stocké : 'canceled' (l'app filtre avec 'cancelled')
+            $query->whereIn('status', ['canceled', 'cancelled']);
+        } elseif ($statusFilter === 'served') {
+            $query->where('status', 'closed');
         } elseif ($statusFilter && $statusFilter !== 'all') {
             // Specific status filter
             $query->where('status', $statusFilter);

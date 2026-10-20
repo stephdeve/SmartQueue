@@ -21,6 +21,9 @@ class SubscriptionController extends Controller
         if ($request->filled('plan')) {
             $query->where('plan', $request->query('plan'));
         }
+        if ($request->filled('establishment_id')) {
+            $query->where('establishment_id', (int) $request->query('establishment_id'));
+        }
 
         return response()->json($query->paginate($perPage));
     }

@@ -33,6 +33,16 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
 
+        // Endpoints d'authentification publics : limite par e-mail + IP (anti force brute /
+        // spam d'e-mails de réinitialisation), sans bloquer plusieurs agents derrière la même IP.
+        RateLimiter::for('auth', function (Request $request) {
+            $email = strtolower((string) $request->input('email', $request->input('admin_email', '')));
+            return [
+                Limit::perMinute(10)->by('auth:'.$email.'|'.$request->ip()),
+                Limit::perMinute(60)->by('auth-ip:'.$request->ip()),
+            ];
+        });
+
         $this->app->make('Illuminate\Contracts\Debug\ExceptionHandler')->renderable(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json(['message' => 'Unauthenticated'], 401);
@@ -42,7 +52,7 @@ class AppServiceProvider extends ServiceProvider
 
         // URL de réinitialisation du mot de passe → pointe vers le frontend React
         \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(function ($user, string $token) {
-            $frontendUrl = rtrim(env('FRONTEND_URL', config('app.url')), '/');
+            $frontendUrl = rtrim((string) (config('app.frontend_url') ?: config('app.url')), '/');
             return "{$frontendUrl}/reset-password?token={$token}&email=" . urlencode($user->email);
         });
 

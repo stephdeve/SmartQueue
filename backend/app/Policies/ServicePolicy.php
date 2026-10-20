@@ -4,7 +4,6 @@ namespace App\Policies;
 
 use App\Models\Service;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
 
 class ServicePolicy
 {
@@ -13,15 +12,15 @@ class ServicePolicy
     {
         // Les admins peuvent gérer tous les services de leur établissement
         if ($user->role === 'admin') {
-            return $user->establishment_id === $service->establishment_id;
+            return $user->establishment_id !== null
+                && (int) $user->establishment_id === (int) $service->establishment_id;
         }
-        
+
         // Les agents peuvent gérer uniquement les services qui leur sont assignés
         if ($user->role === 'agent') {
             return $user->services()->where('services.id', $service->id)->exists();
         }
-        
+
         return false;
     }
 }
-

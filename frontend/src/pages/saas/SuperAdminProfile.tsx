@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,7 +66,8 @@ export default function SuperAdminProfile() {
   const dispatch = useAppDispatch();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [systemStats, setSystemStats] = useState(null);
+  const [systemStats, setSystemStats] = useState<any>(null);
+  const navigate = useNavigate();
   const [loadingStats, setLoadingStats] = useState(false);
   
   const [profileData, setProfileData] = useState({
@@ -129,23 +131,27 @@ export default function SuperAdminProfile() {
   const handleSaveProfile = async () => {
     setLoading(true);
     try {
-      const updateData: any = {
+      if (profileData.newPassword && profileData.newPassword !== profileData.confirmPassword) {
+        toast.error('Les mots de passe ne correspondent pas');
+        return;
+      }
+
+      await api.patch('/api/me', {
         name: profileData.name,
         email: profileData.email,
         phone: profileData.phone || null,
         avatar: profileData.avatar || null
-      };
+      });
 
+      // Le mot de passe passe par son endpoint dédié (PATCH /me l'ignorait silencieusement)
       if (profileData.newPassword) {
-        if (profileData.newPassword !== profileData.confirmPassword) {
-          toast.error('Les mots de passe ne correspondent pas');
-          return;
-        }
-        updateData.password = profileData.newPassword;
-        updateData.current_password = profileData.currentPassword;
+        await api.post('/api/me/change-password', {
+          current_password: profileData.currentPassword,
+          password: profileData.newPassword,
+          password_confirmation: profileData.confirmPassword,
+        });
+        setProfileData((prev) => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
       }
-
-      await api.patch('/api/me', updateData);
       setIsEditing(false);
       await dispatch(refreshMe());
       toast.success('Profil mis à jour avec succès');
@@ -165,17 +171,9 @@ export default function SuperAdminProfile() {
     }
   };
 
+  // Aucun endpoint serveur ne stocke ces préférences : ne pas simuler un succès
   const handleSaveAdminSettings = async () => {
-    setLoading(true);
-    try {
-      await api.patch('/api/saas/admin/settings', adminSettings);
-      toast.success('Paramètres administrateur mis à jour');
-    } catch (error) {
-      console.error('Erreur sauvegarde settings:', error);
-      toast.error('Impossible de sauvegarder les paramètres');
-    } finally {
-      setLoading(false);
-    }
+    toast.info("Ces paramètres ne sont pas encore enregistrés côté serveur.");
   };
 
   const handleCancelEdit = () => {
@@ -200,12 +198,12 @@ export default function SuperAdminProfile() {
   const handleSystemAction = async (action: string) => {
     try {
       setLoading(true);
-      await api.post(`/api/saas/admin/system/${action}`);
-      toast.success(`Action ${action} exécutée avec succès`);
+      const response = await api.post(`/api/saas/admin/system/${action}`);
+      toast.success(response.data?.message || `Action ${action} exécutée avec succès`);
       loadSystemStats();
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Erreur action ${action}:`, error);
-      toast.error(`Impossible d'exécuter l'action ${action}`);
+      toast.error(error?.response?.data?.message || `Impossible d'exécuter l'action ${action}`);
     } finally {
       setLoading(false);
     }
@@ -429,21 +427,17 @@ export default function SuperAdminProfile() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Download className="h-4 w-4 mr-2" />
-                    Exporter les données
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Users className="h-4 w-4 mr-2" />
-                    Gérer les utilisateurs
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
+                  <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/dashboard/saas/establishments')}>
                     <Building2 className="h-4 w-4 mr-2" />
-                    Configurer les plans
+                    Gérer les établissements
                   </Button>
-                  <Button variant="outline" className="w-full justify-start">
+                  <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/dashboard/saas/subscriptions')}>
+                    <Users className="h-4 w-4 mr-2" />
+                    Gérer les abonnements
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/dashboard/saas/monitoring')}>
                     <FileText className="h-4 w-4 mr-2" />
-                    Voir les rapports
+                    Voir le monitoring
                   </Button>
                 </CardContent>
               </Card>
@@ -607,7 +601,7 @@ export default function SuperAdminProfile() {
                     <p className="font-medium">Authentification à deux facteurs</p>
                     <p className="text-sm text-muted-foreground">Sécurité renforcée du compte</p>
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" disabled title="Bientôt disponible">
                     <KeyRound className="h-4 w-4 mr-2" />
                     Configurer
                   </Button>
@@ -617,7 +611,7 @@ export default function SuperAdminProfile() {
                     <p className="font-medium">Sessions actives</p>
                     <p className="text-sm text-muted-foreground">Gérer les connexions actives</p>
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" disabled title="Bientôt disponible">
                     <Eye className="h-4 w-4 mr-2" />
                     Voir
                   </Button>
@@ -627,7 +621,7 @@ export default function SuperAdminProfile() {
                     <p className="font-medium">Clés API</p>
                     <p className="text-sm text-muted-foreground">Générer et gérer les clés API</p>
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" disabled title="Bientôt disponible">
                     <Key className="h-4 w-4 mr-2" />
                     Gérer
                   </Button>
@@ -649,7 +643,7 @@ export default function SuperAdminProfile() {
                     <p className="font-medium">Politique de mots de passe</p>
                     <p className="text-sm text-muted-foreground">Configuration des exigences</p>
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" disabled title="Bientôt disponible">
                     <Settings className="h-4 w-4 mr-2" />
                     Configurer
                   </Button>
@@ -659,7 +653,7 @@ export default function SuperAdminProfile() {
                     <p className="font-medium">Liste noire IP</p>
                     <p className="text-sm text-muted-foreground">Bloquer les adresses IP</p>
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" disabled title="Bientôt disponible">
                     <Ban className="h-4 w-4 mr-2" />
                     Gérer
                   </Button>
@@ -669,7 +663,7 @@ export default function SuperAdminProfile() {
                     <p className="font-medium">Audit de sécurité</p>
                     <p className="text-sm text-muted-foreground">Vérifier les vulnérabilités</p>
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" disabled title="Bientôt disponible">
                     <ShieldCheck className="h-4 w-4 mr-2" />
                     Lancer
                   </Button>
@@ -703,29 +697,29 @@ export default function SuperAdminProfile() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">CPU Usage</p>
-                      <p className="text-lg font-semibold">{systemStats?.cpu_usage || 0}%</p>
+                      <p className="text-lg font-semibold">{systemStats?.cpu_usage != null ? `${systemStats.cpu_usage}%` : 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Memory Usage</p>
-                      <p className="text-lg font-semibold">{systemStats?.memory_usage || 0}%</p>
+                      <p className="text-lg font-semibold">{systemStats?.memory_usage != null ? `${systemStats.memory_usage}%` : 'N/A'}</p>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Disk Usage</p>
-                      <p className="text-lg font-semibold">{systemStats?.disk_usage || 0}%</p>
+                      <p className="text-lg font-semibold">{systemStats?.disk_usage != null ? `${systemStats.disk_usage}%` : 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Database</p>
-                      <p className="text-lg font-semibold">{systemStats?.db_status || 'Healthy'}</p>
+                      <p className="text-lg font-semibold">{systemStats?.db_status || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Cache</p>
-                      <p className="text-lg font-semibold">{systemStats?.cache_status || 'Active'}</p>
+                      <p className="text-lg font-semibold">{systemStats?.cache_status || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">API Status</p>
-                      <p className="text-lg font-semibold text-green-600">Online</p>
+                      <p className={`text-lg font-semibold ${systemStats ? 'text-green-600' : 'text-muted-foreground'}`}>{systemStats ? 'Online' : 'N/A'}</p>
                     </div>
                   </div>
                 </div>
@@ -749,42 +743,6 @@ export default function SuperAdminProfile() {
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Vider le cache
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start"
-                  onClick={() => handleSystemAction('restart-services')}
-                  disabled={loading}
-                >
-                  <Server className="h-4 w-4 mr-2" />
-                  Redémarrer services
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start"
-                  onClick={() => handleSystemAction('backup-now')}
-                  disabled={loading}
-                >
-                  <HardDrive className="h-4 w-4 mr-2" />
-                  Backup immédiat
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start"
-                  onClick={() => handleSystemAction('optimize-db')}
-                  disabled={loading}
-                >
-                  <Database className="h-4 w-4 mr-2" />
-                  Optimiser BDD
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start"
-                  onClick={() => handleSystemAction('check-updates')}
-                  disabled={loading}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Vérifier mises à jour
                 </Button>
               </CardContent>
             </Card>

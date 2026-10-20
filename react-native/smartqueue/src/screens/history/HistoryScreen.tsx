@@ -10,6 +10,7 @@ import {
   Animated,
   Dimensions,
   Platform,
+  StyleSheet,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -111,13 +112,20 @@ const TicketHistoryCard: React.FC<{
   onRejoin: () => void;
 }> = ({ ticket, colors, isExpanded, onPress, onRejoin }) => {
   const getStatusConfig = () => {
-    const status = ticket.status;
-    if (status === 'served' || status === 'completed')
+    // Statuts réellement renvoyés par l'API : closed (servi), canceled, expired, absent…
+    const status: string = ticket.status;
+    if (status === 'closed' || status === 'served' || status === 'completed')
       return { label: 'Servi', icon: 'checkmark-circle', color: colors.success, bg: colors.success + '15' };
-    if (status === 'cancelled' || status === 'expired' || status === 'absent')
+    if (status === 'canceled' || status === 'cancelled')
       return { label: 'Annulé', icon: 'close-circle', color: colors.danger, bg: colors.danger + '15' };
+    if (status === 'expired')
+      return { label: 'Expiré', icon: 'hourglass-outline', color: colors.danger, bg: colors.danger + '15' };
+    if (status === 'absent')
+      return { label: 'Absent', icon: 'person-remove-outline', color: colors.warning, bg: colors.warning + '15' };
     if (status === 'called')
       return { label: 'Appelé', icon: 'notifications', color: colors.primary, bg: colors.primary + '15' };
+    if (status === 'en_route')
+      return { label: 'En route', icon: 'navigate', color: colors.primary, bg: colors.primary + '15' };
     if (status === 'waiting' || status === 'created')
       return { label: 'En attente', icon: 'time', color: colors.warning, bg: colors.warning + '15' };
     return { label: status, icon: 'help-circle', color: colors.textTertiary, bg: colors.border };
@@ -166,7 +174,7 @@ const TicketHistoryCard: React.FC<{
       {isExpanded && (
         <View style={[styles.expandedContent, { borderTopColor: colors.border }]}>
           <View style={styles.expandedRow}>
-            <Text style={[styles.expandedLabel, { color: colors.textTertiary }]}>Temps d'attente</Text>
+            <Text style={[styles.expandedLabel, { color: colors.textTertiary }]}>Temps d’attente</Text>
             <Text style={[styles.expandedValue, { color: colors.textPrimary }]}>
               {getWaitTime(ticket) || 'N/A'}
             </Text>
@@ -191,7 +199,7 @@ const TicketHistoryCard: React.FC<{
 const ActiveTicketCardCompact: React.FC<{
   activeTicket: Ticket | null;
   isCalled: boolean;
-  counterNumber: number | null;
+  counterNumber: string | number | null;
   colors: any;
   onPress: () => void;
 }> = ({ activeTicket, isCalled, counterNumber, colors, onPress }) => {
@@ -420,8 +428,10 @@ export const HistoryScreen: React.FC = () => {
       const newTicket = await ticketsApi.rejoinQueue(ticket.service_id);
       showSuccess('Ticket créé', `Votre ticket ${newTicket.number} a été créé.`, 'OK');
       router.push('/(tabs)/tickets');
-    } catch (error) {
-      showError('Erreur', 'Impossible de rejoindre la file.');
+    } catch (error: any) {
+      // Message métier du serveur (file pleine, ticket déjà actif, service fermé…)
+      const apiMessage = error?.response?.data?.error?.message || error?.response?.data?.message;
+      showError('Erreur', apiMessage || 'Impossible de rejoindre la file.');
     }
   };
 
@@ -499,7 +509,7 @@ export const HistoryScreen: React.FC = () => {
   );
 };
 
-const styles = {
+const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 50 : 40, paddingBottom: 12, borderBottomWidth: 1 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
@@ -556,6 +566,6 @@ const styles = {
   loaderContainer: { alignItems: 'center', paddingVertical: 60 },
   footerLoader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20, gap: 8 },
   footerText: { fontSize: 12 },
-};
+});
 
 export default HistoryScreen;

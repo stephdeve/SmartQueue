@@ -42,4 +42,17 @@ return [
         'service_account_json' => env('FIREBASE_SERVICE_ACCOUNT_JSON'),
     ],
 
+    // Twilio (SMS). Lu via config() : env() renvoie null après `config:cache`.
+    'twilio' => [
+        'sid' => env('TWILIO_SID'),
+        'token' => env('TWILIO_TOKEN'),
+        'from' => env('TWILIO_FROM'),
+    ],
+
+    // Google Sign-In : identifiants OAuth (web, android, ios) acceptés comme audience
+    // des ID tokens, séparés par des virgules.
+    'google' => [
+        'client_ids' => env('GOOGLE_CLIENT_IDS', ''),
+    ],
+
 ];

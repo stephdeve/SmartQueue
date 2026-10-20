@@ -28,6 +28,13 @@ api.interceptors.response.use(
     const url = err?.config?.url || "";
     const data = err?.response?.data;
 
+    // Le backend renvoie { error: { code, message, details } } pour les erreurs HTTP
+    // et de validation ; les écrans lisent `data.message` → normalisation unique ici.
+    if (data && typeof data === "object" && !data.message && data.error?.message) {
+      data.message = data.error.message;
+      if (data.error.details && !data.errors) data.errors = data.error.details;
+    }
+
     // Log pour debug
     if (status === 404 || status === 403) {
       console.error(`[API Error ${status}] ${url}`, data);
@@ -48,6 +55,10 @@ api.interceptors.response.use(
       ) {
         (window as any).localStorage.removeItem("token");
         (window as any).localStorage.removeItem("user");
+      }
+      // Purge du store Redux (écouté dans store/index.ts)
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("auth:expired"));
       }
       // Use history API instead of location.href to avoid full page reload
       if (typeof window !== "undefined") {

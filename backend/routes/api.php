@@ -49,31 +49,37 @@ use App\Http\Controllers\Api\FavoriteController;
 | Elles sont groupées par domaines fonctionnels et sécurisées via Sanctum et Policies.
 */
 
+// Identifiants numériques : une valeur non numérique doit donner 404, pas une erreur 500
+// (TypeError sur les paramètres int des contrôleurs). Les notifications utilisent des UUID.
+foreach (['service', 'agent', 'counter', 'establishment', 'ticket', 'exception'] as $param) {
+    Route::pattern($param, '[0-9]+');
+}
+
 // QR Code scan (public endpoint, auth required for ticket creation)
 Route::middleware('auth:sanctum')->post('qr-scan', [ServiceQrCodeController::class, 'scan']);
 
 // Authentification et gestion des devices
 Route::prefix('auth')->group(function () {
     // Inscription d'un utilisateur (user/agent/admin selon workflow adm)
-    Route::post('register', [AuthController::class, 'register']);
+    Route::post('register', [AuthController::class, 'register'])->middleware('throttle:auth');
     // Connexion (retourne un token personnel pour appels API)
-    Route::post('login', [AuthController::class, 'login'])->middleware('throttle:api');
+    Route::post('login', [AuthController::class, 'login'])->middleware('throttle:auth');
     // Déconnexion (révocation du token courant)
     Route::middleware('auth:sanctum')->post('logout', [AuthController::class, 'logout']);
     // Enregistrement / mise à jour du device FCM pour notifications push
     Route::middleware('auth:sanctum')->post('devices/register', [DeviceController::class, 'register']);
     Route::middleware('auth:sanctum')->delete('devices/current', [DeviceController::class, 'unregister']);
     // Google OAuth
-    Route::post('google', [AuthController::class, 'googleLogin']);
-    Route::post('google/register', [AuthController::class, 'googleRegister']);
+    Route::post('google', [AuthController::class, 'googleLogin'])->middleware('throttle:auth');
+    Route::post('google/register', [AuthController::class, 'googleRegister'])->middleware('throttle:auth');
     // Mot de passe oublié / réinitialisation (public)
-    Route::post('forgot', [ForgotPasswordController::class, 'sendResetLink']);
-    Route::post('reset', [ForgotPasswordController::class, 'reset']);
+    Route::post('forgot', [ForgotPasswordController::class, 'sendResetLink'])->middleware('throttle:auth');
+    Route::post('reset', [ForgotPasswordController::class, 'reset'])->middleware('throttle:auth');
 });
 
 // Onboarding SaaS (établissement -> abonnement)
 Route::prefix('onboarding')->group(function () {
-    Route::post('register-establishment', [OnboardingController::class, 'registerEstablishment']);
+    Route::post('register-establishment', [OnboardingController::class, 'registerEstablishment'])->middleware('throttle:auth');
     Route::middleware('auth:sanctum')->post('subscribe', [OnboardingController::class, 'subscribe']);
 });
 
@@ -81,14 +87,14 @@ Route::prefix('onboarding')->group(function () {
 Route::get('establishments', [EstablishmentController::class, 'index']); // ?lat&lng&radius
 Route::get('establishments/nearby', [EstablishmentController::class, 'index']); // alias mobile: ?lat&lng&radius
 Route::get('establishments/search', [EstablishmentController::class, 'search']); // ?q
-Route::get('establishments/{id}', [EstablishmentController::class, 'show']);
-Route::get('establishments/{id}/services', [ServiceController::class, 'byEstablishment']);
+Route::get('establishments/{id}', [EstablishmentController::class, 'show'])->whereNumber('id');
+Route::get('establishments/{id}/services', [ServiceController::class, 'byEstablishment'])->whereNumber('id');
 
 // Services (lecture publique)
-Route::get('services/{id}', [ServiceController::class, 'show']);
-Route::get('services/{id}/affluence', [ServiceController::class, 'affluence']);
-Route::get('services/{id}/recommendations', [ServiceController::class, 'recommendations']);
-Route::get('services/{id}/availability', [ServiceController::class, 'availability']);
+Route::get('services/{id}', [ServiceController::class, 'show'])->whereNumber('id');
+Route::get('services/{id}/affluence', [ServiceController::class, 'affluence'])->whereNumber('id');
+Route::get('services/{id}/recommendations', [ServiceController::class, 'recommendations'])->whereNumber('id');
+Route::get('services/{id}/availability', [ServiceController::class, 'availability'])->whereNumber('id');
 Route::get('services/{service}/reviews', [ReviewController::class, 'index']); // ← {service} pour le binding auto
 
 // Espace utilisateur authentifié (tickets)
@@ -154,7 +160,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('tickets/{ticket}/cancel', [AgentTicketActionController::class, 'cancel']);
         Route::post('tickets/{ticket}/priority', [AgentTicketActionController::class, 'setPriority']);
         Route::post('tickets/{ticket}/mark-absent', [AgentTicketActionController::class, 'markAbsent']);
-        Route::post('tickets/{ticket}/defer', [AgentTicketActionController::class, 'defer']);
+        // POST tickets/{ticket}/defer : route unique déclarée plus bas (TicketRecallController::defer),
+        // qui délègue à AgentTicketActionController::defer lorsque l'appelant est un agent/admin.
 
         // Profil client (historique, stats)
         Route::get('tickets/{ticket}/client-profile', [AgentClientProfileController::class, 'show']);
@@ -168,7 +175,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('agent/tickets', [AdminTicketController::class, 'index']);
         Route::post('agent/tickets', [AdminTicketController::class, 'store']);
         Route::get('agent/tickets/stats', [AdminTicketController::class, 'stats']);
-        Route::get('agent/tickets/{ticketId}', [AdminTicketController::class, 'show']);
+        Route::get('agent/tickets/export', [AdminTicketController::class, 'export']);
+        Route::get('agent/tickets/{ticketId}', [AdminTicketController::class, 'show'])->whereNumber('ticketId');
 
         // Agent Dashboard routes
         Route::get('agent/dashboard/stats', [AgentDashboardController::class, 'stats']);
@@ -204,7 +212,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('services/{service}/qr-code/download', [ServiceQrCodeController::class, 'download']);
 
         Route::get('stats/overview', [AdminStatsController::class, 'overview']);
-        Route::get('stats/services/{serviceId}', [AdminStatsController::class, 'service']);
+        Route::get('stats/services/{serviceId}', [AdminStatsController::class, 'service'])->whereNumber('serviceId');
         Route::get('stats/series', [AdminStatsController::class, 'series']);
         Route::get('stats/advanced', [AdminStatsController::class, 'advanced']);
 
@@ -213,7 +221,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('tickets', [AdminTicketController::class, 'store']);
         Route::get('tickets', [AdminTicketController::class, 'index']);
         Route::get('tickets/stats', [AdminTicketController::class, 'stats']);
-        Route::get('tickets/{ticketId}', [AdminTicketController::class, 'show']);
+        Route::get('tickets/export', [AdminTicketController::class, 'export']);
+        Route::get('tickets/{ticketId}', [AdminTicketController::class, 'show'])->whereNumber('ticketId');
 
         // Exports
         Route::get('establishments/{establishment}/reports/activity.csv', [AdminReportExportController::class, 'activityCsv']);
@@ -226,8 +235,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Historique des notifications envoyées (logs)
         Route::get('notification-logs', [NotificationLogController::class, 'index']);
-        Route::get('notification-logs/{id}', [NotificationLogController::class, 'show']);
-        Route::patch('notification-logs/{id}', [NotificationLogController::class, 'update']);
+        Route::get('notification-logs/{id}', [NotificationLogController::class, 'show'])->whereNumber('id');
+        Route::patch('notification-logs/{id}', [NotificationLogController::class, 'update'])->whereNumber('id');
     });
 
     // Espace super-admin SaaS (multi-établissements)
@@ -236,6 +245,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('subscriptions', [SaasSubscriptionController::class, 'index']);
         Route::put('establishments/{establishment}/subscription', [SaasSubscriptionController::class, 'upsert']);
         Route::get('monitoring/overview', [SaasMonitoringController::class, 'overview']);
+        Route::get('admin/system-stats', [SaasMonitoringController::class, 'systemStats']);
+        Route::post('admin/system/{action}', [SaasMonitoringController::class, 'systemAction'])->where('action', '[a-z-]+');
     });
 
     // User alert preferences
@@ -251,7 +262,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('{ticket}/expire-en-route', [TicketRecallController::class, 'expireEnRoute']);
         Route::post('{ticket}/en-route', [TicketRecallController::class, 'enRoute']);
         Route::post('{ticket}/present', [TicketRecallController::class, 'present']); // "Je suis déjà là" → ferme le ticket auto
-        Route::post('{ticket}/defer', [TicketRecallController::class, 'defer']); // User defers/swap position
+        Route::post('{ticket}/defer', [TicketRecallController::class, 'defer']); // Usager (échange) ou agent
         Route::get('{ticket}/countdown', [TicketRecallController::class, 'countdown']);
         Route::post('{ticket}/review', [ReviewController::class, 'store']); // Évaluation post-service
     });
@@ -259,11 +270,5 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Authentification pour canaux de broadcast via Sanctum (Echo auth)
 Route::post('broadcasting/auth', function (Request $request) {
-    \Log::info('Broadcasting auth request', [
-        'channel_name' => $request->input('channel_name'),
-        'socket_id' => $request->input('socket_id'),
-        'user_id' => $request->user()?->id,
-    ]);
-
     return Broadcast::auth($request);
 })->middleware('auth:sanctum');

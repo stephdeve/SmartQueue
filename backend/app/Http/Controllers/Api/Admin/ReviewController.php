@@ -34,14 +34,14 @@ class ReviewController extends Controller
         $services = DB::table('reviews')
             ->whereIn('reviews.service_id', $serviceIds)
             ->join('services', 'reviews.service_id', '=', 'services.id')
-            ->selectRaw('reviews.service_id, services.name as service_name, ROUND(AVG(reviews.rating)::numeric, 2) as avg_rating, COUNT(reviews.id) as total')
+            ->selectRaw('reviews.service_id, services.name as service_name, AVG(reviews.rating) as avg_rating, COUNT(reviews.id) as total')
             ->groupBy('reviews.service_id', 'services.name')
             ->orderByDesc('total')
             ->get()
             ->map(fn ($r) => [
                 'service_id'   => $r->service_id,
                 'service_name' => $r->service_name,
-                'avg_rating'   => (float) $r->avg_rating,
+                'avg_rating'   => round((float) $r->avg_rating, 2),
                 'total'        => (int) $r->total,
             ]);
 
@@ -62,27 +62,27 @@ class ReviewController extends Controller
         $evolution = DB::table('reviews')
             ->whereIn('service_id', $serviceIds)
             ->where('reviews.created_at', '>=', Carbon::now()->subDays(30))
-            ->selectRaw("DATE(reviews.created_at) as date, ROUND(AVG(reviews.rating)::numeric, 2) as avg_rating, COUNT(reviews.id) as count")
+            ->selectRaw("DATE(reviews.created_at) as date, AVG(reviews.rating) as avg_rating, COUNT(reviews.id) as count")
             ->groupBy('date')
             ->orderBy('date')
             ->get()
             ->map(fn ($r) => [
                 'date'       => $r->date,
-                'avg_rating' => (float) $r->avg_rating,
+                'avg_rating' => round((float) $r->avg_rating, 2),
                 'count'      => (int) $r->count,
             ]);
 
         // Total + moyenne globale
         $totals = DB::table('reviews')
             ->whereIn('service_id', $serviceIds)
-            ->selectRaw('COUNT(*) as total, ROUND(AVG(rating)::numeric, 2) as global_avg')
+            ->selectRaw('COUNT(*) as total, AVG(rating) as global_avg')
             ->first();
 
         return response()->json([
             'services'     => $services,
             'distribution' => $distribution,
             'evolution'    => $evolution,
-            'global_avg'   => $totals->global_avg ? (float) $totals->global_avg : null,
+            'global_avg'   => $totals->global_avg !== null ? round((float) $totals->global_avg, 2) : null,
             'total'        => (int) ($totals->total ?? 0),
         ]);
     }

@@ -16,8 +16,12 @@ class ServiceResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'establishment_id' => $this->establishment_id,
             'name' => $this->name,
             'status' => $this->status,
+            // Sans ces champs, le formulaire d'édition admin réinitialisait capacité et priorité
+            'priority_support' => (bool) $this->priority_support,
+            'capacity' => $this->capacity !== null ? (int) $this->capacity : null,
             'opening_time' => $this->opening_time,
             'closing_time' => $this->closing_time,
             'avg_service_time_minutes' => (int) $this->avg_service_time_minutes,
@@ -39,6 +43,13 @@ class ServiceResource extends JsonResource
                     'closing_time' => $wd->closing_time,
                 ])->values();
             }),
+            // QR code : uniquement pour l'administration (le jeton permet de prendre un
+            // ticket "sur place" ; il ne doit pas être exposé par l'API publique)
+            $this->mergeWhen($request->is('api/admin/*'), fn () => [
+                'qr_code_token' => $this->qr_code_token,
+                'qr_code_url' => $this->qr_code_url,
+                'qr_generated_at' => $this->qr_generated_at?->toIso8601String(),
+            ]),
             // Etablissement parent (résumé)
             'establishment' => $this->whenLoaded('establishment', function () {
                 return [

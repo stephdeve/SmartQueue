@@ -95,7 +95,7 @@ export default function AgentProfileScreen() {
     {
       title: 'APP',
       items: [
-        { id: 'notifications', title: 'Notifications', icon: 'notifications-outline', iconBg: colors.warning, toggle: true, toggleValue: pushNotificationsEnabled, onToggle: (v: boolean) => updatePreferences({ push_notifications_enabled: v }) },
+        { id: 'notifications', title: 'Notifications', icon: 'notifications-outline', iconBg: colors.warning, toggle: true, toggleValue: pushNotificationsEnabled, onToggle: (v: boolean) => { updatePreferences({ push_notifications_enabled: v }).catch(() => {}); } },
         { id: 'darkMode', title: 'Mode sombre', icon: 'moon-outline', iconBg: colors.secondary, toggle: true, toggleValue: isDarkMode, onToggle: setDarkMode },
       ],
     },

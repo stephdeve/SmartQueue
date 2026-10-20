@@ -94,8 +94,8 @@ class TicketResource extends JsonResource
             'establishment' => ($this->service && $this->service->establishment) ? [
                 'id' => $this->service->establishment->id,
                 'name' => $this->service->establishment->name,
-                'lat' => $this->service->establishment->lat,
-                'lng' => $this->service->establishment->lng,
+                'lat' => $this->service->establishment->lat !== null ? (float) $this->service->establishment->lat : null,
+                'lng' => $this->service->establishment->lng !== null ? (float) $this->service->establishment->lng : null,
                 'address' => $this->service->establishment->address,
             ] : null,
         ];

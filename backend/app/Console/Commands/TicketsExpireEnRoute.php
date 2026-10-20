@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\SendPushNotification;
 use App\Models\Ticket;
 use App\Services\TicketService;
 use Illuminate\Console\Command;
@@ -41,19 +40,12 @@ class TicketsExpireEnRoute extends Command
 
         foreach ($tickets as $ticket) {
             $affectedServiceIds->push($ticket->service_id);
-            $this->ticketService->markAbsent($ticket);
-
-            if ($ticket->user) {
-                dispatch(new SendPushNotification(
-                    $ticket->user->id,
-                    'Absence temporaire',
-                    "Vous ne vous êtes pas présenté à temps. Votre ticket {$ticket->number} a été marqué absent mais peut encore être rappelé.",
-                    [
-                        'ticket_id' => $ticket->id,
-                        'service_id' => $ticket->service_id,
-                        'type' => 'en_route_expired',
-                    ]
-                ));
+            // markAbsent() envoie déjà la notification adaptée (absence temporaire ou
+            // définitive) : un second push ici créait un doublon, parfois contradictoire.
+            try {
+                $this->ticketService->markAbsent($ticket);
+            } catch (\InvalidArgumentException $e) {
+                // Ticket clôturé entre-temps : rien à faire
             }
         }
 

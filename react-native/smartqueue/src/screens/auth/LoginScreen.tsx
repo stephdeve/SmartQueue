@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useAuth } from '../../store/authStore';
+import { useAuth, useAuthStore } from '../../store/authStore';
 import { useCustomAlert } from '../../hooks/useCustomAlert';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -223,7 +223,8 @@ export const LoginScreen: React.FC = () => {
         showSuccess('✅ Connexion réussie', 'Connexion Google réussie !');
         
         setTimeout(() => {
-          const { user } = useAuth.getState();
+          // useAuth est un hook ; l'état hors rendu se lit sur le store zustand
+          const { user } = useAuthStore.getState();
           if (user?.role === 'agent' || user?.role === 'admin') {
             router.replace('/agent');
           } else {
@@ -275,7 +276,7 @@ export const LoginScreen: React.FC = () => {
                 <Ionicons name="timer-outline" size={48} color="#FFF" />
               </View>
               <Text style={styles.logoText}>SmartQueue</Text>
-              <Text style={styles.tagline}>Gérez vos files d'attente</Text>
+              <Text style={styles.tagline}>Gérez vos files d’attente</Text>
             </LinearGradient>
           </Animated.View>
 
@@ -341,7 +342,7 @@ export const LoginScreen: React.FC = () => {
             <View style={styles.signupContainer}>
               <Text style={[styles.signupText, { color: colors.textSecondary }]}>Pas encore de compte ? </Text>
               <TouchableOpacity onPress={handleGoToRegister}>
-                <Text style={[styles.signupLink, { color: colors.primary }]}>S'inscrire</Text>
+                <Text style={[styles.signupLink, { color: colors.primary }]}>S’inscrire</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>

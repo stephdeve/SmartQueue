@@ -18,6 +18,8 @@ export interface Ticket {
     | "closed"
     | "absent"
     | "expired"
+    | "canceled"
+    | "cancelled"
     | "dismissed";
   priority: "normal" | "high" | "vip" | "urgence";
   priority_reason?: string | null;
@@ -336,12 +338,13 @@ export const ticketsApi = {
     return response.data;
   },
 
-  // Rejoindre à nouveau la file (créer un nouveau ticket pour le même service)
+  // Rejoindre à nouveau la file (créer un nouveau ticket pour le même service).
+  // Pas d'endpoint dédié côté API : c'est une création de ticket classique.
   rejoinQueue: async (serviceId: number): Promise<Ticket> => {
-    const response = await axiosClient.post("/tickets/rejoin", {
+    const response = await axiosClient.post("/tickets", {
       service_id: serviceId,
     });
-    return response.data;
+    return response.data?.data || response.data;
   },
 
   // Obtenir le temps d'attente estimé pour un service

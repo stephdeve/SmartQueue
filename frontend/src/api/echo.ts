@@ -11,15 +11,23 @@ import Pusher from "pusher-js";
 // Create a singleton Echo instance configured for Bearer auth with Sanctum token
 let echoInstance: any = null;
 
-export function getEcho(): any {
-  if (echoInstance) return echoInstance;
-  // Token Sanctum pour l'auth broadcast privé
-  const token =
-    typeof window !== "undefined" &&
+// Objet d'en-têtes partagé avec pusher-js (même référence) : mis à jour à chaque
+// appel pour que l'auth des canaux utilise le token courant, et non celui présent
+// lors de la création du singleton (null avant connexion, ou ancien compte).
+const authHeaders: Record<string, string> = {};
+
+function readToken(): string | null {
+  return typeof window !== "undefined" &&
     (window as any).localStorage &&
     typeof (window as any).localStorage.getItem === "function"
-      ? (window as any).localStorage.getItem("token")
-      : null;
+    ? (window as any).localStorage.getItem("token")
+    : null;
+}
+
+export function getEcho(): any {
+  const token = readToken();
+  authHeaders.Authorization = token ? `Bearer ${token}` : "";
+  if (echoInstance) return echoInstance;
   const key =
     import.meta.env.VITE_REVERB_APP_KEY || import.meta.env.VITE_PUSHER_KEY;
   const host =
@@ -55,7 +63,18 @@ export function getEcho(): any {
     disableStats: true,
     enabledTransports: ["ws", "wss"],
     authEndpoint: `${import.meta.env.VITE_API_BASE_URL || ""}/api/broadcasting/auth`,
-    auth: { headers: { Authorization: token ? `Bearer ${token}` : "" } },
+    auth: { headers: authHeaders },
   });
   return echoInstance;
+}
+
+/** À appeler à la déconnexion : ferme la socket et oublie les abonnements. */
+export function disconnectEcho(): void {
+  if (!echoInstance) return;
+  try {
+    echoInstance.disconnect();
+  } catch (_) {
+    // socket déjà fermée
+  }
+  echoInstance = null;
 }

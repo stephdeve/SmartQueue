@@ -28,7 +28,7 @@ class ServiceController extends Controller
             ->where('establishment_id', $id)
             ->with('workingDays')
             ->withCount(['tickets as people_waiting' => function ($q2) {
-                $q2->where('status', 'waiting');
+                $q2->where('status', 'waiting')->whereDate('valid_date', now()->toDateString());
             }])
             ->withCount(['agents as agents_count'])
             ->orderBy('name');
@@ -39,11 +39,13 @@ class ServiceController extends Controller
         if ($q->has('priority_support')) {
             $builder->where('priority_support', (bool) $prio);
         }
+        // HAVING sur l'alias d'un withCount est refusé par PostgreSQL : sous-requête de comptage
+        $waitingToday = fn ($t) => $t->where('status', 'waiting')->whereDate('valid_date', now()->toDateString());
         if (is_numeric($min)) {
-            $builder->having('people_waiting', '>=', (int) $min);
+            $builder->whereHas('tickets', $waitingToday, '>=', (int) $min);
         }
         if (is_numeric($max)) {
-            $builder->having('people_waiting', '<=', (int) $max);
+            $builder->whereHas('tickets', $waitingToday, '<=', (int) $max);
         }
 
         $paginator = $builder->paginate($perPage);
@@ -58,7 +60,7 @@ class ServiceController extends Controller
         $service = Service::query()
             ->with(['establishment', 'workingDays'])
             ->withCount(['tickets as people_waiting' => function ($q) {
-                $q->where('status', 'waiting');
+                $q->where('status', 'waiting')->whereDate('valid_date', now()->toDateString());
             }])
             ->findOrFail($id);
 
@@ -75,6 +77,7 @@ class ServiceController extends Controller
         $people = DB::table('tickets')
             ->where('service_id', $id)
             ->where('status', 'waiting')
+            ->whereDate('valid_date', now()->toDateString())
             ->count();
 
         // ETA moyen basé sur les 24h: moyenne(closed_at - called_at) calculée en PHP pour compat SQL
@@ -91,7 +94,7 @@ class ServiceController extends Controller
             $called = \Illuminate\Support\Carbon::parse($r->called_at);
             $closed = \Illuminate\Support\Carbon::parse($r->closed_at);
             if ($closed->greaterThan($called)) {
-                $sum += $closed->diffInMinutes($called);
+                $sum += $called->diffInMinutes($closed); // Carbon 3 : signé
                 $n++;
             }
         }

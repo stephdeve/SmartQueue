@@ -1,5 +1,19 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { api } from "@/api/axios";
+import { disconnectEcho } from "@/api/echo";
+
+/** Erreur transmise aux composants via rejectWithValue (le statut HTTP est conservé). */
+export interface AuthError {
+  status?: number;
+  message: string;
+  data?: any;
+}
+
+const toAuthError = (err: any, fallback: string): AuthError => ({
+  status: err?.response?.status,
+  message: err?.response?.data?.message || err?.message || fallback,
+  data: err?.response?.data,
+});
 
 export type Role = "admin" | "agent" | "user" | "super_admin";
 export interface User {
@@ -36,90 +50,83 @@ const initialState: AuthState = {
   isAuthenticated: !!localStorage.getItem("token"),
 };
 
-export const login = createAsyncThunk(
-  "auth/login",
-  async (payload: { email: string; password: string }) => {
-    try {
-      const { data } = await api.post("/api/auth/login", payload);
-      return data as { token: string; user: User };
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.message || err?.message || "Login failed";
-      // Use rejectWithValue to pass a controlled message to the reducer
-      throw new Error(msg);
-    }
-  },
-);
+export const login = createAsyncThunk<
+  { token: string; user: User },
+  { email: string; password: string },
+  { rejectValue: AuthError }
+>("auth/login", async (payload, { rejectWithValue }) => {
+  try {
+    const { data } = await api.post("/api/auth/login", payload);
+    return data as { token: string; user: User };
+  } catch (err: any) {
+    // rejectWithValue : une Error levée perd son statut HTTP à la sérialisation
+    return rejectWithValue(toAuthError(err, "Login failed"));
+  }
+});
 
-export const signup = createAsyncThunk(
-  "auth/signup",
-  async (payload: {
+export const signup = createAsyncThunk<
+  { token: string; user: User },
+  {
     name: string;
     email: string;
     password: string;
     password_confirmation: string;
     phone?: string;
-  }) => {
-    try {
-      const { data } = await api.post("/api/auth/register", payload);
-      return data as { token: string; user: User };
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.message || err?.message || "Signup failed";
-      throw new Error(msg);
-    }
   },
-);
+  { rejectValue: AuthError }
+>("auth/signup", async (payload, { rejectWithValue }) => {
+  try {
+    const { data } = await api.post("/api/auth/register", payload);
+    return data as { token: string; user: User };
+  } catch (err: any) {
+    return rejectWithValue(toAuthError(err, "Signup failed"));
+  }
+});
 
-export const registerEstablishment = createAsyncThunk(
-  "auth/registerEstablishment",
-  async (payload: {
+export const registerEstablishment = createAsyncThunk<
+  { token: string; user: User; next_step: string },
+  {
     admin_name: string;
     admin_email: string;
     admin_password: string;
     admin_password_confirmation: string;
     admin_phone?: string;
-  }) => {
-    try {
-      const { data } = await api.post(
-        "/api/onboarding/register-establishment",
-        payload,
-      );
-      return data as { token: string; user: User; next_step: string };
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.message || err?.message || "Registration failed";
-      throw new Error(msg);
-    }
   },
-);
+  { rejectValue: AuthError }
+>("auth/registerEstablishment", async (payload, { rejectWithValue }) => {
+  try {
+    const { data } = await api.post(
+      "/api/onboarding/register-establishment",
+      payload,
+    );
+    return data as { token: string; user: User; next_step: string };
+  } catch (err: any) {
+    return rejectWithValue(toAuthError(err, "Registration failed"));
+  }
+});
 
-export const subscribe = createAsyncThunk(
-  "auth/subscribe",
-  async (payload: { plan: string; paid: boolean }) => {
-    try {
-      const { data } = await api.post("/api/onboarding/subscribe", payload);
-      return data as {
-        pending_subscription: any;
-        next_step: string;
-        user?: User;
-      };
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const msg =
-        err?.response?.data?.message || err?.message || "Subscription failed";
-      const e: any = new Error(msg);
-      e.status = status;
-      e.data = err?.response?.data;
-      throw e;
-    }
-  },
-);
+export const subscribe = createAsyncThunk<
+  { pending_subscription: any; next_step: string; user?: User },
+  { plan: string; paid: boolean },
+  { rejectValue: AuthError }
+>("auth/subscribe", async (payload, { rejectWithValue }) => {
+  try {
+    const { data } = await api.post("/api/onboarding/subscribe", payload);
+    return data as {
+      pending_subscription: any;
+      next_step: string;
+      user?: User;
+    };
+  } catch (err: any) {
+    return rejectWithValue(toAuthError(err, "Subscription failed"));
+  }
+});
 
 export const logout = createAsyncThunk("auth/logout", async () => {
   try {
     await api.post("/api/auth/logout");
   } catch {}
+  disconnectEcho();
   return true;
 });
 
@@ -139,7 +146,17 @@ export const updateProfile = createAsyncThunk(
 const slice = createSlice({
   name: "auth",
   initialState,
-  reducers: {},
+  reducers: {
+    // Token refusé par l'API (401) : purge de la session sans appel réseau
+    sessionExpired: (s) => {
+      s.user = null;
+      s.token = null;
+      s.isAuthenticated = false;
+      s.loading = false;
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+    },
+  },
   extraReducers: (b) => {
     b.addCase(login.pending, (s) => {
       s.loading = true;
@@ -156,9 +173,9 @@ const slice = createSlice({
         localStorage.setItem("user", JSON.stringify(a.payload.user));
       },
     );
-    b.addCase(login.rejected, (s, a: any) => {
+    b.addCase(login.rejected, (s, a) => {
       s.loading = false;
-      s.error = a?.error?.message || "Login failed";
+      s.error = a.payload?.message || a.error?.message || "Login failed";
     });
 
     b.addCase(signup.pending, (s) => {
@@ -176,9 +193,9 @@ const slice = createSlice({
         localStorage.setItem("user", JSON.stringify(a.payload.user));
       },
     );
-    b.addCase(signup.rejected, (s, a: any) => {
+    b.addCase(signup.rejected, (s, a) => {
       s.loading = false;
-      s.error = a?.error?.message || "Signup failed";
+      s.error = a.payload?.message || a.error?.message || "Signup failed";
     });
     b.addCase(registerEstablishment.pending, (s) => {
       s.loading = true;
@@ -198,9 +215,9 @@ const slice = createSlice({
         localStorage.setItem("user", JSON.stringify(a.payload.user));
       },
     );
-    b.addCase(registerEstablishment.rejected, (s, a: any) => {
+    b.addCase(registerEstablishment.rejected, (s, a) => {
       s.loading = false;
-      s.error = a?.error?.message || "Registration failed";
+      s.error = a.payload?.message || a.error?.message || "Registration failed";
     });
 
     b.addCase(subscribe.pending, (s) => {
@@ -227,9 +244,9 @@ const slice = createSlice({
         }
       },
     );
-    b.addCase(subscribe.rejected, (s, a: any) => {
+    b.addCase(subscribe.rejected, (s, a) => {
       s.loading = false;
-      s.error = a?.error?.message || "Subscription failed";
+      s.error = a.payload?.message || a.error?.message || "Subscription failed";
     });
 
     b.addCase(logout.fulfilled, (s) => {
@@ -260,4 +277,5 @@ const slice = createSlice({
   },
 });
 
+export const { sessionExpired } = slice.actions;
 export default slice.reducer;

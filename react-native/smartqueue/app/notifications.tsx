@@ -40,7 +40,7 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-function getNotificationStyle(type: string, colors: any) {
+function getNotificationStyle(type: string, colors: any): { icon: keyof typeof Ionicons.glyphMap; color: string; bgColor: string } {
   switch (type) {
     case "success":
       return { icon: "checkmark-circle", color: colors.success, bgColor: colors.success + "15" };

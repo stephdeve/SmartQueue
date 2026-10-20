@@ -11,12 +11,36 @@ use App\Models\User;
 class StatsController extends Controller
 {
     /**
+     * Période from/to de la requête. Une date seule (Y-m-d) en borne haute couvre
+     * toute la journée (sinon "to=aujourd'hui" excluait les tickets du jour).
+     *
+     * @return array{0: \Illuminate\Support\Carbon, 1: \Illuminate\Support\Carbon}
+     */
+    private function parseRange(Request $request, int $defaultDays): array
+    {
+        try {
+            $from = $request->query('from')
+                ? \Illuminate\Support\Carbon::parse((string) $request->query('from'))
+                : now()->subDays($defaultDays);
+            $toRaw = (string) $request->query('to', '');
+            $to = $toRaw !== '' ? \Illuminate\Support\Carbon::parse($toRaw) : now();
+        } catch (\Throwable $e) {
+            abort(422, 'Invalid date range');
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $toRaw)) {
+            $to = $to->endOfDay();
+        }
+
+        return [$from, $to];
+    }
+
+    /**
      * Statistiques globales (période optionnelle from/to).
      */
     public function overview(Request $request)
     {
-        $from = $request->query('from') ? now()->parse($request->query('from')) : now()->subDays(7);
-        $to = $request->query('to') ? now()->parse($request->query('to')) : now();
+        [$from, $to] = $this->parseRange($request, 7);
 
         $scopedId = $request->attributes->get('scoped_establishment_id');
 
@@ -50,7 +74,7 @@ class StatsController extends Controller
         foreach ($rows as $r) {
             $created = \Illuminate\Support\Carbon::parse($r->created_at);
             $called = \Illuminate\Support\Carbon::parse($r->called_at);
-            if ($called->greaterThan($created)) { $sum += $called->diffInMinutes($created); $n++; }
+            if ($called->greaterThan($created)) { $sum += $created->diffInMinutes($called); $n++; }
         }
         $waitAvg = $n > 0 ? (int) round($sum / $n) : null;
 
@@ -109,8 +133,7 @@ class StatsController extends Controller
             ->when($scopedId, fn ($q) => $q->where('establishment_id', (int) $scopedId))
             ->findOrFail($serviceId);
 
-        $from = $request->query('from') ? now()->parse($request->query('from')) : now()->subDays(7);
-        $to = $request->query('to') ? now()->parse($request->query('to')) : now();
+        [$from, $to] = $this->parseRange($request, 7);
 
         $totals = DB::table('tickets')
             ->selectRaw("COUNT(*) as created,
@@ -133,7 +156,7 @@ class StatsController extends Controller
         foreach ($rows as $r) {
             $called = \Illuminate\Support\Carbon::parse($r->called_at);
             $closed = \Illuminate\Support\Carbon::parse($r->closed_at);
-            if ($closed->greaterThan($called)) { $sum += $closed->diffInMinutes($called); $n++; }
+            if ($closed->greaterThan($called)) { $sum += $called->diffInMinutes($closed); $n++; }
         }
         $serviceAvg = $n > 0 ? (int) round($sum / $n) : (int) $service->avg_service_time_minutes;
 
@@ -200,7 +223,7 @@ class StatsController extends Controller
         foreach ($waitRows as $r) {
             $c1 = \Illuminate\Support\Carbon::parse($r->created_at);
             $c2 = \Illuminate\Support\Carbon::parse($r->called_at);
-            if ($c2->gt($c1)) { $wSum += $c2->diffInMinutes($c1); $wN++; }
+            if ($c2->gt($c1)) { $wSum += $c1->diffInMinutes($c2); $wN++; }
         }
 
         $svcRows = $base($from, $to)->whereNotNull('tickets.closed_at')->whereNotNull('tickets.called_at')
@@ -209,7 +232,7 @@ class StatsController extends Controller
         foreach ($svcRows as $r) {
             $c1 = \Illuminate\Support\Carbon::parse($r->called_at);
             $c2 = \Illuminate\Support\Carbon::parse($r->closed_at);
-            if ($c2->gt($c1)) { $sSum += $c2->diffInMinutes($c1); $sN++; }
+            if ($c2->gt($c1)) { $sSum += $c1->diffInMinutes($c2); $sN++; }
         }
 
         $total  = (int) ($kRow->total ?? 0);
@@ -269,7 +292,7 @@ class StatsController extends Controller
             $c2 = \Illuminate\Support\Carbon::parse($r->called_at);
             if ($c2->gt($c1)) {
                 $svcWaitMap[$r->service_id] ??= [0, 0];
-                $svcWaitMap[$r->service_id][0] += $c2->diffInMinutes($c1);
+                $svcWaitMap[$r->service_id][0] += $c1->diffInMinutes($c2);
                 $svcWaitMap[$r->service_id][1]++;
             }
         }
@@ -310,7 +333,7 @@ class StatsController extends Controller
             $c2 = \Illuminate\Support\Carbon::parse($r->called_at);
             if ($c2->gt($c1)) {
                 $prioWaitMap[$p] ??= [0, 0];
-                $prioWaitMap[$p][0] += $c2->diffInMinutes($c1);
+                $prioWaitMap[$p][0] += $c1->diffInMinutes($c2);
                 $prioWaitMap[$p][1]++;
             }
         }
@@ -431,8 +454,7 @@ class StatsController extends Controller
      */
     public function series(Request $request)
     {
-        $from = $request->query('from') ? now()->parse($request->query('from')) : now()->subDays(14);
-        $to = $request->query('to') ? now()->parse($request->query('to')) : now();
+        [$from, $to] = $this->parseRange($request, 14);
         $bucket = $request->query('bucket', 'day');
         $serviceId = $request->query('service_id') ? (int) $request->query('service_id') : null;
 

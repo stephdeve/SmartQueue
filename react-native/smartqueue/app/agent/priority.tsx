@@ -33,10 +33,11 @@ export default function PriorityTickets() {
           per_page: 50,
         },
       });
-      // Filter for urgence/vip/high priority
+      // Tickets prioritaires encore en file (les tickets clos/annulés du jour n'ont rien à faire ici)
       const allTickets = response.data?.data || [];
       const priorityFiltered = allTickets.filter((t: Ticket) =>
-        t.priority === 'urgence' || t.priority === 'high' || t.priority === 'vip'
+        t.status === 'waiting' &&
+        (t.priority === 'urgence' || t.priority === 'high' || t.priority === 'vip')
       );
       setTickets(priorityFiltered);
     } catch (error) {
@@ -55,7 +56,8 @@ export default function PriorityTickets() {
 
   const callTicket = async (ticketId: number) => {
     try {
-      await axiosClient.post(`/tickets/${ticketId}/call`);
+      // Pas d'endpoint « call » dédié : recall appelle n'importe quel ticket actif
+      await axiosClient.post(`/tickets/${ticketId}/recall`);
       fetchData();
     } catch (error: any) {
       console.error('Error calling ticket:', error);

@@ -19,9 +19,9 @@ class SendSmsNotification implements ShouldQueue
      */
     public function handle(): void
     {
-        $sid = env('TWILIO_SID');
-        $token = env('TWILIO_TOKEN');
-        $from = env('TWILIO_FROM');
+        $sid = config('services.twilio.sid');
+        $token = config('services.twilio.token');
+        $from = config('services.twilio.from');
 
         if (!$sid || !$token || !$from) {
             Log::warning('Twilio not configured; skipping SMS');

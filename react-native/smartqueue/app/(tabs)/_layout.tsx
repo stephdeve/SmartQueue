@@ -173,7 +173,7 @@ export default function TabLayout() {
 
               <Ionicons name="star" size={40} color="#F59E0B" style={{ alignSelf: "center", marginBottom: 8 }} />
               <Text style={[reviewStyles.title, { color: colors.textPrimary }]}>
-                Comment s'est passé votre visite ?
+                Comment s’est passé votre visite ?
               </Text>
               <Text style={[reviewStyles.subtitle, { color: colors.textSecondary }]}>
                 {pendingReviewTicket?.serviceName ?? ""}

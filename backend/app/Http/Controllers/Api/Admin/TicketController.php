@@ -29,7 +29,10 @@ class TicketController extends Controller
                 ->orderBy('services.name')
                 ->get();
         } else {
-            $scopedId = $request->attributes->get('scoped_establishment_id');
+            $scopedId = $request->attributes->get('scoped_establishment_id') ?: $user->establishment_id;
+            if (empty($scopedId)) {
+                abort(403, 'Admin has no establishment scope');
+            }
             $services = Service::query()
                 ->when($scopedId, fn($q) => $q->where('establishment_id', (int) $scopedId))
                 ->select('id', 'name', 'status')
@@ -55,12 +58,9 @@ class TicketController extends Controller
         $agent = $request->user();
         $serviceId = (int) $request->validated('service_id');
 
-        // Vérifier l'accès au service
-        if ($agent->role === 'agent') {
-            $assignedServiceIds = $agent->services()->pluck('services.id');
-            if (!$assignedServiceIds->contains($serviceId)) {
-                abort(403, 'Accès non autorisé à ce service');
-            }
+        // Vérifier l'accès au service (agent assigné ou admin de l'établissement)
+        if (!$agent->can('manage', Service::findOrFail($serviceId))) {
+            abort(403, 'Accès non autorisé à ce service');
         }
 
         $priority = $request->validated('priority') ?? 'normal';
@@ -68,20 +68,9 @@ class TicketController extends Controller
         $ticket = DB::transaction(function () use ($serviceId, $priority, $request, $ticketService) {
             $service = Service::lockForUpdate()->findOrFail($serviceId);
             $targetDate = Carbon::today()->toDateString();
-            $targetDateKey = str_replace('-', '', $targetDate);
 
-            // Générer un numéro de ticket
-            $prefix = strtoupper(substr($service->name, 0, 1));
-            $last = Ticket::query()
-                ->where('service_id', $serviceId)
-                ->whereDate('valid_date', $targetDate)
-                ->orderByDesc('id')
-                ->value('number');
-            $seq = 1;
-            if ($last && preg_match('/^[A-Z]-(\d+)-' . $targetDateKey . '$/', $last, $m)) {
-                $seq = ((int) $m[1]) + 1;
-            }
-            $number = sprintf('%s-%03d-%s', $prefix, $seq, $targetDateKey);
+            // Générer un numéro de ticket (même règle que les tickets de l'app)
+            $number = $ticketService->nextTicketNumber($service, $targetDate);
 
             // Position dans la file (VIP/high s'insèrent devant les tickets normal)
             // La vraie position sera recalculée par recomputePositions ci-dessous
@@ -154,26 +143,22 @@ class TicketController extends Controller
     }
 
     /**
-     * Liste des tickets avec filtres pour admin/agent.
+     * Requête filtrée commune à la liste et à l'export (scope, période, service, statut).
      *
-     * Query params:
-     * - status: waiting|called|closed|absent|cancelled|expired|all
-     * - service_id: ID du service (optionnel)
-     * - from: date début (ISO ou Y-m-d)
-     * - to: date fin (ISO ou Y-m-d)
-     * - period: today|week|month (raccourci pour from/to)
-     * - per_page: nombre par page (défaut 20, max 100)
-     * - page: numéro de page
-     * - with_details: inclure les détails utilisateur (défaut false)
+     * @return array{0: \Illuminate\Database\Eloquent\Builder, 1: \Illuminate\Support\Carbon, 2: \Illuminate\Support\Carbon, 3: string}
      */
-    public function index(Request $request)
+    private function filteredTicketsQuery(Request $request): array
     {
         $scopedId = $request->attributes->get('scoped_establishment_id');
         $user = $request->user();
 
-        // Pour les agents, récupérer l'établissement via l'utilisateur
-        if ($user->role === 'agent' && !$scopedId) {
+        // Via les routes /agent/*, le middleware de scope n'est pas appliqué :
+        // l'établissement est celui de l'utilisateur (agent comme admin).
+        if (!$scopedId) {
             $scopedId = $user->establishment_id;
+        }
+        if ($user->role === 'admin' && empty($scopedId)) {
+            abort(403, 'Admin has no establishment scope');
         }
 
         // Déterminer la période
@@ -208,9 +193,6 @@ class TicketController extends Controller
             $to = now()->parse(now()->addDays(30)->toDateString())->endOfDay();
         }
 
-        $perPage = min(max((int) $request->query('per_page', 20), 1), 100);
-        $withDetails = $request->boolean('with_details', false);
-
         // Construire la requête
         $query = Ticket::query()
             ->join('services', 'services.id', '=', 'tickets.service_id')
@@ -222,22 +204,8 @@ class TicketController extends Controller
         } elseif ($user->role === 'agent') {
             // Agent: seulement les services auxquels il est assigné
             $assignedServiceIds = $user->services()->pluck('services.id');
-            if ($assignedServiceIds->isEmpty()) {
-                // Si l'agent n'a pas de services assignés, retourner une liste vide
-                return response()->json([
-                    'data' => [],
-                    'meta' => [
-                        'current_page' => 1,
-                        'per_page' => $perPage,
-                        'total' => 0,
-                        'last_page' => 1,
-                        'from' => $from->toDateTimeString(),
-                        'to' => $to->toDateTimeString(),
-                        'period' => $period,
-                    ],
-                ]);
-            }
-            $query->whereIn('tickets.service_id', $assignedServiceIds);
+            // Sans service assigné, aucun ticket (whereIn sur une liste vide)
+            $query->whereIn('tickets.service_id', $assignedServiceIds->all() ?: [0]);
         }
 
         // Filtre par service
@@ -249,9 +217,12 @@ class TicketController extends Controller
         $status = $request->query('status');
         if ($status && $status !== 'all') {
             if ($status === 'active') {
-                $query->whereIn('tickets.status', ['waiting', 'called', 'created']);
+                $query->whereIn('tickets.status', ['waiting', 'called', 'en_route', 'present', 'absent']);
             } elseif ($status === 'completed') {
-                $query->whereIn('tickets.status', ['closed', 'cancelled', 'served', 'expired', 'absent']);
+                $query->whereIn('tickets.status', ['closed', 'canceled', 'cancelled', 'expired']);
+            } elseif (in_array($status, ['canceled', 'cancelled'], true)) {
+                // Le statut stocké est 'canceled' ; 'cancelled' est accepté pour les clients existants
+                $query->whereIn('tickets.status', ['canceled', 'cancelled']);
             } else {
                 $query->where('tickets.status', $status);
             }
@@ -263,6 +234,28 @@ class TicketController extends Controller
                   ->where('tickets.status', 'waiting')
                   ->whereDate('tickets.valid_date', '>', now()->toDateString());
         }
+
+        return [$query, $from, $to, $period];
+    }
+
+    /**
+     * Liste des tickets avec filtres pour admin/agent.
+     *
+     * Query params:
+     * - status: waiting|called|closed|absent|cancelled|expired|all
+     * - service_id: ID du service (optionnel)
+     * - from: date début (ISO ou Y-m-d)
+     * - to: date fin (ISO ou Y-m-d)
+     * - period: today|week|month (raccourci pour from/to)
+     * - per_page: nombre par page (défaut 20, max 100)
+     * - page: numéro de page
+     * - with_details: inclure les détails utilisateur (défaut false)
+     */
+    public function index(Request $request)
+    {
+        [$query, $from, $to, $period] = $this->filteredTicketsQuery($request);
+        $perPage = min(max((int) $request->query('per_page', 20), 1), 100);
+        $withDetails = $request->boolean('with_details', false);
 
         // Sélection et tri
         $query->select([
@@ -358,6 +351,44 @@ class TicketController extends Controller
     }
 
     /**
+     * Export CSV des tickets (mêmes filtres que la liste). BOM UTF-8 pour Excel.
+     */
+    public function export(Request $request)
+    {
+        [$query, $from, $to] = $this->filteredTicketsQuery($request);
+
+        $query->select([
+            'tickets.id', 'tickets.number', 'tickets.status', 'tickets.priority', 'tickets.source',
+            'tickets.position', 'tickets.customer_name', 'tickets.customer_phone',
+            'tickets.valid_date', 'tickets.created_at', 'tickets.called_at', 'tickets.closed_at',
+            'tickets.absent_at', 'services.name as service_name',
+        ])->orderBy('tickets.id');
+
+        $filename = 'tickets_'.$from->format('Ymd').'-'.$to->format('Ymd').'.csv';
+
+        return response()->streamDownload(function () use ($query) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['id', 'numero', 'service', 'statut', 'priorite', 'source', 'position',
+                'client', 'telephone', 'date_validite', 'cree_le', 'appele_le', 'cloture_le', 'absent_le']);
+
+            $query->chunk(1000, function ($rows) use ($out) {
+                foreach ($rows as $t) {
+                    fputcsv($out, [
+                        $t->id, $t->number, $t->service_name, $t->status, $t->priority, $t->source,
+                        $t->position, $t->customer_name, $t->customer_phone,
+                        $t->valid_date?->toDateString(), $t->created_at?->toDateTimeString(),
+                        $t->called_at?->toDateTimeString(), $t->closed_at?->toDateTimeString(),
+                        $t->absent_at?->toDateTimeString(),
+                    ]);
+                }
+            });
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
      * Statistiques des tickets par service.
      *
      * Query params:
@@ -368,9 +399,13 @@ class TicketController extends Controller
         $scopedId = $request->attributes->get('scoped_establishment_id');
         $user = $request->user();
 
-        // Pour les agents, récupérer l'établissement via l'utilisateur
-        if ($user->role === 'agent' && !$scopedId) {
+        // Via les routes /agent/*, le middleware de scope n'est pas appliqué :
+        // l'établissement est celui de l'utilisateur (agent comme admin).
+        if (!$scopedId) {
             $scopedId = $user->establishment_id;
+        }
+        if ($user->role === 'admin' && empty($scopedId)) {
+            abort(403, 'Admin has no establishment scope');
         }
 
         // Déterminer la période
@@ -452,9 +487,11 @@ class TicketController extends Controller
                 COUNT(*) as total,
                 SUM(CASE WHEN tickets.status = 'waiting' THEN 1 ELSE 0 END) as waiting,
                 SUM(CASE WHEN tickets.status = 'called' THEN 1 ELSE 0 END) as called,
+                SUM(CASE WHEN tickets.status = 'en_route' THEN 1 ELSE 0 END) as en_route,
+                SUM(CASE WHEN tickets.status = 'present' THEN 1 ELSE 0 END) as present,
                 SUM(CASE WHEN tickets.status = 'closed' THEN 1 ELSE 0 END) as closed,
                 SUM(CASE WHEN tickets.status = 'absent' THEN 1 ELSE 0 END) as absent,
-                SUM(CASE WHEN tickets.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+                SUM(CASE WHEN tickets.status IN ('canceled', 'cancelled') THEN 1 ELSE 0 END) as cancelled,
                 SUM(CASE WHEN tickets.status = 'expired' THEN 1 ELSE 0 END) as expired
             ")
             ->first();
@@ -472,7 +509,7 @@ class TicketController extends Controller
                 SUM(CASE WHEN tickets.status = 'called' THEN 1 ELSE 0 END) as called,
                 SUM(CASE WHEN tickets.status = 'closed' THEN 1 ELSE 0 END) as closed,
                 SUM(CASE WHEN tickets.status = 'absent' THEN 1 ELSE 0 END) as absent,
-                SUM(CASE WHEN tickets.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
+                SUM(CASE WHEN tickets.status IN ('canceled', 'cancelled') THEN 1 ELSE 0 END) as cancelled
             ")
             ->groupBy('services.id', 'services.name', 'services.status')
             ->orderByDesc('total')
@@ -491,7 +528,7 @@ class TicketController extends Controller
             $created = \Illuminate\Support\Carbon::parse($row->created_at);
             $called = \Illuminate\Support\Carbon::parse($row->called_at);
             if ($called->greaterThan($created)) {
-                $totalWait += $called->diffInMinutes($created);
+                $totalWait += $created->diffInMinutes($called); // Carbon 3 : signé
                 $waitCount++;
             }
         }
@@ -507,6 +544,8 @@ class TicketController extends Controller
                 'total' => (int) ($globalStats->total ?? 0),
                 'waiting' => (int) ($globalStats->waiting ?? 0),
                 'called' => (int) ($globalStats->called ?? 0),
+                'en_route' => (int) ($globalStats->en_route ?? 0),
+                'present' => (int) ($globalStats->present ?? 0),
                 'closed' => (int) ($globalStats->closed ?? 0),
                 'absent' => (int) ($globalStats->absent ?? 0),
                 'cancelled' => (int) ($globalStats->cancelled ?? 0),
@@ -537,9 +576,13 @@ class TicketController extends Controller
         $scopedId = $request->attributes->get('scoped_establishment_id');
         $user = $request->user();
 
-        // Pour les agents, récupérer l'établissement via l'utilisateur
-        if ($user->role === 'agent' && !$scopedId) {
+        // Via les routes /agent/*, le middleware de scope n'est pas appliqué :
+        // l'établissement est celui de l'utilisateur (agent comme admin).
+        if (!$scopedId) {
             $scopedId = $user->establishment_id;
+        }
+        if ($user->role === 'admin' && empty($scopedId)) {
+            abort(403, 'Admin has no establishment scope');
         }
 
         $ticket = Ticket::with(['user', 'service.establishment', 'counter'])

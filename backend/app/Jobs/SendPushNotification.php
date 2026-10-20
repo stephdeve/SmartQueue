@@ -15,19 +15,29 @@ class SendPushNotification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public int $userId, public string $title, public string $body, public array $data = []) {}
+    /**
+     * false quand l'appelant a déjà enregistré la notification in-app (diffusion admin),
+     * pour éviter un doublon dans la cloche. Propriété hors constructeur : les jobs
+     * déjà sérialisés en file restent désérialisables avec la valeur par défaut.
+     */
+    public bool $storeInApp = true;
+
+    public function __construct(public int $userId, public string $title, public string $body, public array $data = [], bool $storeInApp = true)
+    {
+        $this->storeInApp = $storeInApp;
+    }
+
+    public int $tries = 3;
+    public int $backoff = 10;
 
     /**
      * Execute the job.
      */
-    public int $tries = 3;
-    public int $backoff = 10;
-
     public function handle(): void
     {
         // 1. Notification in-app (stockée en base, affichée dans le dashboard)
         $user = User::find($this->userId);
-        if ($user) {
+        if ($user && $this->storeInApp) {
             $user->notify(new \App\Notifications\InAppNotification(
                 $this->title,
                 $this->body,
@@ -211,8 +221,7 @@ class SendPushNotification implements ShouldQueue
      */
     private function sendViaFcmV1(array $tokens): array
     {
-        $serviceAccountJson = config('services.firebase.service_account_json')
-            ?? env('FIREBASE_SERVICE_ACCOUNT_JSON');
+        $serviceAccountJson = config('services.firebase.service_account_json');
 
         if (!$serviceAccountJson) {
             Log::warning('[Push] FIREBASE_SERVICE_ACCOUNT_JSON non configuré ; push FCM ignoré');
@@ -255,7 +264,11 @@ class SendPushNotification implements ShouldQueue
                         'message' => [
                             'token'        => $token,
                             'notification' => ['title' => $this->title, 'body' => $this->body],
-                            'data'         => array_map('strval', $this->data),
+                            // FCM v1 exige des valeurs string ; les valeurs non scalaires sont encodées en JSON
+                            'data'         => array_map(
+                                fn ($v) => is_scalar($v) || $v === null ? (string) $v : (string) json_encode($v),
+                                $this->data
+                            ),
                             'android'      => $this->buildAndroidConfig(),
                             'apns'         => $this->buildApnsConfig(),
                         ],

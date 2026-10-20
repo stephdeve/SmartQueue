@@ -13,8 +13,10 @@ return [
                 'host' => env('REVERB_HOST'),
                 'port' => env('REVERB_PORT', 443),
                 'scheme' => env('REVERB_SCHEME', 'https'),
-                'encrypted' => true,
-                'useTLS' => true,
+                // TLS uniquement en https : en local (REVERB_SCHEME=http) un useTLS forcé
+                // faisait échouer toutes les diffusions.
+                'encrypted' => env('REVERB_SCHEME', 'https') === 'https',
+                'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
                 'timeout' => 10,
                 'curl' => [
                     CURLOPT_TIMEOUT => 10,
@@ -31,7 +33,7 @@ return [
                 'host' => env('REVERB_HOST'),
                 'port' => env('REVERB_PORT', 443),
                 'scheme' => env('REVERB_SCHEME', 'https'),
-                'useTLS' => true,
+                'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
                 'timeout' => 10,
             ],
         ],

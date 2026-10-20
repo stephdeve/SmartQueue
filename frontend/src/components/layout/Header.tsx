@@ -227,7 +227,8 @@ export default function HeaderNew({ onMenuToggle }: HeaderProps) {
       try {
         if (scope === 'tickets') {
           // Déterminer l'endpoint selon le rôle
-          const isAgentOrAdmin = user?.role === 'agent' || user?.role === 'admin' || user?.role === 'super_admin'
+          // Le super admin n'a pas de file : les routes /agent/* lui renvoient 403
+          const isAgentOrAdmin = user?.role === 'agent' || user?.role === 'admin'
           const ticketsEndpoint = isAgentOrAdmin ? '/api/agent/tickets' : '/api/tickets/active'
           const historyEndpoint = isAgentOrAdmin ? '/api/agent/tickets?status=closed&per_page=50' : '/api/tickets/history?per_page=50'
           
@@ -521,7 +522,7 @@ export default function HeaderNew({ onMenuToggle }: HeaderProps) {
                       if (unread.length === 0) return
                       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
                       try {
-                        await Promise.all(unread.map((n) => api.post(`/api/notifications/${n.id}/read`)))
+                        await api.post('/api/notifications/mark-all-read')
                       } catch (_) {
                         fetchNotifications()
                       }

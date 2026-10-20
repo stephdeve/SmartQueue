@@ -381,7 +381,7 @@ export const RegisterScreen: React.FC = () => {
               {isLoading ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                <Text style={styles.registerButtonText}>S'inscrire</Text>
+                <Text style={styles.registerButtonText}>S’inscrire</Text>
               )}
             </TouchableOpacity>
 

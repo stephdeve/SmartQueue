@@ -28,21 +28,33 @@ class PushNotificationController extends Controller
         $payload = is_array($data['data'] ?? null) ? $data['data'] : [];
         $payload['type'] = $payload['type'] ?? 'admin_broadcast';
 
-        // La cloche/dashboard doit afficher le broadcast pour tous les users du même établissement.
-        // En revanche, l'envoi FCM doit rester limité aux users ayant au moins un device push_enabled.
+        // Destinataires : le personnel de l'établissement + ses usagers. Les usagers n'ont
+        // pas d'establishment_id : ce sont ceux qui ont un ticket sur un service de
+        // l'établissement (30 derniers jours) ou qui l'ont mis en favori.
         $admin = $request->user();
         $establishmentId = (int) ($admin->establishment_id ?? 0);
+        $serviceIds = \App\Models\Service::query()->where('establishment_id', $establishmentId)->pluck('id');
 
-        $establishmentUsers = User::query()
-            ->where('establishment_id', $establishmentId)
-            ->get();
+        $audience = User::query()
+            ->where(function ($q) use ($establishmentId, $serviceIds) {
+                $q->where('establishment_id', $establishmentId)
+                  ->orWhereHas('favoriteEstablishments', fn ($f) => $f->where('establishments.id', $establishmentId))
+                  ->orWhereIn('id', \App\Models\Ticket::query()
+                      ->select('user_id')
+                      ->whereIn('service_id', $serviceIds)
+                      ->whereNotNull('user_id')
+                      ->where('created_at', '>=', now()->subDays(30)));
+            });
 
+        $establishmentUsers = (clone $audience)->get();
+
+        // La cloche/dashboard affiche le broadcast pour toute l'audience…
         foreach ($establishmentUsers as $u) {
             $u->notify(new AdminBroadcastNotification($data['title'], $data['body'], $payload));
         }
 
-        $pushUserIds = User::query()
-            ->where('establishment_id', $establishmentId)
+        // …et l'envoi push reste limité aux users ayant au moins un device push_enabled
+        $pushUserIds = (clone $audience)
             ->whereHas('devices', function ($q) {
                 $q->where('push_enabled', true);
             })
@@ -50,7 +62,8 @@ class PushNotificationController extends Controller
             ->all();
 
         foreach ($pushUserIds as $userId) {
-            dispatch(new SendPushNotification((int) $userId, $data['title'], $data['body'], $payload));
+            // La notification in-app vient d'être créée ci-dessus : pas de doublon
+            dispatch(new SendPushNotification((int) $userId, $data['title'], $data['body'], $payload, storeInApp: false));
         }
 
         NotificationLog::create([

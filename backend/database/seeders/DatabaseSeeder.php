@@ -14,8 +14,16 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Super admin : identifiants fournis par l'environnement (ignoré s'ils sont absents)
+        $this->call(SuperAdminSeeder::class);
+
+        // Données de démonstration (comptes au mot de passe connu, faux tickets) :
+        // jamais en production.
+        if (app()->environment('production')) {
+            return;
+        }
+
         $this->call([
-            SuperAdminSeeder::class,
             AdminSeeder::class,
             EstablishmentSeeder::class,
             ServiceSeeder::class,

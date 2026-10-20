@@ -111,7 +111,8 @@ export const establishmentsApi = {
     let retryCount = 0;
     
     // Helper function to make request with retry
-    const makeRequest = async (requestParams: EstablishmentsParams, attempt: number): Promise<Establishment[]> => {
+    // Réponse paginée Laravel ({ data, links, meta }) ou tableau brut
+    const makeRequest = async (requestParams: EstablishmentsParams, attempt: number): Promise<any> => {
       try {
         const response = await axiosClient.get('/establishments', { params: requestParams });
         return response.data;

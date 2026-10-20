@@ -75,28 +75,42 @@ export const usersApi = {
     return response.data;
   },
 
-  // Obtenir les préférences de l'utilisateur
-  getPreferences: async (): Promise<UserPreferences> => {
-    const response = await axiosClient.get('/me/preferences');
-    return response.data;
-  },
-
-  // Mettre à jour les préférences de l'utilisateur
-  updatePreferences: async (preferences: Partial<UserPreferences>): Promise<UserPreferences> => {
-    const response = await axiosClient.put('/me/preferences', preferences);
-    return response.data;
-  },
-
-  // Obtenir les préférences de notification
-  getNotificationPreferences: async (): Promise<NotificationPreferences> => {
+  // Préférences utilisateur : seuls push/SMS sont stockés côté serveur
+  // (/notification-preferences, utilisé pour les alertes « votre tour approche »).
+  // Les autres (thème, langue, son…) restent locales (store persisté).
+  getPreferences: async (): Promise<Partial<UserPreferences>> => {
     const response = await axiosClient.get('/notification-preferences');
-    return response.data;
+    const prefs = response.data?.data ?? response.data ?? {};
+    return {
+      push_notifications_enabled: prefs.push_enabled ?? true,
+      sms_notifications_enabled: prefs.sms_enabled ?? false,
+    };
   },
 
-  // Mettre à jour les préférences de notification
-  updateNotificationPreferences: async (preferences: Partial<NotificationPreferences>): Promise<NotificationPreferences> => {
+  updatePreferences: async (preferences: Partial<UserPreferences>): Promise<Partial<UserPreferences>> => {
+    const payload: Record<string, boolean> = {};
+    if (preferences.push_notifications_enabled !== undefined) payload.push_enabled = preferences.push_notifications_enabled;
+    if (preferences.sms_notifications_enabled !== undefined) payload.sms_enabled = preferences.sms_notifications_enabled;
+    if (Object.keys(payload).length === 0) return {};
+
+    const response = await axiosClient.put('/notification-preferences', payload);
+    const prefs = response.data?.data ?? response.data ?? {};
+    return {
+      push_notifications_enabled: prefs.push_enabled ?? preferences.push_notifications_enabled,
+      sms_notifications_enabled: prefs.sms_enabled ?? preferences.sms_notifications_enabled,
+    };
+  },
+
+  // Obtenir les préférences de notification (réponse API enveloppée dans { data })
+  getNotificationPreferences: async (): Promise<Partial<NotificationPreferences>> => {
+    const response = await axiosClient.get('/notification-preferences');
+    return response.data?.data ?? response.data ?? {};
+  },
+
+  // Mettre à jour les préférences de notification (le serveur ignore les clés inconnues)
+  updateNotificationPreferences: async (preferences: Partial<NotificationPreferences>): Promise<Partial<NotificationPreferences>> => {
     const response = await axiosClient.put('/notification-preferences', preferences);
-    return response.data;
+    return response.data?.data ?? response.data ?? {};
   },
 
   // Changer le mot de passe

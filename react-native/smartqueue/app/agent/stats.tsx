@@ -176,7 +176,7 @@ export default function AgentStats() {
       if ((stats?.today_absent ?? 0) > 3 && absenteeismRate > 20) {
         return (
           <View style={[styles.insightCard, { backgroundColor: '#FF3B3015', borderColor: '#FF3B30' }]}>
-            <Text style={[styles.insightText, { color: '#FF3B30' }]}>⚠️ Taux d'absentéisme élevé aujourd'hui ({Math.round(absenteeismRate)}%)</Text>
+            <Text style={[styles.insightText, { color: '#FF3B30' }]}>⚠️ Taux d’absentéisme élevé aujourd’hui ({Math.round(absenteeismRate)}%)</Text>
           </View>
         );
       }
@@ -191,13 +191,13 @@ export default function AgentStats() {
       if ((stats?.avg_wait_time ?? 0) > 15) {
         return (
           <View style={[styles.insightCard, { backgroundColor: '#FF950015', borderColor: '#FF9500' }]}>
-            <Text style={[styles.insightText, { color: '#FF9500' }]}>⏱ Temps d'attente moyen élevé ({Math.round(stats?.avg_wait_time ?? 0)} min)</Text>
+            <Text style={[styles.insightText, { color: '#FF9500' }]}>⏱ Temps d’attente moyen élevé ({Math.round(stats?.avg_wait_time ?? 0)} min)</Text>
           </View>
         );
       }
       return (
         <View style={[styles.insightCard, { backgroundColor: '#3B82F615', borderColor: '#3B82F6' }]}>
-          <Text style={[styles.insightText, { color: '#3B82F6' }]}>ℹ️ Activité normale aujourd'hui</Text>
+          <Text style={[styles.insightText, { color: '#3B82F6' }]}>ℹ️ Activité normale aujourd’hui</Text>
         </View>
       );
     };
@@ -341,14 +341,14 @@ export default function AgentStats() {
       {stats && (
         <View style={[styles.ticketSummary, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.ticketSummaryText, { color: colors.textSecondary }]}>
-            {stats.today_total} tickets aujourd'hui — {stats.today_waiting} en attente, {stats.today_closed} clôturés, {stats.today_absent} absents
+            {stats.today_total} tickets aujourd’hui — {stats.today_waiting} en attente, {stats.today_closed} clôturés, {stats.today_absent} absents
           </Text>
         </View>
       )}
       {todayTickets.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="ticket-outline" size={48} color={colors.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Aucun ticket aujourd'hui</Text>
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Aucun ticket aujourd’hui</Text>
           <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Les tickets traités apparaîtront ici</Text>
         </View>
       ) : (

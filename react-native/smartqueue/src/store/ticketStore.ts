@@ -31,8 +31,21 @@ const getTicketStatusPriority = (status: Ticket["status"]): number => {
   }
 };
 
+// Ticket reporté à une date ultérieure (file du jour non concernée)
+const isDeferredToLaterDay = (ticket: Ticket): boolean => {
+  if (!ticket.valid_date) return false;
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return ticket.valid_date > today;
+};
+
 const sortActiveTickets = (tickets: Ticket[]): Ticket[] => {
   return [...tickets].sort((a, b) => {
+    // Les tickets du jour passent avant les tickets reportés (sinon un ticket de
+    // demain en position 1 devenait le ticket principal devant celui du jour)
+    const deferredDiff = Number(isDeferredToLaterDay(a)) - Number(isDeferredToLaterDay(b));
+    if (deferredDiff !== 0) return deferredDiff;
+
     const statusDiff =
       getTicketStatusPriority(a.status) - getTicketStatusPriority(b.status);
     if (statusDiff !== 0) return statusDiff;

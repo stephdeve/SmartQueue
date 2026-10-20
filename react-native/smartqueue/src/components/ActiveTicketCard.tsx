@@ -195,7 +195,9 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
 
     const setupWebSocket = async () => {
       try {
-        const echo = axiosClient.defaults?.echo;
+        // Aucune instance Echo n'est attachée à axios : le temps réel du ticket est
+        // assuré par useTicketSocket. Ce bloc reste inactif (pas de 2e connexion).
+        const echo = (axiosClient.defaults as any)?.echo;
         if (!echo) return;
 
         const channel = echo.private(`ticket.${activeTicket.id}`);
@@ -423,14 +425,15 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
       await axiosClient.post(`/tickets/${activeTicket?.id}/present`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      setLocalStatus("present");
+      // Le serveur clôture le ticket (« je suis là » = auto-servi) : même
+      // comportement que GlobalCalledTicketOverlay
+      setLocalStatus("closed");
 
       const s = useTicketStore.getState();
-      s.markPresent();
 
       showSuccess(
-        "Présence confirmée !",
-        "Votre priorité est conservée. L'agent sait maintenant que vous êtes arrivé.",
+        "Ticket clos ✔",
+        "Présence confirmée. Présentez-vous au guichet, merci de votre visite !",
         "OK",
         () => { s.fetchActiveTicket().catch(console.warn); }
       );
@@ -440,10 +443,10 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
     }
   }, [activeTicket, onConfirmPresence, showSuccess, showError]);
 
-  if (!activeTicket) return null;
-
-  const ticketNumber = activeTicket.number || position;
-  const serviceName = activeTicket.service?.name || "Service";
+  // Pas de return anticipé ici : il doit venir APRÈS tous les hooks, sinon l'apparition
+  // ou la disparition du ticket fait planter React (nombre de hooks différent).
+  const ticketNumber = activeTicket?.number || position;
+  const serviceName = activeTicket?.service?.name || "Service";
 
   const [enRouteCountdown, setEnRouteCountdown] = useState<number | null>(null);
   const enRouteExpiryAlerted = useRef(false);
@@ -584,6 +587,8 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
 
   const whenToLeave = getWhenToLeave();
 
+  if (!activeTicket) return null;
+
   return (
     <>
       <TouchableOpacity
@@ -693,7 +698,7 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
                 Absence temporaire — Rappel disponible
               </Text>
               <Text style={[styles.deferredBannerSub, { color: colors.textSecondary }]}>
-                Vous ne vous êtes pas présenté à temps. L'agent peut vous rappeler. Restez disponible.
+                Vous ne vous êtes pas présenté à temps. L’agent peut vous rappeler. Restez disponible.
               </Text>
             </View>
           </View>
@@ -760,7 +765,7 @@ export const ActiveTicketCard: React.FC<ActiveTicketCardProps> = ({
         {isTicketCalledState && callExpired && (
           <View style={[styles.stateMsg, { backgroundColor: colors.danger + "10", borderColor: colors.danger + "20" }]}>
             <Ionicons name="warning" size={16} color={colors.danger} />
-            <Text style={[styles.stateMsgText, { color: colors.danger }]}>Délai expiré — L'agent va statuer sur votre présence</Text>
+            <Text style={[styles.stateMsgText, { color: colors.danger }]}>Délai expiré — L’agent va statuer sur votre présence</Text>
           </View>
         )}
 

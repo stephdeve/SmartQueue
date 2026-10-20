@@ -504,7 +504,7 @@ const CreateTicketModal = ({
         <View style={[cmStyles.sheetHeader, { borderBottomColor: colors.border }]}>
           <View>
             <Text style={[cmStyles.sheetTitle, { color: colors.textPrimary }]}>Créer un ticket</Text>
-            <Text style={[cmStyles.sheetSub, { color: colors.textSecondary }]}>Création manuelle par l'agent</Text>
+            <Text style={[cmStyles.sheetSub, { color: colors.textSecondary }]}>Création manuelle par l’agent</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={cmStyles.closeBtn}>
             <Ionicons name="close" size={20} color={colors.textSecondary} />
@@ -688,9 +688,11 @@ export default function AgentQueue() {
         processed: statsRes.data?.processed || 0,
         avg_wait_time: statsRes.data?.eta_avg || statsRes.data?.average_wait_time || 0,
       });
-      setServiceStatus(serviceRes.data?.status || "open");
-      setCallTimeoutMinutes(serviceRes.data?.call_timeout_minutes ?? null);
-      setMaxCallAttempts(serviceRes.data?.max_call_attempts ?? 2);
+      // GET /services/{id} renvoie une ressource enveloppée : { data: { ... } }
+      const service = serviceRes.data?.data ?? serviceRes.data;
+      setServiceStatus(service?.status || "open");
+      setCallTimeoutMinutes(service?.call_timeout_minutes ?? null);
+      setMaxCallAttempts(service?.max_call_attempts ?? 2);
 
       if (availRes?.data) {
         const cap = availRes.data.capacity ?? {};
@@ -763,7 +765,8 @@ export default function AgentQueue() {
           .listen(".service.ticket.absent", (e: any) => { if (isActive) { fetchData(); const level = e?.absent_level ?? 1; const max = e?.max_call_attempts ?? 2; addActivity('absent', e?.ticket_number || '?', level >= max ? 'Absence définitive' : 'Absence temporaire'); } })
           .listen(".service.ticket.served", (e: any) => { if (isActive) { fetchData(); addActivity('closed', e?.ticket_number || '?', 'Servi / Clôturé'); } })
           .listen(".service.stats.updated", () => { if (isActive) fetchData(); })
-          .listen(".service.ticket.recalled", (e: any) => { if (isActive) { fetchData(); addActivity('recalled', e?.ticket_number || '?', 'Rappelé'); } })
+          // Délai de priorité / tentatives / délai de présentation modifiés (admin ou autre agent)
+          .listen(".ServiceConfigUpdated", () => { if (isActive) fetchData(); })
           .listen(".service.ticket.enqueued", (e: any) => { if (isActive) { fetchData(); addActivity('enqueued', e?.ticket_number || '?', 'Nouveau ticket en file'); } });
       };
       connectRealtime();
@@ -962,7 +965,7 @@ export default function AgentQueue() {
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>File d'attente</Text>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>File d’attente</Text>
           <Text style={[styles.headerSub, { color: colors.textSecondary }]}>
             Service #{serviceId}{counterId ? ` · Guichet ${counterId}` : ""}
             {smartQueue?.closing_time ? ` · Ferme à ${fmtTime(smartQueue.closing_time)}` : ""}
@@ -1370,7 +1373,7 @@ export default function AgentQueue() {
               <Text style={[tmStyles.cardTitle, { color: colors.textPrimary }]}>Délai de priorité</Text>
             </View>
             <Text style={[tmStyles.cardSub, { color: colors.textSecondary }]}>
-              Durée accordée à l'usager pour se présenter après l'appel de son ticket. Passé ce délai, il sera automatiquement marqué absent.
+              Durée accordée à l’usager pour se présenter après l’appel de son ticket. Passé ce délai, il sera automatiquement marqué absent.
             </Text>
             <View style={[tmStyles.inputRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <TextInput
@@ -1438,7 +1441,7 @@ export default function AgentQueue() {
                 </View>
                         {affluenceData.hourly_data && affluenceData.hourly_data.length > 0 && (
                   <>
-                    <Text style={[styles.affluenceChartTitle, { color: colors.textPrimary }]}>Créneaux d'affluence (30 jours)</Text>
+                    <Text style={[styles.affluenceChartTitle, { color: colors.textPrimary }]}>Créneaux d’affluence (30 jours)</Text>
                     <View style={[styles.affluenceChart, { backgroundColor: colors.surfaceSecondary }]}>
                       <View style={styles.affluenceChartBars}>
                         {affluenceData.hourly_data.map((pt: any) => {
@@ -1480,7 +1483,7 @@ export default function AgentQueue() {
                   <View style={[styles.affluenceTip, { backgroundColor: '#FF950012' }]}>
                     <Ionicons name="bulb-outline" size={16} color="#FF9500" />
                     <Text style={[styles.affluenceTipText, { color: colors.textSecondary }]}>
-                      Heures d'affluence : {affluenceData.peak_hours.high.map((h: number) => `${String(h).padStart(2,'0')}h`).join(', ')}.
+                      Heures d’affluence : {affluenceData.peak_hours.high.map((h: number) => `${String(h).padStart(2,'0')}h`).join(', ')}.
                     </Text>
                   </View>
                 )}

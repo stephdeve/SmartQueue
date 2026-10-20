@@ -89,7 +89,7 @@ const getResponsiveSize = (screenW: number, screenH: number) => {
   const isTablet = screenW >= 768;
   
   return {
-    containerMaxHeight: isLandscape ? '90%' : '85%',
+    containerMaxHeight: (isLandscape ? '90%' : '85%') as `${number}%`,
     iconSize: isTablet ? 52 : 44,
     iconMarginTop: isTablet ? -26 : -22,
     titleSize: isTablet ? 20 : 16,
@@ -134,9 +134,11 @@ export const CustomActionSheet: React.FC<CustomActionSheetProps> = ({
   
   const slideAnim = useRef(new Animated.Value(screenHeight)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const [screenWidth, setScreenWidth] = React.useState(screenWidth);
+  // Le state local masquait la constante de module du même nom : l'initialiseur
+  // lisait la variable locale avant sa déclaration (ReferenceError à l'ouverture)
+  const [screenWidthState, setScreenWidth] = React.useState(screenWidth);
   const [screenHeightState, setScreenHeightState] = React.useState(screenHeight);
-  const responsive = getResponsiveSize(screenWidth, screenHeightState);
+  const responsive = getResponsiveSize(screenWidthState, screenHeightState);
 
   // Grouper les options par section
   const groupedOptions: { [key: string]: Option[] } = {};

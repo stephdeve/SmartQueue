@@ -120,12 +120,13 @@ export const useSettingsStore = create<SettingsState>()(
         set({ isLoading: true, error: null });
 
         try {
-          const updatedPreferences = await usersApi.updatePreferences(preferencesUpdate);
-          
+          const serverPreferences = await usersApi.updatePreferences(preferencesUpdate);
+          const preferences = { ...get().preferences, ...preferencesUpdate, ...serverPreferences };
+
           set({
-            preferences: updatedPreferences,
-            isDarkMode: updatedPreferences.dark_mode,
-            language: updatedPreferences.language,
+            preferences,
+            isDarkMode: preferences.dark_mode,
+            language: preferences.language,
             isLoading: false,
             error: null,
           });
@@ -145,9 +146,9 @@ export const useSettingsStore = create<SettingsState>()(
 
         try {
           const updatedPreferences = await usersApi.updateNotificationPreferences(preferencesUpdate);
-          
+
           set({
-            notificationPreferences: updatedPreferences,
+            notificationPreferences: { ...get().notificationPreferences, ...preferencesUpdate, ...updatedPreferences },
             isLoading: false,
             error: null,
           });
@@ -175,12 +176,11 @@ export const useSettingsStore = create<SettingsState>()(
             usersApi.getPreferences(),
             usersApi.getNotificationPreferences(),
           ]);
-          
+
+          // Fusion : le serveur fait foi pour push/SMS, le reste est local
           set({
-            preferences: userPreferences,
-            notificationPreferences,
-            isDarkMode: userPreferences.dark_mode,
-            language: userPreferences.language,
+            preferences: { ...get().preferences, ...userPreferences },
+            notificationPreferences: { ...get().notificationPreferences, ...notificationPreferences },
             isLoading: false,
             error: null,
           });

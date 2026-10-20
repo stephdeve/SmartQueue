@@ -20,6 +20,10 @@ class ProfileController extends Controller
 
         $validated = $request->validate([
             'name'   => 'sometimes|string|max:255',
+            'email'  => [
+                'sometimes', 'email', 'max:190',
+                Rule::unique('users', 'email')->ignore($user->id),
+            ],
             'phone'  => [
                 'sometimes', 'nullable', 'string', 'max:32',
                 Rule::unique('users', 'phone')->ignore($user->id),

@@ -270,7 +270,7 @@ export default function TicketsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('grouped')
 
   // Feature: Notifications
-  const [notifications, setNotifications] = useState<{ id: number; message: string; type: string; read: boolean; created_at: string }[]>([])
+  const [notifications, setNotifications] = useState<{ id: string; message: string; type: string; read: boolean; created_at: string }[]>([])
   const [showNotifications, setShowNotifications] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
 
@@ -332,7 +332,7 @@ export default function TicketsPage() {
           comparison = a.number.localeCompare(b.number)
           break
         case 'priority':
-          const priorityOrder = { vip: 3, high: 2, normal: 1 }
+          const priorityOrder = { urgence: 4, vip: 3, high: 2, normal: 1 }
           comparison = (priorityOrder[a.priority as keyof typeof priorityOrder] || 0) -
             (priorityOrder[b.priority as keyof typeof priorityOrder] || 0)
           break
@@ -343,28 +343,30 @@ export default function TicketsPage() {
     return filtered
   }, [tickets, searchTerm, sortBy, sortOrder])
 
-  // Feature: Notifications - Chargement
+  // Feature: Notifications - Chargement (notifications de l'utilisateur connecté)
   const loadNotifications = async () => {
     try {
-      const res = await api.get(`${apiEndpoint}/notifications`)
-      setNotifications(res.data.data || [])
-      setUnreadCount(res.data.data?.filter((n: any) => !n.read).length || 0)
+      const res = await api.get('/api/notifications', { params: { per_page: 20 } })
+      const items = (res.data?.data || []).map((n: any) => ({
+        id: String(n.id),
+        message: n.message || n.title || '',
+        type: n.type || 'info',
+        read: !!n.read_at,
+        created_at: n.created_at,
+      }))
+      setNotifications(items)
+      setUnreadCount(items.filter((n: any) => !n.read).length)
     } catch (error) {
       console.error('Error loading notifications:', error)
-      // Données mockées pour la démo
-      const mockNotifs = [
-        { id: 1, message: "Nouveau ticket #1234 créé", type: "info", read: false, created_at: new Date().toISOString() },
-        { id: 2, message: "Ticket #1230 a été appelé", type: "success", read: false, created_at: new Date(Date.now() - 300000).toISOString() },
-        { id: 3, message: "Service Administration fermé dans 30min", type: "warning", read: true, created_at: new Date(Date.now() - 3600000).toISOString() },
-      ]
-      setNotifications(mockNotifs)
-      setUnreadCount(mockNotifs.filter(n => !n.read).length)
+      setNotifications([])
+      setUnreadCount(0)
     }
   }
 
-  const markNotificationAsRead = async (id: number) => {
+  const markNotificationAsRead = async (id: string) => {
+    if (notifications.find(n => n.id === id)?.read) return
     try {
-      await api.post(`${apiEndpoint}/notifications/${id}/read`)
+      await api.post(`/api/notifications/${id}/read`)
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
       setUnreadCount(prev => Math.max(0, prev - 1))
       toast.success("Notification marquée comme lue")
@@ -378,7 +380,7 @@ export default function TicketsPage() {
 
   const markAllNotificationsAsRead = async () => {
     try {
-      await api.post(`${apiEndpoint}/notifications/read-all`)
+      await api.post('/api/notifications/mark-all-read')
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       setUnreadCount(0)
       toast.success("Toutes les notifications ont été marquées comme lues")
@@ -394,18 +396,20 @@ export default function TicketsPage() {
     try {
       const response = await api.get(`${apiEndpoint}/export`, {
         params: {
-          format,
-          period,
-          status: statusFilter === 'all' ? undefined : statusFilter,
+          period: statusFilter === 'deferred' ? 'all' : period,
+          status: statusFilter === 'all' || statusFilter === 'deferred' ? undefined : statusFilter,
+          auto_deferred: statusFilter === 'deferred' ? true : undefined,
           service_id: selectedService === 'all' ? undefined : selectedService,
         },
         responseType: 'blob',
       })
 
-      const url = window.URL.createObjectURL(new Blob([response.data]))
+      // CSV UTF-8 (avec BOM) : ouvert directement par Excel pour les deux formats
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `tickets_export_${new Date().toISOString()}.${format}`)
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+      link.setAttribute('download', `tickets_export_${stamp}${format === 'excel' ? '_excel' : ''}.csv`)
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -1090,8 +1094,10 @@ export default function TicketsPage() {
                     try {
                       const ids = Array.from(selectedIds)
                       if (v === 'close') {
-                        await Promise.all(ids.map(id => api.post(`${apiEndpoint}/${id}/close`).catch(() => {})))
-                        toast.success(`${ids.length} ticket(s) clôturé(s)`)
+                        const results = await Promise.allSettled(ids.map(id => api.post(`/api/tickets/${id}/close`)))
+                        const done = results.filter(r => r.status === 'fulfilled').length
+                        if (done > 0) toast.success(`${done} ticket(s) clôturé(s)`)
+                        if (done < ids.length) toast.error(`${ids.length - done} ticket(s) non clôturé(s) (déjà terminés ou non autorisés)`)
                       } else if (v === 'export') {
                         // Export selected as CSV
                         const csvContent = "data:text/csv;charset=utf-8," + ids.join(",")

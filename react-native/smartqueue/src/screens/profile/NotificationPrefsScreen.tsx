@@ -19,17 +19,34 @@ export const NotificationPrefsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const colors = useThemeColors();
-  const { pushNotificationsEnabled, setPushNotificationsEnabled } = useSettings();
+  const {
+    pushNotificationsEnabled,
+    smsNotificationsEnabled,
+    positionUpdatesEnabled,
+    promotionsEnabled,
+    updatePreferences,
+    updateNotificationPreferences,
+  } = useSettings();
   const { AlertComponent, showError } = useCustomAlert();
   
-  const [smsEnabled, setSmsEnabled] = useState(true);
-  const [ticketUpdates, setTicketUpdates] = useState(true);
-  const [promotions, setPromotions] = useState(false);
+  // Valeurs issues du store persisté (push/SMS synchronisés avec le serveur) :
+  // des useState locaux se réinitialisaient à chaque ouverture de l'écran
+  const smsEnabled = smsNotificationsEnabled;
+  const ticketUpdates = positionUpdatesEnabled;
+  const promotions = promotionsEnabled;
+  const setSmsEnabled = (value: boolean) =>
+    updatePreferences({ sms_notifications_enabled: value }).catch(() =>
+      showError('Erreur', 'Impossible de mettre à jour les préférences.'),
+    );
+  const setTicketUpdates = (value: boolean) =>
+    updateNotificationPreferences({ position_updates: value }).catch(() => {});
+  const setPromotions = (value: boolean) =>
+    updateNotificationPreferences({ promotions: value }).catch(() => {});
   const [isLoading, setIsLoading] = useState(false);
 
   const handleTogglePush = async (value: boolean) => {
     try {
-      await setPushNotificationsEnabled(value);
+      await updatePreferences({ push_notifications_enabled: value });
     } catch (error) {
       showError('Erreur', 'Impossible de mettre à jour les préférences.');
     }

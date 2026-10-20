@@ -12,14 +12,38 @@ use Carbon\Carbon;
 class DashboardController extends Controller
 {
     /**
+     * Services gérés par l'utilisateur : assignés (agent) ou tous ceux de
+     * l'établissement (admin, qui n'est en général pas assigné via le pivot).
+     */
+    private function managedServiceIds($user)
+    {
+        if ($user->role === 'admin') {
+            return $user->establishment_id
+                ? Service::where('establishment_id', $user->establishment_id)->pluck('id')
+                : collect();
+        }
+
+        return $user->services()->pluck('services.id');
+    }
+
+    /** Durée en minutes entre deux colonnes, selon le moteur SQL. */
+    private function minutesBetween(string $from, string $to): string
+    {
+        return match (DB::connection()->getDriverName()) {
+            'pgsql'  => "EXTRACT(EPOCH FROM ($to - $from)) / 60",
+            'sqlite' => "(strftime('%s', $to) - strftime('%s', $from)) / 60.0",
+            default  => "TIMESTAMPDIFF(SECOND, $from, $to) / 60",
+        };
+    }
+
+    /**
      * Statistiques du dashboard agent.
      */
     public function stats(Request $request)
     {
         $user = $request->user();
 
-        // Récupérer les services assignés à l'agent
-        $assignedServiceIds = $user->services()->pluck('services.id');
+        $assignedServiceIds = $this->managedServiceIds($user);
 
         if ($assignedServiceIds->isEmpty()) {
             return response()->json([
@@ -60,7 +84,7 @@ class DashboardController extends Controller
             ->whereNotNull('called_at')
             ->whereNotNull('closed_at')
             ->whereDate('closed_at', $today)
-            ->selectRaw("AVG(EXTRACT(EPOCH FROM (closed_at - called_at)) / 60) as avg_time")
+            ->selectRaw('AVG('.$this->minutesBetween('called_at', 'closed_at').') as avg_time')
             ->value('avg_time');
 
         // Temps moyen d'attente (temps entre created_at et called_at)
@@ -68,7 +92,7 @@ class DashboardController extends Controller
             ->whereIn('service_id', $assignedServiceIds)
             ->whereNotNull('called_at')
             ->whereDate('called_at', $today)
-            ->selectRaw("AVG(EXTRACT(EPOCH FROM (called_at - created_at)) / 60) as avg_time")
+            ->selectRaw('AVG('.$this->minutesBetween('created_at', 'called_at').') as avg_time')
             ->value('avg_time');
 
         // Tickets par jour (moyenne sur 7 jours)
@@ -86,8 +110,8 @@ class DashboardController extends Controller
         // File actuelle (tickets en attente)
         $currentQueueSize = DB::table('tickets')
             ->whereIn('service_id', $assignedServiceIds)
-            ->whereIn('status', ['waiting', 'created', 'en_route', 'present'])
-            ->where('created_at', '>=', Carbon::now()->subHours(24))
+            ->whereIn('status', ['waiting', 'en_route', 'present'])
+            ->whereDate('valid_date', $today)
             ->count();
 
         return response()->json([
@@ -112,7 +136,7 @@ class DashboardController extends Controller
     public function todayTickets(Request $request)
     {
         $user = $request->user();
-        $assignedServiceIds = $user->services()->pluck('services.id');
+        $assignedServiceIds = $this->managedServiceIds($user);
 
         if ($assignedServiceIds->isEmpty()) {
             return response()->json([]);
@@ -163,7 +187,7 @@ class DashboardController extends Controller
     public function currentQueue(Request $request)
     {
         $user = $request->user();
-        $assignedServiceIds = $user->services()->pluck('services.id');
+        $assignedServiceIds = $this->managedServiceIds($user);
 
         if ($assignedServiceIds->isEmpty()) {
             return response()->json([
@@ -175,18 +199,20 @@ class DashboardController extends Controller
         // Tickets en attente par service
         $services = Service::whereIn('id', $assignedServiceIds)
             ->withCount(['tickets as waiting_count' => function ($q) {
-                $q->whereIn('status', ['waiting', 'created'])
-                  ->where('created_at', '>=', Carbon::now()->subHours(24));
+                $q->where('status', 'waiting')
+                  ->whereDate('valid_date', Carbon::today());
             }])
             ->get();
 
         // Tickets en attente
         $waitingTickets = Ticket::query()
             ->whereIn('service_id', $assignedServiceIds)
-            ->whereIn('status', ['waiting', 'created'])
-            ->where('created_at', '>=', Carbon::now()->subHours(24))
+            ->where('status', 'waiting')
+            ->whereDate('valid_date', Carbon::today())
             ->with(['service', 'user'])
-            ->orderBy('priority', 'desc')
+            // Tri métier (un tri alphabétique placerait 'vip' > 'urgence' > 'normal' > 'high')
+            ->orderByRaw("CASE priority WHEN 'urgence' THEN 0 WHEN 'vip' THEN 1 WHEN 'high' THEN 2 ELSE 3 END")
+            ->orderBy('position')
             ->orderBy('created_at')
             ->limit(20)
             ->get();
@@ -210,11 +236,11 @@ class DashboardController extends Controller
                     'service_id' => $t->service_id,
                     'service_name' => $t->service?->name,
                     'user_name' => $t->user?->name,
-                    'wait_time_minutes' => $t->created_at->diffInMinutes(Carbon::now()),
+                    'wait_time_minutes' => (int) $t->created_at->diffInMinutes(Carbon::now()),
                     'created_at' => $t->created_at->toDateTimeString(),
                 ];
             }),
-            'total_waiting' => $waitingTickets->count(),
+            'total_waiting' => (int) $services->sum('waiting_count'),
         ]);
     }
 
@@ -224,7 +250,7 @@ class DashboardController extends Controller
     public function performance(Request $request)
     {
         $user = $request->user();
-        $assignedServiceIds = $user->services()->pluck('services.id');
+        $assignedServiceIds = $this->managedServiceIds($user);
 
         if ($assignedServiceIds->isEmpty()) {
             return response()->json([
@@ -259,13 +285,13 @@ class DashboardController extends Controller
             ")
             ->first();
 
-        // Temps moyen de service - PostgreSQL compatible
+        // Temps moyen de service
         $avgServiceTime = DB::table('tickets')
             ->whereIn('service_id', $assignedServiceIds)
             ->whereNotNull('called_at')
             ->whereNotNull('closed_at')
             ->where('closed_at', '>=', Carbon::now()->subDays(7))
-            ->selectRaw("AVG(EXTRACT(EPOCH FROM (closed_at - called_at)) / 60) as avg_time")
+            ->selectRaw('AVG('.$this->minutesBetween('called_at', 'closed_at').') as avg_time')
             ->value('avg_time');
 
         return response()->json([

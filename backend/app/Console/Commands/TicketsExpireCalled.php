@@ -43,11 +43,12 @@ class TicketsExpireCalled extends Command
 
         $this->info(($dryRun ? '[dry-run] ' : '') . "Called tickets expired: {$calledTickets->count()}");
 
-        // Niveau 2 absents : tickets en absence définitive dont le délai d'expiration est écoulé
+        // Absents définitifs dont le délai d'expiration est écoulé. absent_expires_at
+        // n'est renseigné qu'en absence définitive (niveau >= max_call_attempts du
+        // service, qui peut valoir 1 ou plus de 2 : pas de seuil codé en dur).
         $absentExpiring = Ticket::query()
             ->with(['user', 'service'])
             ->where('status', 'absent')
-            ->where('absent_level', '>=', 2)
             ->whereNotNull('absent_expires_at')
             ->where('absent_expires_at', '<=', $now)
             ->get();
@@ -65,16 +66,20 @@ class TicketsExpireCalled extends Command
 
             $maxAttempts = (int) ($ticket->service?->max_call_attempts ?? 2);
 
-            if (($ticket->absent_level ?? 0) >= $maxAttempts) {
-                // At or beyond max attempts — permanent expiry
-                $this->ticketService->permanentlyExpireAbsent($ticket);
-            } else {
-                // Still has attempts left — mark absent (agent can still recall)
-                $this->ticketService->markAbsent($ticket);
+            try {
+                if (($ticket->absent_level ?? 0) >= $maxAttempts) {
+                    // At or beyond max attempts — permanent expiry
+                    $this->ticketService->permanentlyExpireAbsent($ticket);
+                } else {
+                    // Still has attempts left — mark absent (agent can still recall)
+                    $this->ticketService->markAbsent($ticket);
+                }
+            } catch (\InvalidArgumentException $e) {
+                // Ticket clôturé entre-temps par un agent : rien à faire
             }
         }
 
-        // Expirer les absents de niveau 2 dont le délai est écoulé
+        // Expirer les absents définitifs dont le délai est écoulé
         foreach ($absentExpiring as $ticket) {
             $affectedServiceIds->push($ticket->service_id);
             $this->ticketService->permanentlyExpireAbsent($ticket);

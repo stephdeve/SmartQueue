@@ -65,6 +65,8 @@ export const AppNavigator: React.FC = () => {
     // Set notification handler
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: false,

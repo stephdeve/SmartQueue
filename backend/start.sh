@@ -71,6 +71,51 @@ server {
 EOF
 
 echo "[start.sh] Nginx config written for port ${PORT_VALUE}"
-echo "[start.sh] Starting supervisord (php-fpm + nginx)..."
+
+# ─── 6. Worker de queue + scheduler ──────────────────────────────────────────
+# Indispensables au fonctionnement de la file : expiration des appels / "en route",
+# activation des tickets reportés, clôture de journée (scheduler) et envoi des
+# notifications push/SMS + in-app (jobs en queue). Désactivables si ces processus
+# tournent dans des services séparés (RUN_QUEUE_WORKER=false / RUN_SCHEDULER=false).
+SUPERVISOR_CONF=/etc/supervisor/conf.d/supervisord.conf
+
+if [ "${RUN_QUEUE_WORKER:-true}" = "true" ] && ! grep -q "program:queue-worker" "$SUPERVISOR_CONF"; then
+  cat >> "$SUPERVISOR_CONF" <<EOF
+
+[program:queue-worker]
+command=php /var/www/html/artisan queue:work --sleep=3 --tries=3 --timeout=90 --max-time=3600
+user=www-data
+autorestart=true
+stopwaitsecs=100
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+EOF
+  echo "[start.sh] Queue worker enabled"
+fi
+
+if [ "${RUN_SCHEDULER:-true}" = "true" ] && ! grep -q "program:scheduler" "$SUPERVISOR_CONF"; then
+  cat >> "$SUPERVISOR_CONF" <<EOF
+
+[program:scheduler]
+command=php /var/www/html/artisan schedule:work
+user=www-data
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+EOF
+  echo "[start.sh] Scheduler enabled"
+fi
+
+# Les commandes artisan ci-dessus tournent en root : rendre storage/ et le cache
+# accessibles en écriture à php-fpm et aux workers (www-data), sinon un
+# laravel.log créé par root provoque des erreurs 500 à la première écriture.
+mkdir -p storage/logs storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views
+chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+
+echo "[start.sh] Starting supervisord (php-fpm + nginx + workers)..."
 
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

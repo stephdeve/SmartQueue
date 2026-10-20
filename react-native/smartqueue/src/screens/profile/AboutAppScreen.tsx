@@ -82,7 +82,7 @@ export const AboutAppScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>Notre mission</Text>
           <Text style={[styles.description, { color: colors.textSecondary, backgroundColor: colors.surface, borderColor: colors.border }]}>
-            SmartQueue révolutionne la gestion des files d'attente en permettant aux clients de rejoindre une file virtuellement, sans attendre physiquement.
+            SmartQueue révolutionne la gestion des files d’attente en permettant aux clients de rejoindre une file virtuellement, sans attendre physiquement.
           </Text>
         </View>
 
@@ -101,7 +101,7 @@ export const AboutAppScreen: React.FC = () => {
         <View style={[styles.linksCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <TouchableOpacity style={styles.linkItem} onPress={() => Linking.openURL('https://smartqueue.app/terms')}>
             <Ionicons name="document-text-outline" size={18} color={colors.textSecondary} />
-            <Text style={[styles.linkText, { color: colors.textPrimary }]}>Conditions d'utilisation</Text>
+            <Text style={[styles.linkText, { color: colors.textPrimary }]}>Conditions d’utilisation</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
           </TouchableOpacity>
           <View style={[styles.linkDivider, { backgroundColor: colors.border }]} />

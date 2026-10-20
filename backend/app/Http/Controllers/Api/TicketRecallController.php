@@ -44,7 +44,7 @@ class TicketRecallController extends Controller
         }
 
         // Cannot recall a definitively absent ticket
-        if (($ticket->absent_level ?? 0) >= 2) {
+        if (($ticket->absent_level ?? 0) >= (int) ($ticket->service?->max_call_attempts ?? 2)) {
             return response()->json([
                 'error' => 'Le ticket est en absence définitive et ne peut plus être rappelé',
             ], 400);
@@ -57,8 +57,8 @@ class TicketRecallController extends Controller
             ], 400);
         }
 
-        $timeoutMinutes = $ticket->service->call_timeout_minutes
-            ?? (int) ceil((int) config('queue.call_timeout_seconds', 600) / 60);
+        $timeoutMinutes = max(1, $ticket->service?->call_timeout_minutes
+            ?? (int) ceil((int) config('queue.call_timeout_seconds', 600) / 60));
 
         // Mark as recalled and reset countdown
         $ticket->update([
@@ -96,7 +96,11 @@ class TicketRecallController extends Controller
             return response()->json(['error' => 'En route grace period has not expired yet'], 422);
         }
 
-        $ticketService->markAbsent($ticket);
+        try {
+            $ticketService->markAbsent($ticket);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
 
         return response()->json([
             'success' => true,
@@ -131,15 +135,20 @@ class TicketRecallController extends Controller
         // Calculate travel time if coordinates provided
         $travelMinutes = $validated['estimated_travel_minutes'] ?? null;
 
-        if (isset($validated['lat'], $validated['lng'])) {
+        $establishment = $ticket->service?->establishment;
+        if (isset($validated['lat'], $validated['lng']) && $establishment?->lat !== null && $establishment?->lng !== null) {
             $travelMinutes = $this->alertService->calculateTravelTime(
                 $validated['lat'],
                 $validated['lng'],
-                $ticket->service->establishment->lat,
-                $ticket->service->establishment->lng,
+                (float) $establishment->lat,
+                (float) $establishment->lng,
                 $request->user()->alertPreference?->preferred_transport_mode ?? 'motorcycle'
             );
+            // Le mobile valide 1..60 min ; une distance très faible donne 0 min
+            $travelMinutes = max(1, $travelMinutes);
 
+        }
+        if (isset($validated['lat'], $validated['lng'])) {
             // Update user's last known location
             $ticket->update([
                 'last_lat' => $validated['lat'],
@@ -158,29 +167,7 @@ class TicketRecallController extends Controller
             'estimated_travel_minutes' => $travelMinutes,
         ]);
 
-        // Test Reverb connectivity before dispatching
-        $reverbHost = config('broadcasting.connections.pusher.options.host');
-        $reverbPort = config('broadcasting.connections.pusher.options.port', 443);
-        $reverbScheme = config('broadcasting.connections.pusher.options.scheme', 'https');
-
-        \Log::info('[TicketRecallController] Broadcasting config', [
-            'connection' => config('broadcasting.default'),
-            'reverb_host' => $reverbHost,
-            'reverb_port' => $reverbPort,
-            'reverb_scheme' => $reverbScheme,
-            'app_id' => config('broadcasting.connections.pusher.app_id'),
-            'key_exists' => !empty(config('broadcasting.connections.pusher.key')),
-            'secret_exists' => !empty(config('broadcasting.connections.pusher.secret')),
-        ]);
-
         // Broadcast to agent dashboard via service channel
-        \Log::info('UserEnRoute event dispatching', [
-            'ticket_id' => $ticket->id,
-            'service_id' => $ticket->service_id,
-            'ticket_number' => $ticket->number,
-            'estimated_minutes' => $travelMinutes,
-        ]);
-
         try {
             event(new UserEnRoute(
                 $ticket->id,
@@ -190,7 +177,6 @@ class TicketRecallController extends Controller
                 $travelMinutes === null,
                 $ticket->last_distance_m
             ));
-            \Log::info('[TicketRecallController] UserEnRoute event dispatched successfully');
         } catch (\Exception $e) {
             \Log::error('[TicketRecallController] Failed to dispatch UserEnRoute', [
                 'error' => $e->getMessage(),
@@ -208,19 +194,7 @@ class TicketRecallController extends Controller
                     : "L'usager a confirmé sa présence (Ticket {$ticket->number})";
 
                 foreach ($agents as $agent) {
-                    $agent->notify(new InAppNotification(
-                        'Usager en route',
-                        $message,
-                        'user_en_route',
-                        [
-                            'ticket_id' => $ticket->id,
-                            'ticket_number' => $ticket->number,
-                            'service_id' => $ticket->service_id,
-                            'estimated_minutes' => $travelMinutes,
-                        ]
-                    ));
-
-                    // Also push a notification to agent device
+                    // Push + notification in-app (créée par le job)
                     try {
                         dispatch(new SendPushNotification(
                             $agent->id,
@@ -228,7 +202,9 @@ class TicketRecallController extends Controller
                             $message,
                             [
                                 'ticket_id' => $ticket->id,
+                                'ticket_number' => $ticket->number,
                                 'service_id' => $ticket->service_id,
+                                'estimated_minutes' => $travelMinutes,
                                 'type' => 'user_en_route',
                             ]
                         ));
@@ -236,10 +212,6 @@ class TicketRecallController extends Controller
                         \Log::warning('[TicketRecallController] Failed to push to agent: ' . $_e->getMessage());
                     }
                 }
-                \Log::info('[TicketRecallController] Notifications created for agents', [
-                    'agent_count' => $agents->count(),
-                    'service_id' => $ticket->service_id,
-                ]);
             }
         } catch (\Exception $e) {
             \Log::error('[TicketRecallController] Failed to create agent notifications', [
@@ -310,6 +282,10 @@ class TicketRecallController extends Controller
             // 3. Notifier les agents en temps réel (canal présence du service)
             //    → le dashboard agent se rafraîchit sans action manuelle
             event(new \App\Events\ServiceTicketServed($service->id, [
+                'service_id'    => $service->id,
+                'ticket_id'     => $ticket->id,
+                'ticket_number' => $ticket->number,
+                'self_served'   => true,
                 'ticket' => [
                     'id'          => $ticket->id,
                     'number'      => $ticket->number,
@@ -322,24 +298,13 @@ class TicketRecallController extends Controller
             // 4. Notification in-app pour chaque agent du service
             $agents = $service->agents()->get();
             foreach ($agents as $agent) {
-                $agent->notify(new \App\Notifications\InAppNotification(
-                    'Ticket auto-servi ✓',
-                    "L'usager du ticket {$ticket->number} a confirmé sa présence. Ticket clos automatiquement.",
-                    'self_served',
-                    [
-                        'ticket_id'    => $ticket->id,
-                        'ticket_number'=> $ticket->number,
-                        'service_id'   => $ticket->service_id,
-                    ]
-                ));
-
-                // Push vers l'agent (async)
+                // Push vers l'agent (async) + notification in-app créée par le job
                 try {
                     dispatch(new SendPushNotification(
                         $agent->id,
                         "Ticket {$ticket->number} — auto-servi",
                         "L'usager est arrivé. Le ticket est clos automatiquement.",
-                        ['ticket_id' => $ticket->id, 'service_id' => $ticket->service_id, 'type' => 'self_served']
+                        ['ticket_id' => $ticket->id, 'ticket_number' => $ticket->number, 'service_id' => $ticket->service_id, 'type' => 'self_served']
                     ));
                 } catch (\Exception $_e) {
                     \Log::warning('[present] push agent failed: ' . $_e->getMessage());
@@ -371,8 +336,12 @@ class TicketRecallController extends Controller
      */
     public function defer(Request $request, Ticket $ticket, \App\Services\TicketService $svc): JsonResponse
     {
-        // Authorize: only ticket owner can defer
-        if ($ticket->user_id !== $request->user()->id) {
+        // Même URI que l'action agent (POST tickets/{ticket}/defer) : la route usager,
+        // déclarée en dernier, la remplaçait et renvoyait 403 aux agents.
+        if ((int) $ticket->user_id !== (int) $request->user()->id) {
+            if ($request->user()->can('actOn', $ticket)) {
+                return app(AgentTicketActionController::class)->defer($request, $ticket, $svc);
+            }
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -473,7 +442,7 @@ class TicketRecallController extends Controller
             'is_present' => $ticket->status === 'present',
             'countdown_seconds' => (int) $remaining,
             'has_recalled' => $ticket->has_recalled,
-            'counter_number' => $ticket->counter?->number,
+            'counter_number' => $ticket->counter?->name,
             'en_route_expires_at' => $ticket->en_route_expires_at,
             'called_expires_at' => $ticket->called_expires_at,
             'call_timeout_minutes' => $timeoutMinutes,

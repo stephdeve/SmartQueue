@@ -41,6 +41,8 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'google_id',
+        'stats_data',
     ];
 
     /**
@@ -76,6 +78,18 @@ class User extends Authenticatable
     public function notificationPreference()
     {
         return $this->hasOne(NotificationPreference::class);
+    }
+
+    // Préférences d'alerte (mode de transport, marge…) utilisées pour l'ETA "en route"
+    public function alertPreference()
+    {
+        return $this->hasOne(UserAlertPreference::class);
+    }
+
+    // Compte désactivé par un admin (agents) : connexion et API refusées
+    public function isInactive(): bool
+    {
+        return ($this->status ?? 'active') === 'inactive';
     }
 
     public function favoriteEstablishments()

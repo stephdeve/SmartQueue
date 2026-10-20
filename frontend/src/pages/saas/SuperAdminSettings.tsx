@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAppDispatch } from '@/store';
 import { logout } from '@/store/authSlice';
+import { toast } from 'sonner';
 import { api } from '@/api/axios';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -162,7 +163,7 @@ export default function SuperAdminSettings() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [saving] = useState(false);
 
   // SaaS Configuration
   const [saasConfig, setSaasConfig] = useState({
@@ -488,18 +489,10 @@ export default function SuperAdminSettings() {
     ],
   });
 
-  const handleSave = async (section: string, config: any) => {
-    setSaving(true);
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log(`Saving ${section} config:`, config);
-      // Show success message
-    } catch (error) {
-      console.error(`Error saving ${section} config:`, error);
-    } finally {
-      setSaving(false);
-    }
+  // Aucun endpoint serveur ne persiste encore cette configuration : l'ancienne version
+  // simulait un appel (setTimeout) et laissait croire à un enregistrement.
+  const handleSave = async (section: string, _config: any) => {
+    toast.info(`Configuration « ${section} » non enregistrée : cette section n'est pas encore reliée au serveur.`);
   };
 
   const handleLogout = () => {

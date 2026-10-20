@@ -21,8 +21,9 @@ class EstablishmentResource extends JsonResource
             'address' => $this->address,
             'category' => $this->category,
             // Coordonnées (décimales)
-            'lat' => $this->lat,
-            'lng' => $this->lng,
+            // Les colonnes decimal sont renvoyées en chaîne par PDO : nombres pour les cartes
+            'lat' => $this->lat !== null ? (float) $this->lat : null,
+            'lng' => $this->lng !== null ? (float) $this->lng : null,
             // Horaires d'ouverture indicatifs
             'open_at' => $this->open_at,
             'close_at' => $this->close_at,

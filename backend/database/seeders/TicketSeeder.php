@@ -16,8 +16,9 @@ class TicketSeeder extends Seeder
         $services = Service::all();
         if ($services->isEmpty()) return;
 
-        $userIds = User::pluck('id')->all();
+        $userIds = User::where('role', 'user')->pluck('id')->all();
         $now = Carbon::now();
+        $today = $now->toDateString();
 
         foreach ($services as $service) {
             // Waiting tickets
@@ -29,6 +30,7 @@ class TicketSeeder extends Seeder
                     'status' => 'waiting',
                     'priority' => rand(0, 9) < 2 ? 'high' : 'normal',
                     'position' => $i,
+                    'valid_date' => $today,
                     'created_at' => $now->copy()->subMinutes(rand(5, 180)),
                     'updated_at' => $now,
                 ]);
@@ -43,6 +45,7 @@ class TicketSeeder extends Seeder
                     'service_id' => $service->id,
                     'number' => sprintf('C-%02d-%03d', $service->id, $i),
                     'status' => 'called',
+                    'valid_date' => $today,
                     'priority' => rand(0, 9) < 2 ? 'vip' : 'normal',
                     'position' => null,
                     'created_at' => $created,
@@ -61,6 +64,7 @@ class TicketSeeder extends Seeder
                     'service_id' => $service->id,
                     'number' => sprintf('A-%02d-%03d', $service->id, $i),
                     'status' => 'absent',
+                    'valid_date' => $today,
                     'priority' => 'normal',
                     'position' => null,
                     'created_at' => $created,
@@ -79,6 +83,7 @@ class TicketSeeder extends Seeder
                     'service_id' => $service->id,
                     'number' => sprintf('D-%02d-%03d', $service->id, $i),
                     'status' => 'closed',
+                    'valid_date' => $created->toDateString(),
                     'priority' => rand(0, 9) < 1 ? 'vip' : 'normal',
                     'position' => null,
                     'created_at' => $created,
@@ -96,6 +101,7 @@ class TicketSeeder extends Seeder
                     'service_id' => $service->id,
                     'number' => sprintf('X-%02d-%03d', $service->id, $i),
                     'status' => 'canceled',
+                    'valid_date' => $today,
                     'priority' => 'normal',
                     'position' => null,
                     'created_at' => $created,

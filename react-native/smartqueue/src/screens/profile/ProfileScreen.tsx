@@ -275,7 +275,7 @@ export const ProfileScreen: React.FC = () => {
     {
       title: 'APPLICATION',
       items: [
-        { id: 'notifications', title: 'Notifications', icon: 'notifications-outline', iconBg: colors.warning, toggle: true, toggleValue: pushNotificationsEnabled, onToggle: (value: boolean) => updatePreferences({ push_notifications_enabled: value }) },
+        { id: 'notifications', title: 'Notifications', icon: 'notifications-outline', iconBg: colors.warning, toggle: true, toggleValue: pushNotificationsEnabled, onToggle: (value: boolean) => { updatePreferences({ push_notifications_enabled: value }).catch(() => {}); } },
         { id: 'darkMode', title: 'Mode sombre', icon: 'moon-outline', iconBg: colors.secondary, toggle: true, toggleValue: isDarkMode, onToggle: setDarkMode },
       ],
     },

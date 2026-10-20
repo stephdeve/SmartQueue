@@ -17,6 +17,7 @@ import Animated, {
   withSpring,
   interpolate,
   useAnimatedScrollHandler,
+  SharedValue,
 } from 'react-native-reanimated';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useSettings } from '../../store/settingsStore';
@@ -53,6 +54,42 @@ const slides: OnboardingSlide[] = [
     color: '#F59E0B',
   },
 ];
+
+// Point de pagination : composant dédié pour que useAnimatedStyle soit appelé au
+// niveau d'un composant (et non dans le callback d'un .map())
+const PaginationDot = ({
+  index,
+  scrollX,
+  windowWidth,
+  activeColor,
+}: {
+  index: number;
+  scrollX: SharedValue<number>;
+  windowWidth: number;
+  activeColor: string;
+}) => {
+  const animatedDotStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      scrollX.value,
+      [(index - 1) * windowWidth, index * windowWidth, (index + 1) * windowWidth],
+      [0.4, 1, 0.4],
+      'clamp'
+    );
+    const scale = interpolate(
+      scrollX.value,
+      [(index - 1) * windowWidth, index * windowWidth, (index + 1) * windowWidth],
+      [0.8, 1.2, 0.8],
+      'clamp'
+    );
+    return {
+      opacity,
+      transform: [{ scale }],
+      backgroundColor: activeColor,
+    };
+  });
+
+  return <Animated.View style={[styles.dot, animatedDotStyle]} />;
+};
 
 export const OnboardingScreen = () => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -131,34 +168,15 @@ export const OnboardingScreen = () => {
 
       <View style={styles.footer}>
         <View style={styles.pagination}>
-          {slides.map((_, index) => {
-            const animatedDotStyle = useAnimatedStyle(() => {
-              const opacity = interpolate(
-                scrollX.value,
-                [(index - 1) * windowWidth, index * windowWidth, (index + 1) * windowWidth],
-                [0.4, 1, 0.4],
-                'clamp'
-              );
-              const scale = interpolate(
-                scrollX.value,
-                [(index - 1) * windowWidth, index * windowWidth, (index + 1) * windowWidth],
-                [0.8, 1.2, 0.8],
-                'clamp'
-              );
-              return {
-                opacity,
-                transform: [{ scale }],
-                backgroundColor: index === currentIndex ? colors.primary : '#D1D5DB',
-              };
-            });
-
-            return (
-              <Animated.View
-                key={index}
-                style={[styles.dot, animatedDotStyle]}
-              />
-            );
-          })}
+          {slides.map((_, index) => (
+            <PaginationDot
+              key={index}
+              index={index}
+              scrollX={scrollX}
+              windowWidth={windowWidth}
+              activeColor={index === currentIndex ? colors.primary : '#D1D5DB'}
+            />
+          ))}
         </View>
 
         <TouchableOpacity

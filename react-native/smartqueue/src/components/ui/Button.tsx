@@ -44,12 +44,16 @@ export const Button: React.FC<ButtonProps> = ({
   
   // Obtenir les couleurs selon le thème et la variante
   const getButtonStyle = () => {
-    const baseStyle = Theme.components.button[variant];
-    
-    if (isDarkMode && Theme.dark.components.button[variant]) {
-      return { ...baseStyle, ...Theme.dark.components.button[variant] };
+    const lightVariants = Theme.components.button as Record<string, any>;
+    const darkVariants = Theme.dark.components.button as Record<string, any>;
+    // Le thème ne définit pas de variante "success" : sans repli, le bouton était sans fond
+    const baseStyle = lightVariants[variant]
+      ?? { ...lightVariants.primary, backgroundColor: Theme.colors.success };
+
+    if (isDarkMode && darkVariants[variant]) {
+      return { ...baseStyle, ...darkVariants[variant] };
     }
-    
+
     return baseStyle;
   };
 

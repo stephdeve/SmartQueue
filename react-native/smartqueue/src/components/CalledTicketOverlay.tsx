@@ -66,7 +66,7 @@ export const CalledTicketOverlay: React.FC<CalledTicketOverlayProps> = ({
   const flashAnim = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const soundIntervalRef = useRef<number | null>(null);
+  const soundIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const playRingtone = useCallback(() => {
     if (!visible) return;

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { useAuth } from '../../store/authStore';
 import { useSettings } from '../../store/settingsStore';
 import { Theme } from '../../theme';

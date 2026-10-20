@@ -43,7 +43,8 @@ export const useAlertPreferencesStore = create<AlertPreferencesState>()(
       setMarginMinutes: (minutes, option) => {
         set({
           marginMinutes: minutes,
-          marginOption: option || minutes,
+          // Une marge hors préréglages (5/10/15/20) correspond à l'option "custom"
+          marginOption: option ?? ([5, 10, 15, 20].includes(minutes) ? (minutes as MarginOption) : 'custom'),
         });
         get().savePreferences();
       },

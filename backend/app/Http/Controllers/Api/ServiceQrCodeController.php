@@ -35,7 +35,7 @@ class ServiceQrCodeController extends Controller
     {
         // Vérifier que l'utilisateur est admin de l'établissement
         $user = $request->user();
-        if ($user->role !== 'admin' || $user->establishment_id !== $service->establishment_id) {
+        if ($user->role !== 'admin' || (int) $user->establishment_id !== (int) $service->establishment_id) {
             return response()->json(['message' => 'Non autorisé'], 403);
         }
 
@@ -62,7 +62,7 @@ class ServiceQrCodeController extends Controller
     public function show(Request $request, Service $service): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'admin' || $user->establishment_id !== $service->establishment_id) {
+        if ($user->role !== 'admin' || (int) $user->establishment_id !== (int) $service->establishment_id) {
             return response()->json(['message' => 'Non autorisé'], 403);
         }
 
@@ -129,13 +129,8 @@ class ServiceQrCodeController extends Controller
             ], 400);
         }
 
-        // Vérifier si l'usager a déjà un ticket actif pour ce service aujourd'hui
-        $today = Carbon::today()->toDateString();
-        $existingTicket = Ticket::where('service_id', $service->id)
-            ->where('user_id', $user->id)
-            ->where('valid_date', $today)
-            ->whereIn('status', ['waiting', 'called'])
-            ->first();
+        // Vérifier si l'usager a déjà un ticket actif (du jour ou reporté) pour ce service
+        $existingTicket = $this->ticketService->findActiveTicketFor($service->id, $user->id);
 
         if ($existingTicket) {
             // Retourner le ticket existant au lieu d'en créer un nouveau
@@ -156,6 +151,9 @@ class ServiceQrCodeController extends Controller
         // Créer un nouveau ticket
         try {
             $ticket = $this->ticketService->createForQrScan($service, $user);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            // Refus métier (file pleine, aucune ouverture à venir…) : pas une erreur serveur
+            return response()->json(['message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Exception $e) {
             \Log::error('QR scan ticket creation failed', [
                 'service_id' => $service->id,
@@ -163,7 +161,7 @@ class ServiceQrCodeController extends Controller
                 'error' => $e->getMessage(),
             ]);
             return response()->json([
-                'message' => 'Erreur lors de la création du ticket: ' . $e->getMessage(),
+                'message' => 'Erreur lors de la création du ticket',
             ], 500);
         }
 
@@ -176,8 +174,9 @@ class ServiceQrCodeController extends Controller
                 'status' => $ticket->status,
                 'service_name' => $service->name,
                 'establishment_name' => $service->establishment?->name,
-                'estimated_wait_minutes' => $this->ticketService->estimateWaitTime($service, $ticket),
-                'valid_date' => $ticket->valid_date,
+                'estimated_wait_minutes' => $ticket->eta_minutes,
+                'auto_deferred' => (bool) $ticket->auto_deferred,
+                'valid_date' => $ticket->valid_date?->toDateString(),
                 'created_at' => $ticket->created_at->toIso8601String(),
             ],
             'action' => 'created',
@@ -192,7 +191,7 @@ class ServiceQrCodeController extends Controller
     public function download(Request $request, Service $service)
     {
         $user = $request->user();
-        if ($user->role !== 'admin' || $user->establishment_id !== $service->establishment_id) {
+        if ($user->role !== 'admin' || (int) $user->establishment_id !== (int) $service->establishment_id) {
             return response()->json(['message' => 'Non autorisé'], 403);
         }
 
@@ -214,6 +213,7 @@ class ServiceQrCodeController extends Controller
         // Retourner le SVG directement - peut être imprimé depuis n'importe quel navigateur
         return response($svgContent)
             ->header('Content-Type', 'image/svg+xml')
-            ->header('Content-Disposition', 'attachment; filename="qr-' . $service->name . '-' . $service->qr_code_token . '.svg"');
+            // Nom ASCII sans guillemets/espaces : un nom de service brut cassait l'en-tête
+            ->header('Content-Disposition', 'attachment; filename="qr-' . \Illuminate\Support\Str::slug($service->name ?: 'service') . '-' . $service->qr_code_token . '.svg"');
     }
 }

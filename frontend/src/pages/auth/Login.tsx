@@ -14,8 +14,8 @@ import { toast } from "sonner";
 export default function Login() {
   const dispatch = useAppDispatch();
   const { token, loading } = useAppSelector((s) => s.auth);
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   if (token) return <Navigate to="/dashboard" replace />;

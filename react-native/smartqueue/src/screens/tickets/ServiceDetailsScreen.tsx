@@ -145,7 +145,7 @@ const ServiceItem: React.FC<{
         {onAffluence && (
           <TouchableOpacity style={[styles.affluenceChip, { backgroundColor: colors.warning + "15" }]} onPress={(e) => { e.stopPropagation?.(); onAffluence(); }}>
             <Ionicons name="pulse-outline" size={11} color={colors.warning} />
-            <Text style={[styles.affluenceChipText, { color: colors.warning }]}>Voir l'affluence</Text>
+            <Text style={[styles.affluenceChipText, { color: colors.warning }]}>Voir l’affluence</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -431,8 +431,12 @@ export const ServiceDetailsScreen: React.FC = () => {
     const generalOpen  = (target as any).opening_time || (target as any).open_at  || '08:00:00';
     const generalClose = (target as any).closing_time || (target as any).close_at || '18:00:00';
 
-    // Statut actuel
-    const isOpen = target.status === "open";
+    // Statut actuel : un service a un statut ; un établissement n'en a pas
+    // (il était toujours affiché « Fermé ») → déduit de ses horaires du jour.
+    const nowHHMM = new Date().toTimeString().slice(0, 5);
+    const isOpen = "status" in target && target.status
+      ? target.status === "open"
+      : nowHHMM >= String(generalOpen).slice(0, 5) && nowHHMM < String(generalClose).slice(0, 5);
     options.push({
       label: isOpen ? "Ouvert maintenant" : "Fermé maintenant",
       value: 'status',
@@ -918,7 +922,7 @@ export const ServiceDetailsScreen: React.FC = () => {
                 {/* Graphique barres — Créneaux horaires */}
                 {affluenceData.hourly_data && affluenceData.hourly_data.length > 0 && (
                   <>
-                    <Text style={[styles.affluenceChartTitle, { color: colors.textPrimary }]}>Créneaux d'affluence (30 jours)</Text>
+                    <Text style={[styles.affluenceChartTitle, { color: colors.textPrimary }]}>Créneaux d’affluence (30 jours)</Text>
                     <View style={[styles.affluenceChart, { backgroundColor: colors.surfaceSecondary }]}>
                       <View style={styles.affluenceChartBars}>
                         {affluenceData.hourly_data.map((pt) => {
@@ -962,7 +966,7 @@ export const ServiceDetailsScreen: React.FC = () => {
                   <View style={[styles.affluenceTip, { backgroundColor: colors.warning + "12" }]}>
                     <Ionicons name="bulb-outline" size={16} color={colors.warning} />
                     <Text style={[styles.affluenceTipText, { color: colors.textSecondary }]}>
-                      Heures d'affluence : {affluenceData.peak_hours.high.map((h: number) => `${String(h).padStart(2,'0')}h`).join(', ')}.
+                      Heures d’affluence : {affluenceData.peak_hours.high.map((h: number) => `${String(h).padStart(2,'0')}h`).join(', ')}.
                       Essayez de venir en dehors de ces créneaux pour une attente réduite.
                     </Text>
                   </View>

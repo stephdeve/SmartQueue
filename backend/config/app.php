@@ -54,6 +54,9 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // URL du front web (liens de réinitialisation de mot de passe)
+    'frontend_url' => env('FRONTEND_URL'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
@@ -65,7 +68,8 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    // Fuseau des horaires d'ouverture saisis par les établissements (ex: Africa/Porto-Novo).
+    'timezone' => env('APP_TIMEZONE', 'UTC'),
 
     /*
     |--------------------------------------------------------------------------

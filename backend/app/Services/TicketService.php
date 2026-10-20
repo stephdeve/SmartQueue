@@ -9,13 +9,13 @@ use App\Events\ServiceStatsUpdated;
 use App\Events\ServiceTicketCalled;
 use App\Events\ServiceTicketAbsent;
 use App\Events\ServiceTicketEnqueued;
+use App\Events\ServiceTicketServed;
 use App\Events\TicketLifecycle\TicketCreated as TicketLifecycleCreated;
 use App\Jobs\SendPushNotification;
 use App\Jobs\SendSmsNotification;
 use App\Models\Service;
 use App\Models\Ticket;
 use App\Models\User;
-use App\Notifications\InAppNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -91,25 +91,29 @@ class TicketService
                 ->get(['id', 'user_id', 'position', 'eta_minutes', 'priority']);
         }
 
+        // Durée moyenne calculée une seule fois pour toute la file (évite N requêtes)
+        $avgTime = $this->estimateAvgServiceTimeMinutes($service->id, $service->avg_service_time_minutes ?? 5);
+
         $pos = 1;
         foreach ($waiting as $t) {
-            $eta = $this->estimateWaitTime($service, new Ticket(['position' => $pos]));
+            $eta = (int) (($pos - 1) * $avgTime);
             $positionChanged = (int) $t->position !== $pos;
             $etaChanged = (int) ($t->eta_minutes ?? -1) !== $eta;
 
-            // Mettre à jour la DB uniquement si quelque chose a changé
-            if ($positionChanged || $etaChanged) {
-                Ticket::query()->where('id', $t->id)->update([
-                    'position' => $pos,
-                    'eta_minutes' => $eta,
-                ]);
+            if (!$positionChanged && !$etaChanged) {
+                $pos++;
+                continue;
             }
 
-            // Toujours broadcaster la position et l'ETA pour que le mobile reste
-            // synchronisé, même si la position numérique n'a pas changé.
-            // Cas typique : un ticket est servi, les positions restent identiques
-            // mais l'ETA recalculé est différent — sans cet événement le mobile
-            // affiche un ETA figé.
+            Ticket::query()->where('id', $t->id)->update([
+                'position' => $pos,
+                'eta_minutes' => $eta,
+            ]);
+
+            // Diffuser dès que la position OU l'ETA change (ex: ticket servi →
+            // positions identiques mais ETA recalculé). Les tickets inchangés ne
+            // sont pas re-diffusés : chaque diffusion est un appel HTTP synchrone
+            // vers Reverb, exécuté pendant que la file est verrouillée.
             $this->broadcastSafely(fn() => event(new TicketUpdated($t->id, [
                 'position' => $pos,
                 'eta_minutes' => $eta,
@@ -158,6 +162,83 @@ class TicketService
     }
 
     /**
+     * Prochain numéro lisible pour un service et un jour cible : "A-001-20260101".
+     *
+     * Le préfixe est la première lettre ASCII du nom du service ("État civil" → "E",
+     * "1er guichet" → "E", "123" → "T") : un octet isolé d'un caractère multi-octets produirait un
+     * UTF-8 invalide (rejeté par PostgreSQL), et un préfixe non alphabétique empêchait
+     * de relire la séquence (toujours 001 → violation d'unicité dès le 2e ticket).
+     * Doit être appelé sous verrou du service (lockForUpdate).
+     */
+    public function nextTicketNumber(Service $service, string $targetDate): string
+    {
+        $ascii = strtoupper(\Illuminate\Support\Str::ascii((string) $service->name));
+        $prefix = preg_match('/[A-Z]/', $ascii, $letter) ? $letter[0] : 'T';
+        $targetDateKey = str_replace('-', '', $targetDate);
+
+        $numbers = Ticket::query()
+            ->where('service_id', $service->id)
+            ->whereDate('valid_date', $targetDate)
+            ->pluck('number');
+
+        $seq = 0;
+        foreach ($numbers as $number) {
+            if (preg_match('/-(\d+)-'.$targetDateKey.'$/', (string) $number, $m)) {
+                $seq = max($seq, (int) $m[1]);
+            }
+        }
+
+        return sprintf('%s-%03d-%s', $prefix, $seq + 1, $targetDateKey);
+    }
+
+    /**
+     * Vérifie qu'un usager peut prendre un ticket sur ce service (capacité + doublon).
+     */
+    private function assertCanEnqueue(Service $service, User $user, string $targetDate): void
+    {
+        // Capacité: appliquée uniquement à la file active du jour cible.
+        if (!is_null($service->capacity)) {
+            $waitingCount = Ticket::query()
+                ->where('service_id', $service->id)
+                ->where('status', 'waiting')
+                ->whereDate('valid_date', $targetDate)
+                ->count();
+            if ($waitingCount >= (int) $service->capacity) {
+                abort(422, 'Service queue is full');
+            }
+        }
+
+        if ($this->findActiveTicketFor($service->id, $user->id)) {
+            abort(422, 'You already have an active ticket for this service');
+        }
+    }
+
+    /**
+     * Ticket encore actif (aujourd'hui ou reporté) d'un usager sur un service.
+     * Les absents définitifs (absent_expires_at renseigné) ne bloquent pas un nouveau ticket.
+     */
+    public function findActiveTicketFor(int $serviceId, int $userId): ?Ticket
+    {
+        return Ticket::query()
+            ->where('user_id', $userId)
+            ->where('service_id', $serviceId)
+            ->whereIn('status', self::ACTIVE_STATUSES)
+            ->where(function ($q) {
+                $q->whereNull('absent_expires_at')
+                  ->orWhere('status', '!=', 'absent');
+            })
+            ->whereDate('valid_date', '>=', Carbon::today())
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /** Code SQLSTATE de violation d'unicité : MySQL/SQLite = 23000, PostgreSQL = 23505. */
+    private function isUniqueViolation(QueryException $e): bool
+    {
+        return in_array((string) $e->getCode(), ['23000', '23505'], true);
+    }
+
+    /**
      * Crée un ticket pour un service donné avec logique de position et numérotation.
      */
     public function createTicket(User $user, int $serviceId, ?float $lat = null, ?float $lng = null, ?string $fromQr = null): Ticket
@@ -185,44 +266,10 @@ class TicketService
             $isDeferred = $placement['mode'] === 'deferred';
             $targetDate = $placement['valid_date'];
 
-            // Capacité: appliquée uniquement à la file active du jour cible.
-            if (!is_null($service->capacity)) {
-                $waitingCount = Ticket::query()
-                    ->where('service_id', $serviceId)
-                    ->where('status', 'waiting')
-                    ->whereDate('valid_date', $targetDate)
-                    ->count();
-                if ($waitingCount >= (int) $service->capacity) {
-                    abort(422, 'Service queue is full');
-                }
-            }
-
-            $already = Ticket::query()
-                ->where('user_id', $user->id)
-                ->where('service_id', $serviceId)
-                ->whereIn('status', ['waiting','called','en_route','present','absent'])
-                ->where(function ($q) {
-                    $q->whereNull('absent_expires_at')
-                      ->orWhere('status', '!=', 'absent');
-                })
-                ->exists();
-            if ($already) {
-                abort(422, 'You already have an active ticket for this service');
-            }
+            $this->assertCanEnqueue($service, $user, $targetDate);
 
             // Génération d'un numéro lisible (jour cible + incrément local au service)
-            $prefix = strtoupper(substr($service->name, 0, 1));
-            $targetDateKey = str_replace('-', '', $targetDate);
-            $last = Ticket::query()
-                ->where('service_id', $serviceId)
-                ->whereDate('valid_date', $targetDate)
-                ->orderByDesc('id')
-                ->value('number');
-            $seq = 1;
-            if ($last && preg_match('/^[A-Z]-(\d+)-'.$targetDateKey.'$/', $last, $m)) {
-                $seq = ((int) $m[1]) + 1;
-            }
-            $number = sprintf('%s-%03d-%s', $prefix, $seq, $targetDateKey);
+            $number = $this->nextTicketNumber($service, $targetDate);
 
             // Position = rang dans la file du jour cible
             $position = Ticket::query()
@@ -295,8 +342,7 @@ class TicketService
                     return $ticket->fresh(['service.establishment']);
                 });
             } catch (QueryException $e) {
-                $isUniqueViolation = ($e->getCode() === '23000');
-                if ($isUniqueViolation && $attempts < $maxAttempts) {
+                if ($this->isUniqueViolation($e) && $attempts < $maxAttempts) {
                     usleep(50000);
                     continue;
                 }
@@ -326,19 +372,10 @@ class TicketService
             $isDeferred = $placement['mode'] === 'deferred';
             $targetDate = $placement['valid_date'];
 
+            $this->assertCanEnqueue($service, $user, $targetDate);
+
             // Génération d'un numéro lisible (jour cible)
-            $prefix = strtoupper(substr($service->name, 0, 1));
-            $targetDateKey = str_replace('-', '', $targetDate);
-            $last = Ticket::query()
-                ->where('service_id', $service->id)
-                ->whereDate('valid_date', $targetDate)
-                ->orderByDesc('id')
-                ->value('number');
-            $seq = 1;
-            if ($last && preg_match('/^[A-Z]-(\d+)-'.$targetDateKey.'$/', $last, $m)) {
-                $seq = ((int) $m[1]) + 1;
-            }
-            $number = sprintf('%s-%03d-%s', $prefix, $seq, $targetDateKey);
+            $number = $this->nextTicketNumber($service, $targetDate);
 
             // Position = rang dans la file du jour cible
             $position = Ticket::query()
@@ -352,7 +389,7 @@ class TicketService
                 'service_id' => $service->id,
                 'number' => $number,
                 'status' => 'waiting',
-                'priority' => $user->priority ?? 'normal',
+                'priority' => 'normal',
                 'position' => $position,
                 'source' => 'qr_scan',
                 'valid_date' => $targetDate,
@@ -442,7 +479,8 @@ class TicketService
             $called = Carbon::parse($r->called_at);
             $closed = Carbon::parse($r->closed_at);
             if ($closed->greaterThan($called)) {
-                $sum += $closed->diffInMinutes($called);
+                // Carbon 3 : $a->diffInMinutes($b) est signé (positif si $b > $a)
+                $sum += $called->diffInMinutes($closed);
                 $n++;
             }
         }
@@ -464,13 +502,16 @@ class TicketService
 
             // Priorité stricte :
             // 1) ticket présent sur place
-            // 2) ticket appelé classique
-            // 3) prochain ticket en attente
+            // 2) prochain ticket en attente
+            // Un ticket déjà « called » est en cours de traitement à un guichet : le
+            // reprendre ici ferait appeler deux fois la même personne (et bloquerait
+            // la file tant qu'il n'est pas clôturé/absent). Il est géré par
+            // recall / markAbsent / close ou l'expiration automatique.
             $ticket = Ticket::query()
                 ->where('service_id', $service->id)
-                ->whereIn('status', ['present', 'called', 'waiting'])
+                ->whereIn('status', ['present', 'waiting'])
                 ->whereDate('valid_date', Carbon::today())
-                ->orderByRaw("CASE status WHEN 'present' THEN 1 WHEN 'called' THEN 2 ELSE 3 END")
+                ->orderByRaw("CASE status WHEN 'present' THEN 1 ELSE 2 END")
                 ->orderByRaw("CASE priority WHEN 'urgence' THEN 4 WHEN 'vip' THEN 3 WHEN 'high' THEN 2 ELSE 1 END DESC")
                 ->orderBy('position')
                 ->orderBy('created_at')
@@ -578,6 +619,11 @@ class TicketService
     {
         $this->expireOldTicketsForServiceId($ticket->service_id);
 
+        $ticket->refresh();
+        if (!in_array($ticket->status, self::ACTIVE_STATUSES, true)) {
+            throw new \InvalidArgumentException('Ce ticket est déjà terminé.');
+        }
+
         $service = $ticket->service;
         $maxAttempts = (int) ($service?->max_call_attempts ?? 2);
 
@@ -674,12 +720,15 @@ class TicketService
     public function permanentlyExpireAbsent(Ticket $ticket): Ticket
     {
         // Éviter le double-traitement
-        if ($ticket->status === 'closed') {
+        if (in_array($ticket->status, ['closed', 'expired', 'canceled'], true)) {
             return $ticket;
         }
 
-        $ticket->status             = 'closed';
-        $ticket->closed_at          = Carbon::now();
+        // Statut 'expired' en base : un absent définitif n'a pas été servi (sinon il
+        // serait comptabilisé comme « servi » dans toutes les statistiques).
+        // Les événements temps réel conservent status=closed + reason=expired_absent,
+        // format attendu par l'application mobile déjà déployée.
+        $ticket->status             = 'expired';
         $ticket->position           = null;
         $ticket->eta_minutes        = null;
         $ticket->called_expires_at  = null;
@@ -733,6 +782,10 @@ class TicketService
      */
     public function close(Ticket $ticket): Ticket
     {
+        if (!in_array($ticket->status, self::ACTIVE_STATUSES, true)) {
+            throw new \InvalidArgumentException('Ce ticket est déjà terminé.');
+        }
+
         $ticket->status = 'closed';
         $ticket->closed_at = Carbon::now();
         $ticket->en_route_expires_at = null;
@@ -761,6 +814,19 @@ class TicketService
                 'type' => 'served',
             ]));
         }
+
+        // Diffusion service : les autres guichets/dashboards retirent le ticket
+        $this->broadcastSafely(fn() => event(new ServiceTicketServed($ticket->service_id, [
+            'service_id'    => $ticket->service_id,
+            'ticket_id'     => $ticket->id,
+            'ticket_number' => $ticket->number,
+            'ticket'        => [
+                'id'         => $ticket->id,
+                'number'     => $ticket->number,
+                'service_id' => $ticket->service_id,
+                'closed_at'  => $ticket->closed_at?->toIso8601String(),
+            ],
+        ])));
 
         $this->recomputePositions($ticket->service);
         return $ticket->fresh();
@@ -822,7 +888,8 @@ class TicketService
             // "operator does not exist" when comparing with NULL on some DB drivers.
             $query = Ticket::query()
                 ->where('service_id', $service->id)
-                ->where('status', 'waiting');
+                ->where('status', 'waiting')
+                ->whereDate('valid_date', Carbon::today());
 
             if (is_numeric($ticket->position)) {
                 $query->where('position', '>', $ticket->position)
@@ -842,8 +909,8 @@ class TicketService
             }
 
             // Sauvegarder les positions originales
-            $ticketOriginalPosition = $ticket->position;
             $nextTicketPosition = $nextTicket->position;
+            $ticketCounterId = $ticket->counter_id;
 
             // Le ticket déferré prend la position du suivant
             $ticket->position = $nextTicketPosition;
@@ -858,18 +925,25 @@ class TicketService
             }
             $ticket->grace_period_expires_at = Carbon::parse($ticket->original_called_at)->addHours(24);
             $ticket->called_at = null;
+            $ticket->called_expires_at = null;
             $ticket->counter_id = null;
             $ticket->eta_minutes = $this->estimateWaitTime($service, $ticket);
             $ticket->save();
 
-            // Le ticket suivant est appelé à la place
+            // Le ticket suivant est appelé à la place (au même guichet)
+            $timeoutMinutes = max(1, $service->call_timeout_minutes
+                ?? (int) ceil((int) config('queue.call_timeout_seconds', 600) / 60));
             $nextTicket->position = null;
             $nextTicket->status = 'called';
+            $nextTicket->counter_id = $ticketCounterId;
             $nextTicket->en_route_at = null; // Nouvel appel : pas encore de réponse
             $nextTicket->present_at = null;
             $nextTicket->response_received_at = null;
             $nextTicket->en_route_expires_at = null;
             $nextTicket->called_at = Carbon::now();
+            // Sans échéance, l'expiration automatique (tickets:expire-called) ne
+            // s'appliquerait qu'au délai global de secours.
+            $nextTicket->called_expires_at = Carbon::now()->addMinutes($timeoutMinutes);
             $nextTicket->is_swapped = true;
             $nextTicket->swapped_with_ticket_id = $ticket->id;
             $nextTicket->eta_minutes = 0;
@@ -894,22 +968,10 @@ class TicketService
                 ));
             }
 
-            // Notify agents in-app that a user chose to defer
+            // Notify agents (le job crée aussi la notification in-app)
             try {
                 $agents = $service->agents()->get();
                 foreach ($agents as $agent) {
-                    $agent->notify(new InAppNotification(
-                        'Usager a laissé passer',
-                        "L'usager du ticket {$ticket->number} a choisi de laisser passer son tour.",
-                        'user_deferred',
-                        [
-                            'ticket_id' => $ticket->id,
-                            'ticket_number' => $ticket->number,
-                            'service_id' => $service->id,
-                        ]
-                    ));
-
-                    // Also send a push notification to agents if they have devices
                     try {
                         dispatch(new SendPushNotification(
                             $agent->id,
@@ -937,11 +999,28 @@ class TicketService
                 'is_swapped' => true,
                 'deferred_at' => $ticket->deferred_at,
             ])));
+            $this->broadcastSafely(fn() => event(new TicketCalled($nextTicket->id, [
+                'ticket_id' => $nextTicket->id,
+                'number' => $nextTicket->number,
+                'counter_id' => $nextTicket->counter_id,
+                'service_id' => $service->id,
+                'position' => null,
+            ])));
             $this->broadcastSafely(fn() => event(new TicketUpdated($nextTicket->id, [
                 'status' => 'called',
                 'position' => null,
                 'eta_minutes' => 0,
                 'is_swapped' => true,
+                'called_expires_at' => $nextTicket->called_expires_at->toIso8601String(),
+            ])));
+            $this->broadcastSafely(fn() => event(new ServiceTicketCalled($service->id, [
+                'service_id' => $service->id,
+                'ticket_id' => $nextTicket->id,
+                'ticket_number' => $nextTicket->number,
+                'ticket' => [
+                    'id' => $nextTicket->id,
+                    'number' => $nextTicket->number,
+                ],
             ])));
 
             if ($ticket->user) {
@@ -960,11 +1039,16 @@ class TicketService
                     'ticket_id' => $nextTicket->id,
                     'service_id' => $service->id,
                     'status' => 'called',
+                    'number' => $nextTicket->number,
+                    'counter_id' => $nextTicket->counter_id,
                     'position' => null,
                     'eta_minutes' => 0,
+                    'called_expires_at' => $nextTicket->called_expires_at->toIso8601String(),
                     'swapped' => true,
                 ])));
             }
+
+            $this->recomputePositions($service);
 
             return $ticket->fresh();
         });
@@ -983,6 +1067,10 @@ class TicketService
      */
     public function cancel(Ticket $ticket): Ticket
     {
+        if (!in_array($ticket->status, self::ACTIVE_STATUSES, true)) {
+            throw new \InvalidArgumentException('Ce ticket est déjà terminé.');
+        }
+
         $ticket->status = 'canceled';
         $ticket->position = null;
         $ticket->eta_minutes = null;
@@ -1013,6 +1101,11 @@ class TicketService
     {
         $this->expireOldTicketsForServiceId($ticket->service_id);
 
+        $ticket->refresh();
+        if (!in_array($ticket->status, self::ACTIVE_STATUSES, true)) {
+            throw new \InvalidArgumentException('Ce ticket est terminé et ne peut plus être rappelé.');
+        }
+
         $maxAttempts = (int) ($ticket->service?->max_call_attempts ?? 2);
 
         if (($ticket->absent_level ?? 0) >= $maxAttempts) {
@@ -1022,6 +1115,9 @@ class TicketService
         $service = $ticket->service;
         $timeoutMinutes = max(1, $service?->call_timeout_minutes
             ?? (int) ceil((int) config('queue.call_timeout_seconds', 600) / 60));
+        // Appel direct d'un ticket encore en file (ex: écran « prioritaires ») :
+        // la file doit être renumérotée et le message n'est pas un « rappel »
+        $wasWaiting = $ticket->status === 'waiting';
 
         $ticket->status = 'called';
         $ticket->en_route_at = null;
@@ -1077,7 +1173,7 @@ class TicketService
             // Send push notification for recall
             dispatch(new SendPushNotification(
                 $ticket->user->id,
-                'Rappel - Votre ticket est appelé',
+                $wasWaiting ? 'Vous êtes appelé' : 'Rappel - Votre ticket est appelé',
                 'Présentez-vous au guichet pour le ticket '.$ticket->number,
                 [
                     'type'       => 'ticket_called',
@@ -1093,6 +1189,11 @@ class TicketService
                 ]));
             }
         }
+
+        if ($wasWaiting && $service) {
+            $this->recomputePositions($service);
+        }
+
         return $ticket->fresh();
     }
 
@@ -1125,7 +1226,10 @@ class TicketService
     {
         $now = Carbon::now();
         $today = $now->format('Y-m-d');
-        $closingTime = $service->closing_time ?? '18:00:00';
+        // Heure de fermeture effective du jour (surcharge du jour ouvrable > horaire
+        // du service), identique à celle utilisée pour accepter les tickets : sinon un
+        // ticket accepté après l'horaire par défaut serait expiré aussitôt.
+        [, $closingTime] = $this->availability()->effectiveHoursAt($service, $now);
 
         // 1) Expire tickets whose valid_date is strictly before today
         //    (yesterday's tickets should already be gone)

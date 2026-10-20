@@ -28,17 +28,22 @@ class EstablishmentController extends Controller
             $category = null;
         }
 
-        $user = $request->user();
+        // Route publique : l'utilisateur n'est résolu que si un token Sanctum est envoyé
+        $user = $request->user('sanctum');
+        $today = now()->toDateString();
 
         $query = Establishment::query()
-            ->where('is_active', true)
+            ->where('establishments.is_active', true)
             ->when($category !== null && $category !== '', function ($q) use ($category) {
                 $q->where('establishments.category', $category);
             })
             ->leftJoin('services', 'services.establishment_id', '=', 'establishments.id')
-            ->leftJoin('tickets', function ($join) {
+            ->leftJoin('tickets', function ($join) use ($today) {
+                // File du jour uniquement (les tickets reportés à une date future
+                // ne sont pas devant l'usager aujourd'hui)
                 $join->on('tickets.service_id', '=', 'services.id')
-                    ->where('tickets.status', '=', 'waiting');
+                    ->where('tickets.status', '=', 'waiting')
+                    ->whereDate('tickets.valid_date', '=', $today);
             })
             ->select('establishments.*')
             ->selectRaw('COUNT(DISTINCT services.id) as services_count')
@@ -58,16 +63,18 @@ class EstablishmentController extends Controller
             // On ne peut pas calculer une distance sans coordonnées.
             $query->whereNotNull('establishments.lat')->whereNotNull('establishments.lng');
 
-            // Formule Haversine approchée (compatible SQLite/MySQL/Postgres)
-            $haversine = "(6371000 * 2 * ASIN(SQRT(POWER(SIN(RADIANS(? - lat)/2),2) + COS(RADIANS(lat)) * COS(RADIANS(?)) * POWER(SIN(RADIANS(? - lng)/2),2))))";
-            $query->select('*')
-                ->selectRaw($haversine.' as distance_m', [$lat, $lat, $lng])
+            // Formule Haversine approchée (compatible MySQL/Postgres).
+            // Colonnes qualifiées et select existant conservé : un `select *` sur la
+            // jointure services/tickets avec GROUP BY établissement est refusé par
+            // PostgreSQL (et écrasait l'id de l'établissement par celui du ticket).
+            $haversine = "(6371000 * 2 * ASIN(SQRT(POWER(SIN(RADIANS(? - establishments.lat)/2),2) + COS(RADIANS(establishments.lat)) * COS(RADIANS(?)) * POWER(SIN(RADIANS(? - establishments.lng)/2),2))))";
+            $query->selectRaw($haversine.' as distance_m', [$lat, $lat, $lng])
                 ->orderBy('distance_m');
             // PostgreSQL ne permet pas d'utiliser un alias dans HAVING
             // On utilise havingRaw avec l'expression complète
             $query->havingRaw($haversine.' <= ?', [$lat, $lat, $lng, $radius]);
         } else {
-            $query->orderBy('name');
+            $query->orderBy('establishments.name');
         }
 
         $perPage = min(max((int) $request->query('per_page', 20), 1), 100);
@@ -83,8 +90,10 @@ class EstablishmentController extends Controller
         $builder = Establishment::query()
             ->where('is_active', true)
             ->where(function ($builder) use ($q) {
-                $builder->where('name', 'like', '%'.$q.'%')
-                        ->orWhere('address', 'like', '%'.$q.'%');
+                // LIKE est sensible à la casse sous PostgreSQL
+                $needle = '%'.mb_strtolower($q).'%';
+                $builder->whereRaw('LOWER(name) LIKE ?', [$needle])
+                        ->orWhereRaw('LOWER(address) LIKE ?', [$needle]);
             })
             ->orderBy('name')
             ;
@@ -95,7 +104,7 @@ class EstablishmentController extends Controller
     /** Détail d'un établissement. */
     public function show(Request $request, int $id)
     {
-        $user = $request->user();
+        $user = $request->user('sanctum');
 
         $est = Establishment::query()
             ->where('id', $id)
@@ -103,7 +112,7 @@ class EstablishmentController extends Controller
             ->with(['services' => function ($q) {
                 $q->with('workingDays')
                   ->withCount(['tickets as people_waiting' => function ($q2) {
-                      $q2->where('status', 'waiting');
+                      $q2->where('status', 'waiting')->whereDate('valid_date', now()->toDateString());
                   }]);
             }])
             ->findOrFail($id);

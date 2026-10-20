@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   ViewStyle,
   TouchableOpacity,
@@ -48,6 +49,7 @@ export const Card: React.FC<CardProps> = ({
 
   // Obtenir le padding selon la taille
   const getPaddingStyle = (): ViewStyle => {
+    if (typeof padding === 'number') return { padding };
     switch (padding) {
       case 'none':
         return { padding: 0 };
@@ -58,13 +60,12 @@ export const Card: React.FC<CardProps> = ({
       case 'medium':
       default:
         return { padding: Theme.spacing.lg };
-      case typeof padding === 'number':
-        return { padding };
     }
   };
 
   // Obtenir le margin selon la taille
   const getMarginStyle = (): ViewStyle => {
+    if (typeof margin === 'number') return { margin };
     switch (margin) {
       case 'none':
         return { margin: 0 };
@@ -75,8 +76,6 @@ export const Card: React.FC<CardProps> = ({
       case 'medium':
       default:
         return { margin: Theme.spacing.lg };
-      case typeof margin === 'number':
-        return { margin };
     }
   };
 
@@ -129,6 +128,7 @@ export const CardSection: React.FC<CardSectionProps> = ({
   borderBottom = false,
 }) => {
   const getPaddingStyle = (): ViewStyle => {
+    if (typeof padding === 'number') return { padding };
     switch (padding) {
       case 'none':
         return { padding: 0 };
@@ -139,8 +139,6 @@ export const CardSection: React.FC<CardSectionProps> = ({
       case 'medium':
       default:
         return { padding: Theme.spacing.lg };
-      case typeof padding === 'number':
-        return { padding };
     }
   };
 
@@ -206,6 +204,7 @@ export const CardFooter: React.FC<CardFooterProps> = ({
   padding = 'medium',
 }) => {
   const getPaddingStyle = (): ViewStyle => {
+    if (typeof padding === 'number') return { padding };
     switch (padding) {
       case 'none':
         return { padding: 0 };
@@ -216,8 +215,6 @@ export const CardFooter: React.FC<CardFooterProps> = ({
       case 'medium':
       default:
         return { padding: Theme.spacing.lg };
-      case typeof padding === 'number':
-        return { padding };
     }
   };
 

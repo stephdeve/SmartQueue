@@ -147,14 +147,19 @@ const TicketsAbsent: React.FC = () => {
         return;
       }
 
-      // CORRECTION: Utiliser channel() au lieu de join() pour les channels publics
+      // Canal de présence (le backend diffuse sur presence-service.{id}, réservé au personnel)
       try {
-        const newChannel = echo.channel(`service.${numericId}`);
+        const newChannel = echo.join(`service.${numericId}`);
 
         newChannel
           .listen('.service.ticket.absent', (e: any) => {
             const t = e?.ticket;
             if (!t) return;
+            // Absence définitive expirée : le ticket quitte la liste des absents
+            if (e?.reason === 'expired_absent') {
+              setAbsentTickets(prev => prev.filter(x => x.id !== t.id));
+              return;
+            }
             console.log('📢 Événement absent reçu:', t);
             setAbsentTickets(prev => {
               if (prev.some(x => x.id === t.id)) return prev;
@@ -173,6 +178,15 @@ const TicketsAbsent: React.FC = () => {
             });
             setLastUpdated(new Date().toLocaleTimeString());
             toast.warning(`Ticket ${t.number || t.ticket_number} marqué absent`);
+          })
+          // Rappelé ou servi : n'est plus absent
+          .listen('.service.ticket.called', (e: any) => {
+            const id = e?.ticket?.id ?? e?.ticket_id;
+            if (id) setAbsentTickets(prev => prev.filter(x => x.id !== id));
+          })
+          .listen('.service.ticket.served', (e: any) => {
+            const id = e?.ticket?.id ?? e?.ticket_id;
+            if (id) setAbsentTickets(prev => prev.filter(x => x.id !== id));
           });
 
         setChannel(newChannel);
@@ -189,13 +203,12 @@ const TicketsAbsent: React.FC = () => {
     });
 
     return () => {
-      if (channel) {
-        try {
-          const echoInstance = getEcho();
-          echoInstance.leaveChannel(`service.${numericId}`);
-        } catch (_) { }
-        setChannel(null);
-      }
+      // `channel` (state) vaut encore null dans cette closure : quitter par nom,
+      // sinon chaque changement de service empilait un abonnement supplémentaire.
+      try {
+        getEcho().leave(`service.${numericId}`);
+      } catch (_) { }
+      setChannel(null);
       setIsConnected(false);
     };
   }, [serviceId]);

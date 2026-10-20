@@ -133,7 +133,7 @@ export default function Services() {
     call_timeout_minutes: z.union([z.number().int().min(1).max(60), z.null()]),
     en_route_grace_minutes: z.number().int().min(1).max(60),
     max_call_attempts: z.number().int().min(1).max(10),
-    capacity: z.union([z.number().int().min(1).max(100000), z.null()]),
+    capacity: z.union([z.number().int().min(1).max(5000), z.null()]),
   });
 
   const load = async () => {

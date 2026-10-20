@@ -4,26 +4,32 @@ namespace App\Policies;
 
 use App\Models\Ticket;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
 
 class TicketPolicy
 {
-    // Lecture: propriétaire du ticket ou agent/admin
+    // Lecture: propriétaire du ticket ou personnel habilité sur le service du ticket
     public function view(User $user, Ticket $ticket): bool
     {
-        return $ticket->user_id === $user->id || in_array($user->role, ['agent','admin'], true);
+        return (int) $ticket->user_id === (int) $user->id || $this->actOn($user, $ticket);
     }
 
-    // Mise à jour par l'utilisateur: uniquement pour annuler un ticket en attente ou appelé
+    // Mise à jour par l'utilisateur: uniquement pour annuler un ticket encore actif
     public function update(User $user, Ticket $ticket): bool
     {
-        return $ticket->user_id === $user->id && in_array($ticket->status, ['waiting', 'called']);
+        return (int) $ticket->user_id === (int) $user->id
+            && in_array($ticket->status, ['waiting', 'called', 'en_route', 'absent'], true);
     }
 
-    // Actions agent: appeler, marquer absent, rappeler
+    // Actions agent: appeler, marquer absent, rappeler — limitées aux services
+    // que l'agent/admin gère (pas d'action possible sur un autre établissement)
     public function actOn(User $user, Ticket $ticket): bool
     {
-        return in_array($user->role, ['agent','admin'], true);
+        if (!in_array($user->role, ['agent', 'admin'], true)) {
+            return false;
+        }
+
+        $service = $ticket->service;
+
+        return $service !== null && (new ServicePolicy())->manage($user, $service);
     }
 }
-

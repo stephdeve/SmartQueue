@@ -10,6 +10,9 @@ import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useSettings } from '../../store/settingsStore';
 import { Theme } from '../../theme';
 
+// Les props SVG ne peuvent pas recevoir une valeur Animated sur un <Circle> simple
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 // Types pour le cercle de progression
 export interface ProgressCircleProps {
   progress: number; // 0 à 100
@@ -66,7 +69,8 @@ export const ProgressCircle: React.FC<ProgressCircleProps> = ({
       Animated.timing(animatedValue, {
         toValue: progress,
         duration,
-        useNativeDriver: true,
+        // strokeDashoffset n'est pas animable par le driver natif
+        useNativeDriver: false,
       }).start();
     } else {
       animatedValue.setValue(progress);
@@ -118,7 +122,7 @@ export const ProgressCircle: React.FC<ProgressCircleProps> = ({
                 <Stop offset="100%" stopColor={gradientColors[1]} />
               </LinearGradient>
             </Defs>
-            <Circle
+            <AnimatedCircle
               cx={size / 2}
               cy={size / 2}
               r={radius}
@@ -132,7 +136,7 @@ export const ProgressCircle: React.FC<ProgressCircleProps> = ({
             />
           </>
         ) : (
-          <Circle
+          <AnimatedCircle
             cx={size / 2}
             cy={size / 2}
             r={radius}

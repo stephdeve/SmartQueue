@@ -8,6 +8,7 @@ import {
   Animated,
   RefreshControl,
   Dimensions,
+  DimensionValue,
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -24,7 +25,7 @@ import * as Haptics from "expo-haptics";
 const { width } = Dimensions.get("window");
 
 // ── Pulsing skeleton ────────────────────────────────────────────────────────
-const SkeletonBlock: React.FC<{ widthVal: number; height: number; borderRadius?: number; style?: any }> = ({
+const SkeletonBlock: React.FC<{ widthVal: DimensionValue; height: number; borderRadius?: number; style?: any }> = ({
   widthVal, height, borderRadius = 8, style,
 }) => {
   const opacity = useRef(new Animated.Value(0.3)).current;
@@ -173,7 +174,7 @@ const TicketCard: React.FC<{
     >
       <View style={styles.ticketCardLeft}>
         <View style={[styles.ticketNumberBadge, { backgroundColor: colors.primary + "15" }]}>
-          <Text style={[styles.ticketNumber, { color: colors.primary }]} numberOfLines={1}>
+          <Text style={[styles.ticketCardNumber, { color: colors.primary }]} numberOfLines={1}>
             {ticket.number}
           </Text>
         </View>
@@ -277,7 +278,7 @@ export const TicketsScreen: React.FC = () => {
       <View style={styles.headerTop}>
         <View>
           <Text style={styles.welcomeText}>👋 Aperçu de votre</Text>
-          <Text style={styles.headerTitle}>File d'attente</Text>
+          <Text style={styles.headerTitle}>File d’attente</Text>
         </View>
         <View style={styles.headerRight}>
           {hasActiveTicket && (
@@ -305,7 +306,7 @@ export const TicketsScreen: React.FC = () => {
       </LinearGradient>
       <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Pas de ticket actif</Text>
       <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-        Scannez un QR code dans un établissement pour rejoindre une file d'attente
+        Scannez un QR code dans un établissement pour rejoindre une file d’attente
       </Text>
       <TouchableOpacity style={styles.scanButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); handleScanQR(); }}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.scanButtonGradient}>
@@ -544,7 +545,8 @@ const styles = StyleSheet.create({
   ticketCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10 },
   ticketCardLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   ticketNumberBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, alignItems: "center", justifyContent: "center", minWidth: 60 },
-  ticketNumber: { fontSize: 16, fontWeight: "800" as any, textAlign: "center" },
+  // Clé distincte : un second « ticketNumber » écrasait le style du ticket principal (22 → 16)
+  ticketCardNumber: { fontSize: 16, fontWeight: "800" as any, textAlign: "center" },
   ticketDetails: { flex: 1 },
   ticketService: { fontSize: 14, fontWeight: "600", marginBottom: 2 },
   ticketQueueInfo: { fontSize: 11 },

@@ -156,7 +156,7 @@ export default function Notifications() {
 
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     try {
-      await Promise.all(unread.map(n => api.post(`/api/notifications/${n.id}/read`)));
+      await api.post('/api/notifications/mark-all-read');
     } catch (e) {
       await fetchNotifications();
     }

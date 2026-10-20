@@ -146,9 +146,9 @@ const TicketsCalled: React.FC = () => {
         return;
       }
 
-      // CORRECTION: Utiliser channel() au lieu de join()
+      // Canal de présence (le backend diffuse sur presence-service.{id}, réservé au personnel)
       try {
-        const newChannel = echo.channel(`service.${numericId}`);
+        const newChannel = echo.join(`service.${numericId}`);
 
         // Écouter l'événement d'appel de ticket
         newChannel.listen('.service.ticket.called', (e: any) => {
@@ -176,39 +176,9 @@ const TicketsCalled: React.FC = () => {
           });
         });
 
-        // Écouter l'événement de rappel
-        newChannel.listen('.service.ticket.recalled', (e: any) => {
-          const t = e?.ticket;
-          if (!t) return;
-          setCalledTickets(prev => {
-            const exists = prev.find(x => x.id === t.id);
-            if (exists) {
-              return prev.map(x => x.id === t.id ? {
-                ...x,
-                called_at: t.called_at || new Date().toISOString(),
-              } : x);
-            }
-            return [{
-              id: t.id,
-              number: t.number || t.ticket_number || String(t.id),
-              ticket_number: t.number || t.ticket_number || String(t.id),
-              status: 'called',
-              service_id: t.service_id || numericId,
-              service_name: t.service_name || `Service ${numericId}`,
-              created_at: t.created_at || new Date().toISOString(),
-              called_at: t.called_at || new Date().toISOString(),
-              client_name: getClientName(t),
-              position: t.position,
-            }, ...prev].slice(0, 50);
-          });
-          setLastUpdated(new Date().toLocaleTimeString());
-          toast.info(`Rappel du ticket ${t.number || t.ticket_number}`, {
-            duration: 3000,
-          });
-        });
-
-        // Écouter la clôture pour retirer de la liste
-        newChannel.listen('.service.ticket.closed', (e: any) => {
+        // Écouter la clôture (servi par un agent ou « je suis là ») pour retirer de la liste.
+        // Un rappel est diffusé comme un nouvel appel (.service.ticket.called).
+        newChannel.listen('.service.ticket.served', (e: any) => {
           const t = e?.ticket;
           if (!t) return;
           setCalledTickets(prev => prev.filter(x => x.id !== t.id));
@@ -236,13 +206,12 @@ const TicketsCalled: React.FC = () => {
     });
 
     return () => {
-      if (channel) {
-        try {
-          const echoInstance = getEcho();
-          echoInstance.leaveChannel(`service.${numericId}`);
-        } catch (_) { }
-        setChannel(null);
-      }
+      // `channel` (state) vaut encore null dans cette closure : quitter par nom,
+      // sinon chaque changement de service empilait un abonnement supplémentaire.
+      try {
+        getEcho().leave(`service.${numericId}`);
+      } catch (_) { }
+      setChannel(null);
       setIsConnected(false);
     };
   }, [serviceId]);

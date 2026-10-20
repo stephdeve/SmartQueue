@@ -23,8 +23,13 @@ class AgentClientProfileController extends Controller
         $customerPhone = $ticket->customer_phone;
         $userId = $ticket->user_id;
 
-        // Trouver tous les tickets du même client
-        $query = Ticket::where(function ($q) use ($customerName, $customerPhone, $userId) {
+        // Trouver tous les tickets du même client, limités à l'établissement du ticket :
+        // un nom/téléphone identique ailleurs ne doit pas exposer l'historique d'un tiers.
+        $establishmentServiceIds = \App\Models\Service::query()
+            ->where('establishment_id', $ticket->service->establishment_id)
+            ->pluck('id');
+
+        $query = Ticket::whereIn('service_id', $establishmentServiceIds)->where(function ($q) use ($customerName, $customerPhone, $userId) {
             if ($userId) {
                 $q->where('user_id', $userId);
             }

@@ -94,6 +94,14 @@ axiosClient.interceptors.response.use(
       );
     }
 
+    // Le backend renvoie { error: { code, message, details } } pour les erreurs HTTP et
+    // de validation ; les écrans lisent `data.message` → normalisation unique ici.
+    const data = error.response?.data;
+    if (data && typeof data === "object" && !data.message && data.error?.message) {
+      data.message = data.error.message;
+      if (data.error.details && !data.errors) data.errors = data.error.details;
+    }
+
     // Si l'erreur est 401 (Non autorisé)
     if (error.response?.status === 401) {
       const hadAuthHeader = !!(error.config?.headers as any)?.Authorization;

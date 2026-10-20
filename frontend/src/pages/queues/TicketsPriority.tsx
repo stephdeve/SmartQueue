@@ -141,15 +141,15 @@ const TicketsPriority: React.FC = () => {
         return;
       }
 
-      // CORRECTION: Utiliser channel() au lieu de join()
+      // Canal de présence (le backend diffuse sur presence-service.{id}, réservé au personnel)
       try {
-        const newChannel = echo.channel(`service.${numericId}`);
+        const newChannel = echo.join(`service.${numericId}`);
 
         // Écouter l'événement d'ajout de ticket
         newChannel.listen('.service.ticket.enqueued', (e: any) => {
           const t = e?.ticket;
           if (!t) return;
-          if (t.priority === 'high' || t.priority === 'vip') {
+          if (t.priority === 'high' || t.priority === 'vip' || t.priority === 'urgence') {
             console.log('📢 Événement prioritaire reçu:', t);
             setPriorityTickets(prev => {
               if (prev.some(x => x.id === t.id)) return prev;
@@ -166,12 +166,12 @@ const TicketsPriority: React.FC = () => {
               }, ...prev].slice(0, 50);
             });
             setLastUpdated(new Date().toLocaleTimeString());
-            toast.info(`Ticket ${t.number || t.ticket_number} (${t.priority === 'vip' ? 'VIP' : 'Prioritaire'}) ajouté`);
+            toast.info(`Ticket ${t.number || t.ticket_number} (${t.priority === 'urgence' ? 'Urgence' : t.priority === 'vip' ? 'VIP' : 'Prioritaire'}) ajouté`);
           }
         });
 
         // Écouter la clôture pour retirer de la liste
-        newChannel.listen('.service.ticket.closed', (e: any) => {
+        newChannel.listen('.service.ticket.served', (e: any) => {
           const t = e?.ticket;
           if (!t) return;
           setPriorityTickets(prev => prev.filter(x => x.id !== t.id));
@@ -197,13 +197,12 @@ const TicketsPriority: React.FC = () => {
     });
 
     return () => {
-      if (channel) {
-        try {
-          const echoInstance = getEcho();
-          echoInstance.leaveChannel(`service.${numericId}`);
-        } catch (_) { }
-        setChannel(null);
-      }
+      // `channel` (state) vaut encore null dans cette closure : quitter par nom,
+      // sinon chaque changement de service empilait un abonnement supplémentaire.
+      try {
+        getEcho().leave(`service.${numericId}`);
+      } catch (_) { }
+      setChannel(null);
       setIsConnected(false);
     };
   }, [serviceId]);

@@ -100,6 +100,17 @@ class ServiceAvailabilityService
     }
 
     /**
+     * Effective [opening_time, closing_time] (HH:MM:SS) for the day of $when:
+     * per-day working-day override, else the service default hours.
+     *
+     * @return array{0:string,1:string}
+     */
+    public function effectiveHoursAt(Service $service, Carbon $when): array
+    {
+        return $this->effectiveHours($service, $this->findWorkingDay($service, $when));
+    }
+
+    /**
      * Compute the next opening datetime starting from $from (look ahead up to 14 days).
      */
     public function nextOpeningFrom(Service $service, Carbon $from): ?Carbon

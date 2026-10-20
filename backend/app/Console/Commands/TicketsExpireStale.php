@@ -24,8 +24,10 @@ class TicketsExpireStale extends Command
         $today = Carbon::today()->format('Y-m-d');
 
         // 1) Expire tickets with valid_date before today
+        $activeStatuses = ['waiting', 'called', 'en_route', 'present', 'absent'];
+
         $staleQuery = Ticket::query()
-            ->whereIn('status', ['waiting', 'called', 'absent'])
+            ->whereIn('status', $activeStatuses)
             ->whereNotNull('valid_date')
             ->whereDate('valid_date', '<', $today);
 
@@ -40,7 +42,7 @@ class TicketsExpireStale extends Command
 
         // 2) Safety net: expire tickets with no valid_date older than 24h
         $orphanQuery = Ticket::query()
-            ->whereIn('status', ['waiting', 'called', 'absent'])
+            ->whereIn('status', $activeStatuses)
             ->whereNull('valid_date')
             ->where('created_at', '<', Carbon::now()->subHours(24));
 
@@ -62,9 +64,10 @@ class TicketsExpireStale extends Command
                 ->pluck('service_id');
 
             foreach ($affectedServiceIds as $serviceId) {
-                $this->ticketService->recomputePositions(
-                    \App\Models\Service::find($serviceId)
-                );
+                $service = \App\Models\Service::find($serviceId);
+                if ($service) {
+                    $this->ticketService->recomputePositions($service);
+                }
             }
 
             $this->info("Recomputed positions for {$affectedServiceIds->count()} services");

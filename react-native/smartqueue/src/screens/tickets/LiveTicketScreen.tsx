@@ -563,6 +563,10 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({
   // ── Son & vibreur quand appelé ────────────────────────────────────────────
   const soundRef = useRef<Audio.Sound | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
+  // Déclarés avant les effets qui les lisent dans leurs dépendances (sinon
+  // ReferenceError « before initialization » au premier rendu sous Hermes)
+  const [countdownSeconds, setCountdownSeconds] = useState(0);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   useEffect(() => {
     if (isCalled && soundEnabled) {
@@ -643,9 +647,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({
   const { recordTicketCompleted, recordPresenceConfirmed, recordArrival } =
     useUserStatsStore();
 
-  const [countdownSeconds, setCountdownSeconds] = useState(0);
   const didCancelRef = useRef(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
 
   // ── Timeline ──────────────────────────────────────────────────────────────
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
@@ -882,9 +884,9 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({
             )}
             {isTicketEnRoute && (
               <View style={styles.posStatusInfo}>
-                <Text style={[styles.posInfoTitle, { color: colors.warning }]}>En attente d'arrivée</Text>
+                <Text style={[styles.posInfoTitle, { color: colors.warning }]}>En attente d’arrivée</Text>
                 <Text style={[styles.posInfoDesc, { color: colors.textSecondary }]}>
-                  L'agent a été notifié
+                  L’agent a été notifié
                 </Text>
               </View>
             )}
@@ -988,7 +990,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({
           <View style={styles.calledIconContainer}>
             <Ionicons name="notifications-circle" size={80} color="#FFF" />
           </View>
-          <Text style={styles.calledTitle}>C'est votre tour !</Text>
+          <Text style={styles.calledTitle}>C’est votre tour !</Text>
           <Text style={styles.calledSubtitle}>
             Guichet #{counterNumber || "N/A"}
           </Text>
@@ -1055,7 +1057,7 @@ export const LiveTicketScreen: React.FC<LiveTicketScreenProps> = ({
             />
           ) : (!isTicketCalledState && !isTicketPresent) && (
             <View style={[styles.noLocationCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Ionicons name="location-off" size={32} color={colors.textTertiary} />
+              <Ionicons name="location-outline" size={32} color={colors.textTertiary} />
               <Text style={[styles.noLocationText, { color: colors.textSecondary }]}>
                 Position GPS non disponible
               </Text>

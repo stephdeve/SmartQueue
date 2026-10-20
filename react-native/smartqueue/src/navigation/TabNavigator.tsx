@@ -66,7 +66,6 @@ export const TabNavigator: React.FC = () => {
             />
           ),
           tabBarBadge: undefined, // Pas de badge pour explore
-          unmountOnBlur: false, // Garde le composant monté quand on quitte le tab
         }}
       />
 
@@ -156,7 +155,7 @@ export const useTabNavigation = () => {
         case 'called':
           return Theme.colors.success;
         case 'waiting':
-          return activeTicket.position <= 2 ? Theme.colors.warning : Theme.colors.primary;
+          return (activeTicket.position ?? Infinity) <= 2 ? Theme.colors.warning : Theme.colors.primary;
         default:
           return Theme.colors.primary;
       }

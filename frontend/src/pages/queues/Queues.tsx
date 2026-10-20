@@ -594,9 +594,14 @@ const Queues: React.FC = () => {
     setError("");
     try {
       const numericCounterId = counterId ? Number(counterId) : null;
-      await api.post(`/api/services/${Number(serviceId)}/call-next`, {
+      const res = await api.post(`/api/services/${Number(serviceId)}/call-next`, {
         counter_id: numericCounterId,
       });
+      if (res.status === 204) {
+        toast.info("Aucun ticket en attente à appeler");
+      } else if (res.data?.called_ticket?.number) {
+        toast.success(`Ticket ${res.data.called_ticket.number} appelé`);
+      }
       await refreshQueueAndStats();
     } catch (e: any) {
       setError(e?.response?.data?.message || e?.message || "Erreur");
@@ -810,7 +815,8 @@ const Queues: React.FC = () => {
         try {
           console.log(`[Queues] Connexion au canal service.${serviceId}`);
           if (echo) {
-            channel = echo.channel(`service.${serviceId}`);
+            // Canal de présence : le backend diffuse sur presence-service.{id}
+            channel = echo.join(`service.${serviceId}`);
             if (channel) {
               channel
                 .listen(".service.ticket.called", (e: any) => {
@@ -844,7 +850,12 @@ const Queues: React.FC = () => {
                   }
                 })
                 .listen(".service.stats.updated", (e: any) => {
-                  if (!cancelled && e.stats) setStats(e.stats);
+                  // Payload : { waiting_count }
+                  if (!cancelled && e?.waiting_count != null) {
+                    setStats((prev: any) =>
+                      prev ? { ...prev, waiting: Number(e.waiting_count) } : prev,
+                    );
+                  }
                 })
                 .listen(".user.en_route", (e: any) => {
                   if (!cancelled) {
@@ -861,7 +872,7 @@ const Queues: React.FC = () => {
                     );
                   }
                 })
-                .listen(".service.ticket.closed", (e: any) => {
+                .listen(".service.ticket.served", (e: any) => {
                   if (!cancelled) {
                     refreshQueueAndStats(false);
                     addActivity(
@@ -869,12 +880,6 @@ const Queues: React.FC = () => {
                       e?.ticket_number || "?",
                       "Servi / Clôturé",
                     );
-                  }
-                })
-                .listen(".service.ticket.recalled", (e: any) => {
-                  if (!cancelled) {
-                    refreshQueueAndStats(false);
-                    addActivity("recalled", e?.ticket_number || "?", "Rappelé");
                   }
                 })
                 .listen(".ServiceConfigUpdated", (e: any) => {
@@ -937,7 +942,8 @@ const Queues: React.FC = () => {
     return () => {
       cancelled = true;
       try {
-        if (channel && typeof channel.leave === "function") channel.leave();
+        // Les objets canal n'ont pas de méthode leave() : quitter via l'instance Echo
+        if (channel && echo) echo.leave(`service.${serviceId}`);
       } catch (error) {
         console.error("[Queues] Erreur nettoyage canal:", error);
       }

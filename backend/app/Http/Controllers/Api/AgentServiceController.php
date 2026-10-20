@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use App\Events\ServiceConfigUpdated;
 use App\Models\Service;
 
@@ -54,12 +55,18 @@ class AgentServiceController extends Controller
         }
         $service->save();
 
-        event(new ServiceConfigUpdated($service->id, [
-            'service_id' => $service->id,
-            'call_timeout_minutes' => $service->call_timeout_minutes,
-            'en_route_grace_minutes' => (int) $service->en_route_grace_minutes,
-            'max_call_attempts' => (int) $service->max_call_attempts,
-        ]));
+        // La configuration est déjà enregistrée : une panne du serveur WebSocket ne doit
+        // pas transformer la requête en erreur 500.
+        try {
+            event(new ServiceConfigUpdated($service->id, [
+                'service_id' => $service->id,
+                'call_timeout_minutes' => $service->call_timeout_minutes,
+                'en_route_grace_minutes' => (int) $service->en_route_grace_minutes,
+                'max_call_attempts' => (int) $service->max_call_attempts,
+            ]));
+        } catch (\Throwable $e) {
+            Log::warning('Broadcast ServiceConfigUpdated failed: '.$e->getMessage());
+        }
 
         return response()->json([
             'message'                => 'Paramètres du service mis à jour',

@@ -15,7 +15,11 @@ class AgentTicketActionController extends Controller
     {
         $this->authorize('actOn', $ticket);
 
-        $ticket = $svc->close($ticket);
+        try {
+            $ticket = $svc->close($ticket);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json(['ticket' => [
             'id' => $ticket->id,
@@ -27,7 +31,11 @@ class AgentTicketActionController extends Controller
     {
         $this->authorize('actOn', $ticket);
 
-        $ticket = $svc->cancel($ticket);
+        try {
+            $ticket = $svc->cancel($ticket);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json(['ticket' => [
             'id' => $ticket->id,
@@ -44,7 +52,11 @@ class AgentTicketActionController extends Controller
     {
         $this->authorize('actOn', $ticket);
 
-        $ticket       = $svc->markAbsent($ticket);
+        try {
+            $ticket = $svc->markAbsent($ticket);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
         $absenceLevel = (int) ($ticket->absent_level ?? 1);
         $maxAttempts  = (int) ($ticket->service?->max_call_attempts ?? 2);
         $recallPossible = $absenceLevel < $maxAttempts;
@@ -110,7 +122,7 @@ class AgentTicketActionController extends Controller
         $this->authorize('actOn', $ticket);
 
         $data = $request->validate([
-            'priority' => ['required','in:normal,high,vip'],
+            'priority' => ['required','in:normal,high,vip,urgence'],
         ]);
 
         $ticket = $svc->setPriority($ticket, $data['priority']);

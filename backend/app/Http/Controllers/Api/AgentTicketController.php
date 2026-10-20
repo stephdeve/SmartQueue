@@ -29,6 +29,9 @@ class AgentTicketController extends Controller
 
         if (!is_null($counterId)) {
             $counter = Counter::query()->findOrFail($counterId);
+            if ((int) $counter->establishment_id !== (int) $service->establishment_id) {
+                abort(422, 'Counter does not belong to this establishment');
+            }
             if ($counter->status !== 'open') {
                 abort(422, 'Counter is closed');
             }
@@ -50,7 +53,11 @@ class AgentTicketController extends Controller
     public function markAbsent(Ticket $ticket, TicketService $svc)
     {
         $this->authorize('actOn', $ticket);
-        $ticket = $svc->markAbsent($ticket);
+        try {
+            $ticket = $svc->markAbsent($ticket);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
         return response()->json(['ticket' => [
             'id' => $ticket->id,
             'status' => $ticket->status,
@@ -61,8 +68,18 @@ class AgentTicketController extends Controller
     public function recall(Request $request, Ticket $ticket, TicketService $svc)
     {
         $this->authorize('actOn', $ticket);
-        $counterId = $request->user()->counter?->id;
-        $ticket = $svc->recall($ticket, $counterId);
+
+        // Guichet actuellement tenu par l'agent (s'il en a ouvert un)
+        $counterId = Counter::query()
+            ->where('current_agent_id', $request->user()->id)
+            ->where('status', 'open')
+            ->value('id');
+
+        try {
+            $ticket = $svc->recall($ticket, $counterId);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
         return response()->json(['ticket' => [
             'id' => $ticket->id,
             'status' => $ticket->status,

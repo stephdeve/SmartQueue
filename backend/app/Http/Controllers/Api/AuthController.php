@@ -83,6 +83,11 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], Response::HTTP_UNAUTHORIZED);
         }
 
+        // Agent désactivé par son administrateur
+        if ($user->isInactive()) {
+            return response()->json(['message' => 'Compte désactivé. Contactez votre administrateur.'], Response::HTTP_FORBIDDEN);
+        }
+
         $token = $user->createToken('api')->plainTextToken;
 
         // Build user response
@@ -129,6 +134,49 @@ class AuthController extends Controller
     }
 
     /**
+     * Vérifie un ID token Google et retourne ses claims, ou une réponse d'erreur.
+     *
+     * L'audience (aud) DOIT correspondre à un client OAuth de l'application : sans
+     * ce contrôle, un ID token émis pour n'importe quelle autre application Google
+     * permettrait de se connecter au compte SmartQueue de cet email.
+     */
+    private function verifyGoogleIdToken(string $idToken): array|\Illuminate\Http\JsonResponse
+    {
+        $googleResponse = Http::timeout(10)->get('https://oauth2.googleapis.com/tokeninfo', [
+            'id_token' => $idToken,
+        ]);
+
+        if (!$googleResponse->ok()) {
+            return response()->json(['message' => 'Invalid Google token'], Response::HTTP_UNAUTHORIZED);
+        }
+
+        $googleUser = (array) $googleResponse->json();
+
+        $allowedAudiences = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) config('services.google.client_ids', ''))
+        )));
+        if (!empty($allowedAudiences)) {
+            if (!in_array($googleUser['aud'] ?? null, $allowedAudiences, true)) {
+                return response()->json(['message' => 'Invalid Google token audience'], Response::HTTP_UNAUTHORIZED);
+            }
+        } else {
+            \Log::warning('GOOGLE_CLIENT_IDS non configuré : audience des ID tokens Google non vérifiée');
+        }
+
+        if (!in_array($googleUser['iss'] ?? null, ['accounts.google.com', 'https://accounts.google.com'], true)) {
+            return response()->json(['message' => 'Invalid Google token issuer'], Response::HTTP_UNAUTHORIZED);
+        }
+
+        // Vérifier que l'email est vérifié par Google
+        if (empty($googleUser['email']) || !isset($googleUser['email_verified']) || !filter_var($googleUser['email_verified'], FILTER_VALIDATE_BOOLEAN)) {
+            return response()->json(['message' => 'Google email not verified'], Response::HTTP_UNAUTHORIZED);
+        }
+
+        return $googleUser;
+    }
+
+    /**
      * Connexion avec Google
      */
     public function googleLogin(Request $request)
@@ -137,24 +185,9 @@ class AuthController extends Controller
             'id_token' => 'required|string',
         ]);
 
-        // Vérifier le token Google
-        $googleResponse = Http::get('https://oauth2.googleapis.com/tokeninfo', [
-            'id_token' => $request->id_token,
-        ]);
-
-        if (!$googleResponse->ok()) {
-            return response()->json([
-                'message' => 'Invalid Google token',
-            ], Response::HTTP_UNAUTHORIZED);
-        }
-
-        $googleUser = $googleResponse->json();
-
-        // Vérifier que l'email est vérifié par Google
-        if (!isset($googleUser['email_verified']) || !filter_var($googleUser['email_verified'], FILTER_VALIDATE_BOOLEAN)) {
-            return response()->json([
-                'message' => 'Google email not verified',
-            ], Response::HTTP_UNAUTHORIZED);
+        $googleUser = $this->verifyGoogleIdToken((string) $request->id_token);
+        if ($googleUser instanceof \Illuminate\Http\JsonResponse) {
+            return $googleUser;
         }
 
         // Chercher ou créer l'utilisateur
@@ -172,6 +205,9 @@ class AuthController extends Controller
                 'avatar' => $googleUser['picture'] ?? null,
             ]);
         } else {
+            if ($user->isInactive()) {
+                return response()->json(['message' => 'Compte désactivé. Contactez votre administrateur.'], Response::HTTP_FORBIDDEN);
+            }
             // Mettre à jour les infos Google si nécessaire
             if (empty($user->google_id)) {
                 $user->update([
@@ -205,30 +241,18 @@ class AuthController extends Controller
             'phone' => 'nullable|string|max:20',
         ]);
 
-        // Vérifier le token Google
-        $googleResponse = Http::get('https://oauth2.googleapis.com/tokeninfo', [
-            'id_token' => $request->id_token,
-        ]);
-
-        if (!$googleResponse->ok()) {
-            return response()->json([
-                'message' => 'Invalid Google token',
-            ], Response::HTTP_UNAUTHORIZED);
-        }
-
-        $googleUser = $googleResponse->json();
-
-        // Vérifier que l'email est vérifié par Google
-        if (!isset($googleUser['email_verified']) || !filter_var($googleUser['email_verified'], FILTER_VALIDATE_BOOLEAN)) {
-            return response()->json([
-                'message' => 'Google email not verified',
-            ], Response::HTTP_UNAUTHORIZED);
+        $googleUser = $this->verifyGoogleIdToken((string) $request->id_token);
+        if ($googleUser instanceof \Illuminate\Http\JsonResponse) {
+            return $googleUser;
         }
 
         // Vérifier si l'utilisateur existe déjà
         $existingUser = User::where('email', $googleUser['email'])->first();
 
         if ($existingUser) {
+            if ($existingUser->isInactive()) {
+                return response()->json(['message' => 'Compte désactivé. Contactez votre administrateur.'], Response::HTTP_FORBIDDEN);
+            }
             // Mettre à jour le phone si fourni
             if ($request->phone && !$existingUser->phone) {
                 $existingUser->update(['phone' => $request->phone]);

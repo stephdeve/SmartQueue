@@ -31,8 +31,10 @@ class ServiceSoundController extends Controller
         'push_channel_id'          => 'smartqueue-calls',
     ];
 
-    public function show(Service $service): JsonResponse
+    public function show(Request $request, Service $service): JsonResponse
     {
+        $this->assertScoped($request, $service);
+
         return response()->json([
             'data' => $this->resolved($service),
         ]);
@@ -40,6 +42,8 @@ class ServiceSoundController extends Controller
 
     public function update(Request $request, Service $service): JsonResponse
     {
+        $this->assertScoped($request, $service);
+
         $validated = $request->validate([
             'enabled'                 => 'sometimes|boolean',
             'sound_uri'               => 'sometimes|nullable|string|max:512',
@@ -62,6 +66,8 @@ class ServiceSoundController extends Controller
      */
     public function uploadSound(Request $request, Service $service): JsonResponse
     {
+        $this->assertScoped($request, $service);
+
         $request->validate([
             'sound' => 'required|file|mimes:mp3,wav,ogg|max:2048',
         ]);
@@ -69,7 +75,8 @@ class ServiceSoundController extends Controller
         $file = $request->file('sound');
         $path = $file->storeAs(
             'services/sounds',
-            'service_' . $service->id . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension(),
+            // Extension déduite du contenu (mimes validé) plutôt que du nom fourni par le client
+            'service_' . $service->id . '_' . Str::random(8) . '.' . ($file->extension() ?: 'mp3'),
             'public'
         );
 
@@ -88,8 +95,10 @@ class ServiceSoundController extends Controller
     /**
      * Remove the custom sound and revert to the bundled default.
      */
-    public function deleteSound(Service $service): JsonResponse
+    public function deleteSound(Request $request, Service $service): JsonResponse
     {
+        $this->assertScoped($request, $service);
+
         $current = $service->sound_settings ?? [];
         $service->update([
             'sound_settings' => array_merge(self::DEFAULTS, $current, ['sound_uri' => null]),
@@ -98,6 +107,15 @@ class ServiceSoundController extends Controller
         return response()->json([
             'data' => $this->resolved($service->fresh()),
         ]);
+    }
+
+    /** Les routes {service} ne passent pas par le scope établissement du middleware. */
+    private function assertScoped(Request $request, Service $service): void
+    {
+        $scopedId = $request->attributes->get('scoped_establishment_id');
+        if ($scopedId && (int) $service->establishment_id !== (int) $scopedId) {
+            abort(403, 'Forbidden establishment scope');
+        }
     }
 
     private function resolved(Service $service): array

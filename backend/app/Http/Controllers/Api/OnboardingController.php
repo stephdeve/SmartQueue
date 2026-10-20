@@ -86,6 +86,25 @@ class OnboardingController extends Controller
             ])->save();
         }
 
+        // Admin déjà rattaché à un établissement (inscription avec établissement) :
+        // l'abonnement est matérialisé immédiatement, sinon il ne l'était jamais
+        // (seule la création d'établissement le faisait).
+        if ($user->role === 'admin' && !empty($user->establishment_id)) {
+            $sub = \App\Models\Subscription::query()->firstOrNew([
+                'establishment_id' => (int) $user->establishment_id,
+            ]);
+            $sub->fill([
+                'plan' => $data['plan'],
+                'status' => 'active',
+                'current_period_start' => now(),
+                'current_period_end' => now()->addMonth(),
+                'canceled_at' => null,
+                'meta' => $user->pending_subscription,
+            ])->save();
+
+            $user->forceFill(['pending_subscription' => null])->save();
+        }
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -97,7 +116,7 @@ class OnboardingController extends Controller
                 'pending_subscription' => $user->pending_subscription,
             ],
             'pending_subscription' => $user->pending_subscription,
-            'next_step' => 'create_establishment',
+            'next_step' => empty($user->establishment_id) ? 'create_establishment' : 'dashboard',
         ]);
     }
 
