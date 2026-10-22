@@ -269,7 +269,7 @@ export default function HeaderNew({ onMenuToggle }: HeaderProps) {
                 id: id || `ticket-${Math.random()}`,
                 label,
                 description,
-                to: id ? `/dashboard/tickets/${id}` : '/dashboard/tickets',
+                to: id ? `/dashboard/tickets?ticket=${id}` : '/dashboard/tickets',
                 scope: 'tickets' as SearchScope,
               }
             })

@@ -8,7 +8,7 @@ export default function PushBroadcast() {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<{ users_targeted?: number } | null>(null)
+  const [result, setResult] = useState<{ establishment_users_notified?: number; push_users_targeted?: number } | null>(null)
   const [error, setError] = useState('')
 
   const submit = async () => {
@@ -39,9 +39,10 @@ export default function PushBroadcast() {
       <div className="bg-card rounded-xl shadow-lg border max-w-6xl mx-auto border-border p-6">
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-foreground mb-1">Push notifications (Firebase)</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-1">Notification aux usagers</h1>
             <p className="text-muted-foreground">
-              Publie une annonce push à tous les utilisateurs mobiles ayant activé les notifications.
+              Annonce envoyée aux usagers de votre établissement (favoris et tickets des 30 derniers jours) et à votre
+              personnel : notification dans l'application, et push sur les téléphones où elles sont activées.
             </p>
           </div>
           <Button variant="outline" onClick={() => history.back()}>
@@ -63,7 +64,8 @@ export default function PushBroadcast() {
           {error ? <div className="text-sm text-destructive">{error}</div> : null}
           {result ? (
             <div className="text-sm text-emerald-600">
-              Notification mise en file d'attente. Utilisateurs ciblés: {result.users_targeted ?? 0}
+              Notification envoyée à {result.establishment_users_notified ?? 0} compte(s), dont{' '}
+              {result.push_users_targeted ?? 0} avec les notifications push activées.
             </div>
           ) : null}
 

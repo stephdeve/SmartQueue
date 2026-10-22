@@ -3,13 +3,16 @@ import { api } from '@/api/axios'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { AnalyticsCard } from '@/components/ui/analytics-card'
-import { cn } from '@/lib/utils'
+import { cn, localDateString } from '@/lib/utils'
 import {
   Ticket, CheckCircle, UserX, TrendingUp, TrendingDown,
   Lightbulb, AlertTriangle, Timer,
   ArrowUpRight, ArrowDownRight, Minus,
   Activity, CalendarDays,
 } from 'lucide-react'
+
+// Même période pour les cartes et la courbe (sinon 7 jours d'un côté, 14 de l'autre)
+const PERIOD_DAYS = 30
 
 export default function Analytics() {
   const [bucket, setBucket] = useState<'day' | 'hour' | 'week'>('day')
@@ -20,30 +23,29 @@ export default function Analytics() {
   const [err, setErr] = useState('')
   const [services, setServices] = useState<Array<{ id: number; name: string }>>([])
 
+  const range = useMemo(() => ({
+    from: localDateString(new Date(Date.now() - (PERIOD_DAYS - 1) * 86400000)),
+    to: localDateString(),
+  }), [])
+
   const params = useMemo(() => {
-    const p: any = { bucket }
+    const p: any = { bucket, ...range }
     if (serviceId) p.service_id = serviceId
     return p
-  }, [bucket, serviceId])
+  }, [bucket, serviceId, range])
 
   useEffect(() => {
-    api.get('/api/admin/stats/overview')
+    api.get('/api/admin/stats/overview', { params: range })
       .then((r) => setOverview(r.data))
       .catch(() => setOverview(null))
-  }, [])
+  }, [range])
 
   useEffect(() => {
     api.get('/api/admin/services')
       .then((r) => {
-        const data = r.data
-        if (Array.isArray(data)) {
-          setServices(data.map((s: any) => ({
-            id: s.id ?? s.service_id,
-            name: s.name ?? s.service_name ?? `Service #${s.id ?? s.service_id}`
-          })))
-        } else {
-          setServices([])
-        }
+        // Ressource paginée : { data: [...], links, meta }
+        const list = Array.isArray(r.data) ? r.data : Array.isArray(r.data?.data) ? r.data.data : []
+        setServices(list.map((s: any) => ({ id: s.id, name: s.name ?? `Service #${s.id}` })))
       })
       .catch(() => setServices([]))
   }, [])
@@ -80,7 +82,7 @@ export default function Analytics() {
         icon: diff > 0 ? TrendingUp : TrendingDown,
         color: diff > 0 ? 'text-green-600' : 'text-red-600',
         bg: diff > 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800',
-        text: `Créations ${diff > 0 ? 'en hausse' : 'en baisse'} de ${Math.abs(Math.round(diff))}% vs période précédente`,
+        text: `Créations ${diff > 0 ? 'en hausse' : 'en baisse'} de ${Math.abs(Math.round(diff))}% sur la 2e moitié de la période`,
       })
     }
 
@@ -176,7 +178,7 @@ export default function Analytics() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-1">Analytics</h1>
-          <p className="text-muted-foreground">Vue complète des indicateurs sur la période.</p>
+          <p className="text-muted-foreground">Indicateurs des {PERIOD_DAYS} derniers jours.</p>
         </div>
         <Button variant="outline" onClick={() => history.back()}>Retour</Button>
       </div>
@@ -261,7 +263,7 @@ export default function Analytics() {
                 </button>
               ))}
             </div>
-            {services.length > 0 ? (
+            {services.length > 0 && (
               <select
                 className="w-44 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
                 value={serviceId === '' ? '' : String(serviceId)}
@@ -272,13 +274,6 @@ export default function Analytics() {
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-            ) : (
-              <input
-                className="w-40 rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground"
-                value={serviceId as any}
-                onChange={e => setServiceId(Number(e.target.value) || '' as any)}
-                placeholder="Service ID (optionnel)"
-              />
             )}
           </div>
         </div>

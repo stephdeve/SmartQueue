@@ -58,23 +58,6 @@ export const usersApi = {
     return response.data.user ?? response.data;
   },
 
-  // Mettre à jour l'avatar
-  updateAvatar: async (avatarData: AvatarData): Promise<{ avatar_url: string }> => {
-    const formData = new FormData();
-    formData.append('avatar', {
-      uri: avatarData.avatar,
-      type: 'image/jpeg',
-      name: 'avatar.jpg',
-    } as any);
-
-    const response = await axiosClient.post('/me/avatar', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  },
-
   // Préférences utilisateur : seuls push/SMS sont stockés côté serveur
   // (/notification-preferences, utilisé pour les alertes « votre tour approche »).
   // Les autres (thème, langue, son…) restent locales (store persisté).
@@ -127,85 +110,6 @@ export const usersApi = {
     await axiosClient.delete('/me', { data: { password } });
   },
 
-  // Obtenir les statistiques de l'utilisateur
-  getUserStats: async (): Promise<{
-    total_tickets: number;
-    avg_wait_time: number;
-    favorite_establishments: number;
-    member_since: string;
-    last_visit: string;
-  }> => {
-    const response = await axiosClient.get('/me/stats');
-    return response.data;
-  },
-
-  // Obtenir les établissements favoris
-  getFavoriteEstablishments: async (): Promise<number[]> => {
-    const response = await axiosClient.get('/me/favorites');
-    return response.data;
-  },
-
-  // Ajouter un établissement aux favoris
-  addFavoriteEstablishment: async (establishmentId: number): Promise<void> => {
-    await axiosClient.post('/me/favorites', { establishment_id: establishmentId });
-  },
-
-  // Retirer un établissement des favoris
-  removeFavoriteEstablishment: async (establishmentId: number): Promise<void> => {
-    await axiosClient.delete(`/me/favorites/${establishmentId}`);
-  },
-
-  // Obtenir l'historique des visites
-  getVisitHistory: async (limit: number = 10): Promise<{
-    establishment_id: number;
-    establishment_name: string;
-    visited_at: string;
-    ticket_count: number;
-  }[]> => {
-    const response = await axiosClient.get('/me/visits', { params: { limit } });
-    return response.data;
-  },
-
-  // Exporter les données utilisateur (GDPR)
-  exportUserData: async (): Promise<{
-    user: User;
-    tickets: any[];
-    preferences: UserPreferences;
-    export_date: string;
-  }> => {
-    const response = await axiosClient.get('/me/export');
-    return response.data;
-  },
-
-  // Désactiver temporairement le compte
-  deactivateAccount: async (reason?: string): Promise<void> => {
-    await axiosClient.post('/me/deactivate', { reason });
-  },
-
-  // Réactiver le compte
-  reactivateAccount: async (): Promise<void> => {
-    await axiosClient.post('/me/reactivate');
-  },
-
-  // Signaler un problème
-  reportIssue: async (data: {
-    type: string;
-    description: string;
-    ticket_id?: number;
-    establishment_id?: number;
-  }): Promise<void> => {
-    await axiosClient.post('/me/report', data);
-  },
-
-  // Donner un feedback
-  submitFeedback: async (data: {
-    rating: number;
-    comment?: string;
-    ticket_id?: number;
-    establishment_id?: number;
-  }): Promise<void> => {
-    await axiosClient.post('/me/feedback', data);
-  },
 };
 
 export default usersApi;

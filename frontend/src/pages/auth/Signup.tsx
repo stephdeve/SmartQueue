@@ -169,7 +169,7 @@ export default function Signup() {
                         {...register("phone")}
                         type="tel"
                         className="focus:ring-primary focus:border-primary block w-full pl-10 pr-3 py-2.5 sm:text-sm border-border bg-background rounded-md placeholder:text-muted-foreground"
-                        placeholder="+33 6 12 34 56 78"
+                        placeholder="+229 01 00 00 00 00"
                       />
                     </div>
                     {errors.phone && (

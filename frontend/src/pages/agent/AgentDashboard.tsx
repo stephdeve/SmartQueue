@@ -112,7 +112,10 @@ type Stats = {
 };
 
 type Performance = {
+  days: number;
   daily: DailyStat[];
+  total: number;
+  total_called: number;
   total_closed: number;
   total_absent: number;
   avg_service_time: number | null;
@@ -157,12 +160,28 @@ const STATUS_CONFIG: Record<
     color: "text-orange-700",
     bgColor: "bg-orange-100 dark:bg-orange-900/30",
   },
+  expired: {
+    label: "Expiré",
+    color: "text-red-700",
+    bgColor: "bg-red-100 dark:bg-red-900/30",
+  },
+  canceled: {
+    label: "Annulé",
+    color: "text-gray-700",
+    bgColor: "bg-gray-100 dark:bg-gray-800",
+  },
+  cancelled: {
+    label: "Annulé",
+    color: "text-gray-700",
+    bgColor: "bg-gray-100 dark:bg-gray-800",
+  },
 };
 
 const PRIORITY_CONFIG: Record<string, { label: string; icon: any }> = {
   normal: { label: "Normal", icon: ListOrdered },
   high: { label: "Haute", icon: Flame },
   vip: { label: "VIP", icon: Star },
+  urgence: { label: "Urgence", icon: AlertTriangle },
 };
 
 const PRIORITY_COLORS: Record<
@@ -184,7 +203,15 @@ const PRIORITY_COLORS: Record<
     text: "text-purple-700",
     bg: "bg-purple-100 dark:bg-purple-900/30",
   },
+  urgence: {
+    bar: "bg-red-500",
+    text: "text-red-700",
+    bg: "bg-red-100 dark:bg-red-900/30",
+  },
 };
+
+/** Jours couverts par la courbe de performance selon la période choisie. */
+const PERIOD_DAYS = { today: 7, "7days": 7, "30days": 30 } as const;
 
 export default function AgentDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -230,7 +257,9 @@ export default function AgentDashboard() {
         api.get("/api/agent/dashboard/stats"),
         api.get("/api/agent/dashboard/today-tickets"),
         api.get("/api/agent/dashboard/current-queue"),
-        api.get("/api/agent/dashboard/performance"),
+        api.get("/api/agent/dashboard/performance", {
+          params: { days: PERIOD_DAYS[agentPeriod] },
+        }),
       ]);
 
       setStats(statsRes.data);
@@ -255,7 +284,9 @@ export default function AgentDashboard() {
         const configPromises = queueRes.data.services.map(
           async (svc: ServiceInfo) => {
             try {
-              const { data } = await api.get(`/api/services/${svc.id}`);
+              const res = await api.get(`/api/services/${svc.id}`);
+              // ServiceResource : la réponse est enveloppée dans { data: {...} }
+              const data = res.data?.data ?? res.data;
               return {
                 id: svc.id,
                 config: {
@@ -299,7 +330,20 @@ export default function AgentDashboard() {
 
   useEffect(() => {
     loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Période 7/30 jours : seule la performance dépend de la période
+  useEffect(() => {
+    let alive = true;
+    api
+      .get("/api/agent/dashboard/performance", { params: { days: PERIOD_DAYS[agentPeriod] } })
+      .then((res) => alive && setPerformance(res.data))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [agentPeriod]);
 
   const performanceChartData = useMemo(() => {
     if (!performance?.daily) return [];
@@ -347,7 +391,7 @@ export default function AgentDashboard() {
   const highPriorityCount = useMemo(() => {
     if (!currentQueue?.tickets) return 0;
     return currentQueue.tickets.filter(
-      (t) => t.priority === "high" || t.priority === "vip",
+      (t) => t.priority === "high" || t.priority === "vip" || t.priority === "urgence",
     ).length;
   }, [currentQueue]);
 
@@ -360,26 +404,13 @@ export default function AgentDashboard() {
       total: stats?.today_total ?? 0,
     };
     if (agentPeriod === "today") return todayKpis;
-    const weeklyTotal =
-      performance?.daily?.reduce((s, d) => s + d.total, 0) ?? 0;
-    const weeklyClosed = performance?.total_closed ?? 0;
-    const weeklyAbsent = performance?.total_absent ?? 0;
-    if (agentPeriod === "7days") {
-      return {
-        waiting: currentQueue?.total_waiting ?? 0,
-        called: weeklyTotal,
-        closed: weeklyClosed,
-        absent: weeklyAbsent,
-        total: weeklyClosed + weeklyAbsent,
-      };
-    }
-    const factor = 4;
+    // Totaux réels de la période (7 ou 30 jours), calculés par l'API
     return {
       waiting: currentQueue?.total_waiting ?? 0,
-      called: weeklyTotal * factor,
-      closed: weeklyClosed * factor,
-      absent: weeklyAbsent * factor,
-      total: (weeklyClosed + weeklyAbsent) * factor,
+      called: performance?.total_called ?? 0,
+      closed: performance?.total_closed ?? 0,
+      absent: performance?.total_absent ?? 0,
+      total: performance?.total ?? 0,
     };
   }, [agentPeriod, stats, performance, currentQueue]);
 
@@ -394,8 +425,8 @@ export default function AgentDashboard() {
 
   const dailyAverage = useMemo(() => {
     if (agentPeriod === "today") return stats?.tickets_per_day;
-    const days = performance?.daily?.length || 7;
-    return Math.round((performance?.total_closed ?? 0) / days);
+    const days = performance?.days || PERIOD_DAYS[agentPeriod];
+    return Math.round(((performance?.total_closed ?? 0) / days) * 10) / 10;
   }, [agentPeriod, stats, performance]);
 
   const priorityDistribution = useMemo(() => {
@@ -406,7 +437,7 @@ export default function AgentDashboard() {
       counts[key] = (counts[key] || 0) + 1;
     });
     const total = currentQueue.tickets.length;
-    const order = ["normal", "high", "vip"];
+    const order = ["urgence", "vip", "high", "normal"];
     return order
       .map((key) => {
         const config = PRIORITY_CONFIG[key];
@@ -425,7 +456,11 @@ export default function AgentDashboard() {
   }, [currentQueue]);
 
   const getStatusBadge = (status: string) => {
-    const config = STATUS_CONFIG[status] || STATUS_CONFIG.waiting;
+    const config = STATUS_CONFIG[status] || {
+      label: status,
+      color: "text-gray-700",
+      bgColor: "bg-gray-100 dark:bg-gray-800",
+    };
     return (
       <Badge
         className={cn(config.bgColor, config.color, "font-medium text-xs")}
@@ -705,7 +740,7 @@ export default function AgentDashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-muted-foreground">
-                        SLA Performance
+                        File actuelle
                       </p>
                       <p
                         className={cn(
@@ -717,7 +752,7 @@ export default function AgentDashboard() {
                               : "text-red-600",
                         )}
                       >
-                        {slaPercent}% servis sous 15 min
+                        {slaPercent}% attendent depuis moins de 15 min
                       </p>
                     </div>
                   </div>
@@ -810,7 +845,7 @@ export default function AgentDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">
-                    Moyenne journalière
+                    {agentPeriod === "today" ? "Tickets / jour (7 j)" : "Clôturés / jour"}
                   </p>
                   <p className="text-2xl font-bold">
                     {dailyAverage ? `${dailyAverage}` : "—"}
@@ -1233,7 +1268,9 @@ export default function AgentDashboard() {
                           title="Délai de priorité"
                         >
                           <Timer className="h-3.5 w-3.5 inline mr-1" />
-                          {config.call_timeout_minutes ?? "10"} min
+                          {config.call_timeout_minutes != null
+                            ? `${config.call_timeout_minutes} min`
+                            : "par défaut"}
                         </span>
                         <span
                           className="text-muted-foreground"

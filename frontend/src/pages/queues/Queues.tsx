@@ -384,7 +384,9 @@ const Queues: React.FC = () => {
     if (!Number.isFinite(numericId) || numericId <= 0) {
       throw new Error("Identifiant de service invalide");
     }
-    const { data } = await api.get(`/api/services/${numericId}`);
+    const res = await api.get(`/api/services/${numericId}`);
+    // ServiceResource : la réponse est enveloppée dans { data: {...} }
+    const data = res.data?.data ?? res.data;
     if (data?.call_timeout_minutes !== undefined) {
       setCallTimeoutMinutes(data.call_timeout_minutes ?? null);
     }

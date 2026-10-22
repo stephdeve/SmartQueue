@@ -19,3 +19,9 @@ Schedule::command('tickets:expire-stale')->everyFiveMinutes()->withoutOverlappin
 Schedule::command('queue:activate-deferred')->everyMinute()->withoutOverlapping();
 Schedule::command('queue:check-overload')->everyMinute()->withoutOverlapping();
 Schedule::command('queue:close-day')->everyMinute()->withoutOverlapping();
+
+// Signaux de vie pour le diagnostic de production (super admin → Paramètres)
+Schedule::call(fn () => \Illuminate\Support\Facades\Cache::forever('heartbeat:scheduler', now()->toIso8601String()))
+    ->everyMinute()
+    ->name('heartbeat:scheduler');
+Schedule::job(new \App\Jobs\QueueHeartbeat())->everyFiveMinutes();

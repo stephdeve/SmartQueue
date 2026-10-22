@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { appInfo } from '../../config/appInfo';
 
 interface FAQItem {
   question: string;
@@ -23,7 +24,7 @@ interface FAQItem {
 const faqData: FAQItem[] = [
   {
     question: 'Comment rejoindre une file d\'attente ?',
-    answer: 'Pour rejoindre une file, scannez le QR code affiché à l\'entrée de l\'établissement avec l\'appareil photo de l\'application, ou entrez manuellement le code à 6 chiffres.'
+    answer: 'Scannez le QR code affiché dans l\'établissement depuis l\'onglet Scanner, ou choisissez l\'établissement et le service dans l\'onglet Explorer puis prenez un ticket.'
   },
   {
     question: 'Puis-je annuler mon ticket ?',
@@ -35,7 +36,7 @@ const faqData: FAQItem[] = [
   },
   {
     question: 'Que se passe-t-il si je manque mon tour ?',
-    answer: 'Si vous n\'êtes pas présent lorsque votre numéro est appelé, votre ticket sera marqué comme "absent" après un délai de grâce.'
+    answer: 'Si vous ne vous présentez pas après l\'appel, votre ticket est marqué « absent ». L\'agent peut vous rappeler un nombre limité de fois, fixé par le service ; au-delà, le ticket expire et il faut en reprendre un.'
   },
   {
     question: 'Comment fonctionne le calcul du temps d\'attente ?',
@@ -132,10 +133,16 @@ export const HelpSupportScreen: React.FC = () => {
         {/* Contact Section compact */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>Contact</Text>
+          {!appInfo.supportEmail && !appInfo.supportPhone ? (
+            <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>
+              Pour une question sur votre ticket, adressez-vous à l’accueil de l’établissement.
+            </Text>
+          ) : (
           <View style={styles.contactRow}>
+            {!!appInfo.supportEmail && (
             <TouchableOpacity 
               style={[styles.contactItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => Linking.openURL('mailto:support@smartqueue.com')}
+              onPress={() => Linking.openURL(`mailto:${appInfo.supportEmail}`)}
               activeOpacity={0.7}
             >
               <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
@@ -143,13 +150,15 @@ export const HelpSupportScreen: React.FC = () => {
               </View>
               <View style={styles.contactInfo}>
                 <Text style={[styles.contactLabel, { color: colors.textTertiary }]}>Email</Text>
-                <Text style={[styles.contactValue, { color: colors.textPrimary }]}>support@smartqueue.com</Text>
+                <Text style={[styles.contactValue, { color: colors.textPrimary }]}>{appInfo.supportEmail}</Text>
               </View>
             </TouchableOpacity>
+            )}
 
+            {!!appInfo.supportPhone && (
             <TouchableOpacity 
               style={[styles.contactItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => Linking.openURL('tel:+33123456789')}
+              onPress={() => Linking.openURL(`tel:${appInfo.supportPhone.replace(/\s/g, '')}`)}
               activeOpacity={0.7}
             >
               <View style={[styles.contactIcon, { backgroundColor: colors.success + "15" }]}>
@@ -157,10 +166,12 @@ export const HelpSupportScreen: React.FC = () => {
               </View>
               <View style={styles.contactInfo}>
                 <Text style={[styles.contactLabel, { color: colors.textTertiary }]}>Téléphone</Text>
-                <Text style={[styles.contactValue, { color: colors.textPrimary }]}>+33 1 23 45 67 89</Text>
+                <Text style={[styles.contactValue, { color: colors.textPrimary }]}>{appInfo.supportPhone}</Text>
               </View>
             </TouchableOpacity>
+            )}
           </View>
+          )}
         </View>
 
         {/* FAQ Section compact */}

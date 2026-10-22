@@ -3,6 +3,7 @@ import { motion, useInView } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTheme } from "@/components/theme-provider";
+import { annualPrice, formatFcfa, usePlans } from "@/lib/plans";
 
 // ─── DESIGN SYSTEM ──────────────────────────────────────────────────────────
 const T = {
@@ -162,8 +163,8 @@ const Features = ({ t }: { t: any }) => {
     },
     { 
       icon: Icons.BarChart, 
-      title: "Analytics Prédictifs", 
-      desc: "Identifiez vos heures de pointe et optimisez l'affectation de vos agents grâce à nos tableaux de bord statistiques détaillés.",
+      title: "Statistiques détaillées", 
+      desc: "Identifiez vos heures de pointe, suivez l'attente, les absences et la satisfaction, et ajustez l'affectation de vos agents.",
       accent: t.accent 
     },
     { 
@@ -180,8 +181,8 @@ const Features = ({ t }: { t: any }) => {
     },
     { 
       icon: Icons.Shield, 
-      title: "Sécurité & RGPD", 
-      desc: "Anonymisation des données usagers et hébergement sécurisé. Une conformité totale pour les administrations et banques.",
+      title: "Accès cloisonnés", 
+      desc: "Chaque établissement ne voit que ses services, agents et tickets ; les agents n'agissent que sur les files qui leur sont confiées.",
       accent: t.textMid 
     }
   ];
@@ -199,16 +200,6 @@ const Features = ({ t }: { t: any }) => {
             <p className="text-sm md:text-base leading-relaxed max-w-lg" style={{ color: t.textMid }}>
               SmartQueue transforme l'attente en une expérience positive et productive, tout en optimisant vos ressources internes.
             </p>
-            <div className="pt-4 grid grid-cols-2 gap-6">
-              <div>
-                <p className="text-2xl font-black text-blue-500">-40%</p>
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Temps d'attente</p>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-green-500">+92%</p>
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Satisfaction Client</p>
-              </div>
-            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {items.map((f, i) => (
@@ -244,7 +235,7 @@ const Hero = ({ t }: { t: any }) => (
       <div className="text-left space-y-6">
         <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-surface/30 backdrop-blur-sm" style={{ borderColor: t.border, background: t.surface + '80' }}>
           <span className="flex h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-          <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: t.textMid }}>Version 2.0 disponible</span>
+          <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: t.textMid }}>Files d'attente virtuelles</span>
         </motion.div>
         <motion.h1 initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-[clamp(32px,6vw,64px)] font-black leading-[1.05] tracking-tight" style={{ color: t.text }}>
           La file d'attente,<br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-blue-300">enfin réinventée.</span>
@@ -253,12 +244,16 @@ const Hero = ({ t }: { t: any }) => (
           Finissez-en avec l'attente debout. Offrez à vos usagers la liberté de prendre un ticket depuis n'importe où.
         </motion.p>
         <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="flex flex-wrap gap-3 pt-2">
-          <Link to="/signup" className="px-6 py-3.5 text-white rounded-xl font-bold text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-blue-600/10" style={{ background: t.accent }}>Démarrer gratuitement</Link>
+          <Link to="/signup" className="px-6 py-3.5 text-white rounded-xl font-bold text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-blue-600/10" style={{ background: t.accent }}>Démarrer l'essai gratuit</Link>
           <a href="#ecosystem" className="px-6 py-3.5 border border-border rounded-xl font-bold text-sm hover:bg-surface transition-all" style={{ color: t.text}}>Découvrir l'écosystème</a>
         </motion.div>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="flex gap-10 pt-8 border-t border-border" style={{ borderColor: t.border }}>
-          <div><p className="text-2xl font-black" style={{ color: t.text }}>-65%</p><p className="text-[9px] uppercase font-bold tracking-widest" style={{ color: t.textSub }}>Stress perçu</p></div>
-          <div><p className="text-2xl font-black" style={{ color: t.text }}>15m</p><p className="text-[9px] uppercase font-bold tracking-widest" style={{ color: t.textSub }}>Temps gagné / usager</p></div>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="flex flex-wrap gap-x-8 gap-y-3 pt-8 border-t border-border" style={{ borderColor: t.border }}>
+          {["Ticket par QR code", "Alertes push et SMS", "Position en temps réel"].map((label) => (
+            <div key={label} className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest" style={{ color: t.textMid }}>
+              <span className="w-4 h-4 rounded-full flex items-center justify-center bg-blue-500/10 text-blue-500"><Icons.Check /></span>
+              {label}
+            </div>
+          ))}
         </motion.div>
       </div>
       <div className="flex justify-center"><QueueVisual t={t} /></div>
@@ -285,7 +280,7 @@ const HowItWorks = ({ t }: { t: any }) => {
     {
       step: "03",
       title: "Gestion par l'agent",
-      desc: "L'agent appelle le prochain ticket depuis son interface web, avec transfert et statistiques en direct.",
+      desc: "L'agent appelle le prochain ticket depuis son interface web ou mobile, gère les absences et les rappels, avec des statistiques en direct.",
       icon: Icons.Terminal,
       color: t.green
     },
@@ -369,7 +364,7 @@ const HowItWorks = ({ t }: { t: any }) => {
               className="px-8 py-4 text-white rounded-xl font-bold hover:scale-[1.02] transition-all shadow-lg"
               style={{ background: t.accent }}
             >
-              Essayer gratuitement
+              Démarrer l'essai gratuit
             </Link>
             <a 
               href="#features" 
@@ -388,7 +383,7 @@ const HowItWorks = ({ t }: { t: any }) => {
 const Ecosystem = ({ t }: { t: any }) => {
   const roles = [
     { icon: Icons.Layout, title: "Admins", role: "Créateurs", desc: "Configurez vos établissements, services et guichets en quelques clics. Gérez vos abonnements et accédez aux analytics globaux.", color: t.purple },
-    { icon: Icons.Terminal, title: "Agents", role: "Opérateurs", desc: "Interface web ultra-rapide pour appeler les tickets, transférer les dossiers et voir l'état de la salle en temps réel.", color: t.accent },
+    { icon: Icons.Terminal, title: "Agents", role: "Opérateurs", desc: "Interface web et mobile pour appeler les tickets, gérer les absences et les priorités, et suivre la file en temps réel.", color: t.accent },
     { icon: Icons.Smartphone, title: "Usagers", role: "Clients", desc: "Application mobile intuitive pour prendre un ticket, suivre sa position et recevoir des alertes de proximité.", color: t.green },
   ];
   return (
@@ -422,63 +417,31 @@ const Ecosystem = ({ t }: { t: any }) => {
   );
 };
 
-const Testimonials = ({ t }: { t: any }) => {
-  const reviews = [
-    { name: "Marc Lefebvre", role: "Directeur Clinique", content: "SmartQueue a réduit la tension dans notre salle d'attente de 80%. Les patients arrivent beaucoup plus sereins.", img: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop", bg: "bg-blue-50 dark:bg-blue-900/40" },
-    { name: "Sophie Durant", role: "Mairie de Lyon", content: "L'interface agent est si simple qu'aucune formation n'a été nécessaire. Le déploiement a été un succès immédiat.", img: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop", bg: "bg-purple-50 dark:bg-purple-900/40" },
-    { name: "Thomas Wagner", role: "Responsable Retail", content: "Nos clients adorent pouvoir faire leurs courses en attendant leur tour. Une vraie révolution pour le commerce.", img: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop", bg: "bg-green-50 dark:bg-green-900/40" },
-    { name: "Elena Rossi", role: "DSI Banque", content: "La sécurité des données et la conformité RGPD étaient nos priorités. SmartQueue coche toutes les cases.", img: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop", bg: "bg-orange-50 dark:bg-orange-900/40" },
-  ];
-  return (
-    <section id="testimonials" className="py-24 px-6" style={{ background: t.surface }}>
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16 space-y-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500">Témoignages</p>
-          <h2 className="text-[clamp(24px,4vw,42px)] font-black tracking-tight" style={{ color: t.text }}>Ils nous font confiance.</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {reviews.map((r, i) => (
-            <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}
-              className={`p-6 rounded-3xl border flex flex-col justify-between ${r.bg}`}
-            >
-              <p className="text-xs leading-relaxed mb-6 italic" style={{ color: t.textMid }}>"{r.content}"</p>
-              <div className="flex items-center gap-3">
-                <img src={r.img} alt={r.name} className="w-8 h-8 rounded-full bg-gray-200" />
-                <div><p className="text-[11px] font-bold" style={{ color: t.text }}>{r.name}</p><p className="text-[9px] text-black/50 dark:text-white" >{r.role}</p></div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-};
-
 const FAQ = ({ t }: { t: any }) => {
   const faqs = [
     {
       q: "Comment fonctionne SmartQueue ?",
-      a: "SmartQueue est un système de gestion de files d'attente intelligent. Les clients prennent un ticket via une interface web ou mobile, reçoivent des notifications en temps réel, et les agents gèrent l'appel depuis un tableau de bord simple."
+      a: "Les usagers prennent un ticket depuis l'application mobile ou en scannant le QR code du service, suivent leur position en temps réel et sont prévenus quand leur tour approche. Les agents appellent les tickets depuis leur tableau de bord web ou mobile."
     },
     {
-      q: "Est-ce compatible avec mon système actuel ?",
-      a: "SmartQueue s'intègre facilement avec vos systèmes existants via notre API REST. Nous proposons également des connecteurs pour les principaux logiciels de gestion et CRM."
+      q: "Comment les usagers sont-ils notifiés ?",
+      a: "Par notification push dans l'application mobile, et par SMS lorsque l'envoi de SMS est activé pour la plateforme. L'usager confirme qu'il est en route ou déjà sur place depuis l'application."
     },
     {
-      q: "Quelles sont les données collectées ?",
-      a: "Nous collectons uniquement les données nécessaires au fonctionnement du service : temps d'attente, nombre de clients, et statistiques d'utilisation. Toutes les données sont sécurisées et conformes au RGPD."
+      q: "Que se passe-t-il si un usager ne se présente pas ?",
+      a: "L'agent le marque absent : il peut être rappelé jusqu'au nombre de tentatives défini pour le service, puis son ticket expire. Le délai de présentation est réglable par service."
     },
     {
-      q: "Comment les clients sont-ils notifiés ?",
-      a: "Les clients peuvent recevoir des notifications par SMS, email, ou via notre application mobile. Ils peuvent également consulter l'affichage en temps réel sur écran dans votre établissement."
+      q: "Puis-je configurer mes horaires ?",
+      a: "Oui : horaires par jour de la semaine, jours fériés et fermetures exceptionnelles. Un ticket pris hors horaires est automatiquement reporté au prochain jour d'ouverture."
     },
     {
-      q: "Quel est le temps de mise en place ?",
-      a: "La mise en place est généralement effectuée en moins de 48h. Nos équipes vous accompagnent pour l'installation, la configuration et la formation de vos agents."
+      q: "Quelles données sont collectées ?",
+      a: "Le nom, l'e-mail et le téléphone de l'usager, l'historique de ses tickets et, s'il l'autorise, sa position pour estimer son temps de trajet. L'usager peut supprimer son compte depuis l'application."
     },
     {
-      q: "Puis-je personnaliser l'interface ?",
-      a: "Oui, vous pouvez personnaliser les couleurs, logos, et messages pour correspondre à votre identité visuelle. La version Enterprise offre même une solution white-label complète."
+      q: "Comment démarrer ?",
+      a: "Créez votre compte, choisissez une offre puis configurez votre établissement, vos services et vos agents depuis le tableau de bord. La période d'essai démarre immédiatement."
     }
   ];
 
@@ -510,76 +473,58 @@ const FAQ = ({ t }: { t: any }) => {
   );
 };
 
-const Stats = ({ t }: { t: any }) => {
-  const stats = [
-    { label: "Établissements", value: "500+", desc: "Nous font confiance" },
-    { label: "Tickets gérés", value: "2M+", desc: "Chaque mois" },
-    { label: "Temps d'attente réduit", value: "-45%", desc: "En moyenne" },
-    { label: "Satisfaction client", value: "98%", desc: "Taux de satisfaction" },
-  ];
-
-  return (
-    <section className="py-24 px-6 border-b" style={{ background: t.bg }}>
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16 space-y-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500">Chiffres clés</p>
-          <h2 className="text-[clamp(24px,4vw,42px)] font-black tracking-tight" style={{ color: t.text }}>L'impact SmartQueue.</h2>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-          {stats.map((stat, i) => (
-            <motion.div 
-              key={i} 
-              initial={{ opacity: 0, scale: 0.9 }} 
-              whileInView={{ opacity: 1, scale: 1 }} 
-              viewport={{ once: true }} 
-              transition={{ delay: i * 0.1 }}
-              className="text-center rounded-3xl p-6 bg-slate-300/20 border border-border "
-            >
-              <div className="text-4xl lg:text-5xl font-black mb-2 " style={{ color: t.accent }}>{stat.value}</div>
-              <div className="text-sm font-bold mb-1" style={{ color: t.text }}>{stat.label}</div>
-              <div className="text-xs" style={{ color: t.textMid }}>{stat.desc}</div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-};
-
 const Pricing = ({ t }: { t: any }) => {
-  const plans = [
-    { name: "Starter", price: "0", desc: "Pour les petits commerces", features: ["1 service", "100 tickets/jour", "Interface Web Agent"] },
-    { name: "Business", price: "49", desc: "Pour les banques & mairies", popular: true, features: ["Services illimités", "SMS Notifications", "Analytics Avancés", "Support 24/7"] },
-    { name: "Enterprise", price: "Custom", desc: "Pour les grands réseaux", features: ["Multi-sites", "API Dédiée", "SLA Garanti", "White-label"] },
-  ];
+  const { catalog, error } = usePlans();
   return (
     <section id="pricing" className="py-24 px-6">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16 space-y-3">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500">Tarification</p>
           <h2 className="text-[clamp(24px,4vw,42px)] font-black tracking-tight" style={{ color: t.text }}>Simple. Sans surprise.</h2>
+          {catalog && (
+            <p className="text-sm" style={{ color: t.textMid }}>
+              {catalog.trial_days} jours d'essai · {catalog.annual_discount_percent > 0 ? `-${catalog.annual_discount_percent}% en paiement annuel` : 'Facturation mensuelle'}
+            </p>
+          )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          {plans.map((p, i) => (
-            <div key={i} className={`p-8 rounded-[32px] border flex flex-col ${p.popular ? 'shadow-xl scale-[1.02]' : ''}`} style={{ background: p.popular ? t.accentStrong : t.surface, borderColor: p.popular ? 'transparent' : t.border }}>
-              <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${p.popular ? 'text-white/60' : 'text-blue-500'}`}>{p.name}</p>
-              <div className="flex items-baseline gap-1 mb-4">
-                <span className={`text-4xl font-black ${p.popular ? 'text-white' : ''}`} style={{ color: p.popular ? '#fff' : t.text }}>{p.price === 'Custom' ? '' : p.price + '€'}</span>
-                {p.price !== 'Custom' && <span className={`text-xs ${p.popular ? 'text-white/60' : 'text-gray-500'}`}>/mois</span>}
-                {p.price === 'Custom' && <span className={`text-3xl font-black ${p.popular ? 'text-white' : ''}`} style={{ color: p.popular ? '#fff' : t.text }}>Sur devis</span>}
+        {error && (
+          <p className="text-center text-sm" style={{ color: t.textMid }}>
+            Les offres sont momentanément indisponibles. <Link to="/signup" className="underline">Créez votre compte</Link> pour les consulter.
+          </p>
+        )}
+        {!catalog && !error && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-80 rounded-[32px] border animate-pulse" style={{ background: t.surface, borderColor: t.border }} />
+            ))}
+          </div>
+        )}
+        {catalog && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {catalog.plans.map((p) => (
+              <div key={p.id} className={`p-8 rounded-[32px] border flex flex-col ${p.popular ? 'shadow-xl md:scale-[1.02]' : ''}`} style={{ background: p.popular ? t.accentStrong : t.surface, borderColor: p.popular ? 'transparent' : t.border }}>
+                <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${p.popular ? 'text-white/60' : 'text-blue-500'}`}>{p.name}</p>
+                <p className={`text-xs mb-3 ${p.popular ? 'text-white/70' : ''}`} style={{ color: p.popular ? undefined : t.textMid }}>{p.description}</p>
+                <div className="flex items-baseline flex-wrap gap-1 mb-1">
+                  <span className="text-3xl font-black" style={{ color: p.popular ? '#fff' : t.text }}>{new Intl.NumberFormat('fr-FR').format(p.monthly_price)}</span>
+                  <span className={`text-xs ${p.popular ? 'text-white/60' : 'text-gray-500'}`}>{catalog.currency} / mois</span>
+                </div>
+                {catalog.annual_discount_percent > 0 && (
+                  <p className={`text-[10px] mb-4 ${p.popular ? 'text-white/60' : 'text-gray-500'}`}>ou {formatFcfa(annualPrice(catalog, p))} / an</p>
+                )}
+                <div className="space-y-3 mb-8 flex-grow">
+                  {p.features.map((f) => (
+                    <div key={f} className="flex items-center gap-2.5">
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${p.popular ? 'bg-white/20 text-white' : 'bg-blue-500/10 text-blue-500'}`}><Icons.Check /></div>
+                      <span className="text-[11px] font-medium" style={{ color: p.popular ? '#fff' : t.textMid }}>{f}</span>
+                    </div>
+                  ))}
+                </div>
+                <Link to="/signup" className={`w-full py-3 rounded-xl font-bold text-xs text-center transition-all ${p.popular ? 'bg-white text-blue-600 hover:scale-[1.02]' : 'text-white hover:opacity-90'}`} style={{ background: p.popular ? '#fff' : t.accent }}>Choisir cette offre</Link>
               </div>
-              <div className="space-y-3 mb-8 flex-grow">
-                {p.features.map((f, j) => (
-                  <div key={j} className="flex items-center gap-2.5">
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${p.popular ? 'bg-white/20 text-white' : 'bg-blue-500/10 text-blue-500'}`}><Icons.Check /></div>
-                    <span className="text-[11px] font-medium" style={{ color: p.popular ? '#fff' : t.textMid }}>{f}</span>
-                  </div>
-                ))}
-              </div>
-              <button className={`w-full py-3 rounded-xl font-bold text-xs transition-all ${p.popular ? 'bg-white text-blue-600 hover:scale-[1.02]' : 'text-white hover:opacity-90'}`} style={{ background: p.popular ? '#fff' : t.accent }}>Choisir ce plan</button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -594,7 +539,6 @@ export default function LandingPage() {
   return (
     <div className={`min-h-screen transition-colors duration-500 font-sans ${theme === 'dark' ? 'bg-black text-white' : 'bg-[#F5F6F7] text-[#1D1D1F]'}`}>
       <style>{`
-        @font-face { font-family: 'SF Pro Display'; src: url('https://db.onlinewebfonts.com/t/607593d66416625890b07a974b6a9578.woff2') format('woff2'); }
         html { scroll-behavior: smooth; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -609,8 +553,8 @@ export default function LandingPage() {
               <span>SmartQueue</span>
             </Link>
             <div className="hidden md:flex items-center gap-6">
-              {['Features', 'Ecosystem', 'FAQ', 'Pricing'].map(item => (
-                <a key={item} href={`#${item.toLowerCase()}`} className="text-[12px] font-semibold hover:opacity-50 transition-opacity" style={{ color: t.textMid }}>{item}</a>
+              {[['features', 'Fonctionnalités'], ['ecosystem', 'Écosystème'], ['pricing', 'Tarifs'], ['faq', 'FAQ']].map(([id, label]) => (
+                <a key={id} href={`#${id}`} className="text-[12px] font-semibold hover:opacity-50 transition-opacity" style={{ color: t.textMid }}>{label}</a>
               ))}
             </div>
           </div>
@@ -626,10 +570,8 @@ export default function LandingPage() {
         <Ecosystem t={t} />
         <HowItWorks t={t} />
         <Features t={t} />
-        <Testimonials t={t} />
         <Pricing t={t} />
         <FAQ t={t} />
-        <Stats t={t} />
         <section className="py-32 px-6">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto rounded-[48px] p-12 md:p-20 text-center text-white space-y-8 relative overflow-hidden" style={{ background: t.accent }}>
             <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
@@ -637,16 +579,16 @@ export default function LandingPage() {
             <p className="text-sm text-white/80 max-lg mx-auto">Rejoignez les établissements qui modernisent leur expérience usager chaque jour.</p>
             <div className="flex flex-wrap justify-center gap-3 pt-4">
               <Link to="/signup" className="px-8 py-4 bg-white text-blue-600 rounded-xl font-black text-sm hover:scale-105 transition-transform">Démarrer maintenant</Link>
-              <button className="px-8 py-4 bg-white/10 backdrop-blur-md rounded-xl font-black text-sm hover:bg-white/20 transition-all">Contacter l'équipe</button>
+              <Link to="/login" className="px-8 py-4 bg-white/10 backdrop-blur-md rounded-xl font-black text-sm hover:bg-white/20 transition-all">J'ai déjà un compte</Link>
             </div>
           </motion.div>
         </section>
       </main>
       <footer className="py-16 px-6 border-t border-border" style={{ borderColor: t.border , background:t.surface}}>
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10 text-[11px] font-bold" style={{ color: t.textMid }}>
-          <div className="flex items-center gap-2"><div className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[8px] font-black" style={{ background: t.accent }}>SQ</div><span>SmartQueue Inc. 2026</span></div>
+          <div className="flex items-center gap-2"><div className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[8px] font-black" style={{ background: t.accent }}>SQ</div><span>© {new Date().getFullYear()} SmartQueue</span></div>
           <div className="flex gap-10">
-            <a href="#" className="hover:text-blue-500">Twitter</a><a href="#" className="hover:text-blue-500">LinkedIn</a><a href="#" className="hover:text-blue-500">Contact</a>
+            <Link to="/login" className="hover:text-blue-500">Connexion</Link><Link to="/signup" className="hover:text-blue-500">Créer un compte</Link><a href="#faq" className="hover:text-blue-500">FAQ</a>
           </div>
         </div>
       </footer>

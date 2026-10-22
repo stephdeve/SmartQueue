@@ -33,12 +33,12 @@ class RoleMiddleware
 
         // Autorise si le rôle de l'utilisateur correspond à l'une des valeurs attendues
         if (!in_array($user->role, $allowedRoles, true)) {
-            abort(403, 'Insufficient role');
+            abort(403, "Votre compte n'a pas accès à cette fonctionnalité.");
         }
 
         // Un compte désactivé conserve ses anciens tokens : on bloque l'accès aux espaces métier
         if (method_exists($user, 'isInactive') && $user->isInactive()) {
-            abort(403, 'Account disabled');
+            abort(403, 'Compte désactivé. Contactez votre administrateur.');
         }
 
         return $next($request);

@@ -10,7 +10,10 @@ use Illuminate\Support\Str;
 
 class AgentController extends Controller
 {
-    /** Liste les agents avec leurs services assignés. */
+    /**
+     * Liste les agents avec leurs services assignés, leur dernière activité
+     * (last_seen_at : dernier appel API authentifié) et les tickets clôturés sur 30 jours.
+     */
     public function index()
     {
         $scopedId = request()->attributes->get('scoped_establishment_id');
@@ -18,9 +21,34 @@ class AgentController extends Controller
             ->where('role', 'agent')
             ->when($scopedId, fn ($q) => $q->where('establishment_id', (int) $scopedId))
             ->with('services')
+            ->withMax('tokens as last_seen_at', 'last_used_at')
+            ->withCount(['handledTickets as tickets_closed_30d' => fn ($q) => $q
+                ->where('status', 'closed')
+                ->where('closed_at', '>=', now()->subDays(30))])
             ->orderBy('name')
             ->paginate(50);
+        // withMax renvoie une chaîne sans fuseau : ISO 8601 comme last_login_at
+        $agents->getCollection()->each(function (User $agent) {
+            $agent->last_seen_at = $agent->last_seen_at ? \Illuminate\Support\Carbon::parse($agent->last_seen_at)->toIso8601String() : null;
+        });
         return response()->json($agents);
+    }
+
+    /** Les services assignés doivent appartenir à l'établissement de l'admin. */
+    private function assertServicesInScope(array $serviceIds, $scopedId): void
+    {
+        if (!$scopedId || empty($serviceIds)) {
+            return;
+        }
+
+        $count = Service::query()
+            ->whereIn('id', $serviceIds)
+            ->where('establishment_id', (int) $scopedId)
+            ->count();
+
+        if ($count !== count(array_unique($serviceIds))) {
+            abort(403, 'Forbidden establishment scope');
+        }
     }
 
     /** Crée un agent et assigne des services. */
@@ -36,6 +64,8 @@ class AgentController extends Controller
             'service_ids' => ['array'],
             'service_ids.*' => ['integer','exists:services,id'],
         ]);
+
+        $this->assertServicesInScope($data['service_ids'] ?? [], $scopedId);
 
         $temporaryPassword = null;
         if (empty($data['password'])) {
@@ -54,15 +84,6 @@ class AgentController extends Controller
         ]);
 
         if (!empty($data['service_ids'])) {
-            if ($scopedId) {
-                $count = Service::query()
-                    ->whereIn('id', $data['service_ids'])
-                    ->where('establishment_id', (int) $scopedId)
-                    ->count();
-                if ($count !== count($data['service_ids'])) {
-                    abort(403, 'Forbidden establishment scope');
-                }
-            }
             $agent->services()->sync($data['service_ids']);
         }
 
@@ -100,21 +121,20 @@ class AgentController extends Controller
             'service_ids' => ['sometimes','array'],
             'service_ids.*' => ['integer','exists:services,id'],
         ]);
+        // Contrôle du cloisonnement AVANT toute écriture (sinon mise à jour partielle)
+        $this->assertServicesInScope($data['service_ids'] ?? [], $scopedId);
+
         if (isset($data['password'])) {
             $data['password'] = bcrypt($data['password']);
         }
-        $agent->update($data);
+        $agent->update(collect($data)->except('service_ids')->all());
         if (array_key_exists('service_ids', $data)) {
-            if ($scopedId && !empty($data['service_ids'])) {
-                $count = Service::query()
-                    ->whereIn('id', $data['service_ids'])
-                    ->where('establishment_id', (int) $scopedId)
-                    ->count();
-                if ($count !== count($data['service_ids'])) {
-                    abort(403, 'Forbidden establishment scope');
-                }
-            }
             $agent->services()->sync($data['service_ids'] ?? []);
+        }
+
+        // Compte désactivé : ses sessions ouvertes sont révoquées immédiatement
+        if (($data['status'] ?? null) === 'inactive') {
+            $agent->tokens()->delete();
         }
         return response()->json($agent->load('services'));
     }

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "smartqueue",
+    "name": "SmartQueue",
     "slug": "smartqueue",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -31,7 +31,10 @@
         "android.permission.VIBRATE",
         "android.permission.WAKE_LOCK"
       ],
-      "package": "com.bestbeedev.smartqueue"
+      "package": "com.bestbeedev.smartqueue",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -55,6 +58,29 @@
           "icon": "./assets/images/icon.png",
           "color": "#007AFF",
           "sounds": []
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SmartQueue utilise la caméra pour scanner le QR code d'un service et prendre un ticket.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SmartQueue utilise votre position pour afficher les établissements proches et estimer votre temps de trajet jusqu'au guichet.",
+          "locationAlwaysAndWhenInUsePermission": "SmartQueue utilise votre position pour afficher les établissements proches et estimer votre temps de trajet jusqu'au guichet.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
         }
       ]
     ],

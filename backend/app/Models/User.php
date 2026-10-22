@@ -27,6 +27,9 @@ class User extends Authenticatable
         // Rôle applicatif (admin, agent, user)
         'role',
         'establishment_id',
+        // Statut du compte (active | inactive | pending) : sans lui, le statut choisi
+        // pour un agent était ignoré à la création comme à la modification
+        'status',
         'pending_subscription',
         // Google OAuth
         'google_id',
@@ -56,6 +59,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'pending_subscription' => 'array',
+            'last_login_at' => 'datetime',
         ];
     }
 
@@ -68,6 +72,12 @@ class User extends Authenticatable
     public function establishment()
     {
         return $this->belongsTo(Establishment::class);
+    }
+
+    /** Tickets appelés ou clôturés par cet agent. */
+    public function handledTickets()
+    {
+        return $this->hasMany(Ticket::class, 'agent_id');
     }
 
     public function devices()

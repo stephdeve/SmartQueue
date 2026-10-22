@@ -8,7 +8,10 @@ interface AnalyticsCardProps {
   value: string | number
   change?: {
     value: number
+    /** Sens de la variation (flèche) */
     type: 'increase' | 'decrease' | 'neutral'
+    /** Variation favorable ? (couleur) — par défaut une hausse est favorable */
+    positive?: boolean
   }
   icon: LucideIcon
   description?: string
@@ -23,25 +26,20 @@ export function AnalyticsCard({
   description,
   className
 }: AnalyticsCardProps) {
+  const getTrendColor = () => {
+    if (!change || change.type === 'neutral') return 'text-gray-500'
+    const positive = change.positive ?? change.type === 'increase'
+    return positive ? 'text-green-500' : 'text-red-500'
+  }
+
   const getTrendIcon = () => {
     switch (change?.type) {
       case 'increase':
-        return <TrendingUp className="h-4 w-4 text-green-500" />
+        return <TrendingUp className={cn('h-4 w-4', getTrendColor())} />
       case 'decrease':
-        return <TrendingDown className="h-4 w-4 text-red-500" />
+        return <TrendingDown className={cn('h-4 w-4', getTrendColor())} />
       default:
         return <Minus className="h-4 w-4 text-gray-500" />
-    }
-  }
-
-  const getTrendColor = () => {
-    switch (change?.type) {
-      case 'increase':
-        return 'text-green-500'
-      case 'decrease':
-        return 'text-red-500'
-      default:
-        return 'text-gray-500'
     }
   }
 

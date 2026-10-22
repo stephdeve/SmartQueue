@@ -552,7 +552,7 @@ const CreateTicketModal = ({
             <Ionicons name="call-outline" size={16} color={colors.textSecondary} />
             <TextInput
               style={[cmStyles.input, { color: colors.textPrimary }]}
-              placeholder="+33 6 00 00 00 00"
+              placeholder="+229 01 00 00 00 00"
               placeholderTextColor={colors.textSecondary}
               keyboardType="phone-pad"
               value={form.customer_phone}

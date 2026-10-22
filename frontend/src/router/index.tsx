@@ -2,7 +2,7 @@
  * Router Configuration - Structure optimisée
  * Organisation des routes par fonctionnalités avec lazy loading
  */
-import { BrowserRouter, useRoutes } from "react-router-dom";
+import { BrowserRouter, Link, useRoutes } from "react-router-dom";
 import { Suspense, lazy } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -152,6 +152,24 @@ const PageLoaderHome = () => {
   );
 };
 
+// Compte usager (rôle « user ») connecté au web : l'espace web est réservé aux
+// établissements, l'usager prend ses tickets depuis l'application mobile.
+const UserHome = () => (
+  <div className="max-w-xl mx-auto py-16 px-4 text-center space-y-4">
+    <h1 className="text-2xl font-bold text-foreground">Espace établissement</h1>
+    <p className="text-muted-foreground">
+      Pour prendre un ticket et suivre votre position, utilisez l'application mobile SmartQueue. Pour gérer les files
+      d'attente de votre établissement, choisissez une offre : votre période d'essai démarre immédiatement.
+    </p>
+    <Link
+      to="/dashboard/subscription"
+      className="inline-flex items-center justify-center h-11 px-6 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
+    >
+      Choisir une offre
+    </Link>
+  </div>
+);
+
 function AppRoutes() {
   const { user, isAuthenticated } = useAuth();
   const dispatch = useAppDispatch();
@@ -240,8 +258,10 @@ function AppRoutes() {
                 <SuperAdminDashboard />
               ) : user?.role === "agent" ? (
                 <AgentDashboard />
-              ) : (
+              ) : user?.role === "admin" ? (
                 <Dashboard />
+              ) : (
+                <UserHome />
               )}
             </Suspense>
           ),
@@ -400,38 +420,48 @@ function AppRoutes() {
             </Suspense>
           ),
         },
-        {
-          path: "billing",
-          element: (
-            <Suspense fallback={<PageLoader />}>
-              <Billing />
-            </Suspense>
-          ),
-        },
-        {
-          path: "subscription",
-          element: (
-            <Suspense fallback={<PageLoaderSample />}>
-              <SubscriptionPlan />
-            </Suspense>
-          ),
-        },
-        {
-          path: "analytics",
-          element: (
-            <Suspense fallback={<PageLoader />}>
-              <Analytics />
-            </Suspense>
-          ),
-        },
-        {
-          path: "push",
-          element: (
-            <Suspense fallback={<PageLoader />}>
-              <PushBroadcast />
-            </Suspense>
-          ),
-        },
+        // Pages d'administration d'établissement (endpoints /api/admin/* réservés aux admins)
+        ...(user?.role === "admin"
+          ? [
+              {
+                path: "billing",
+                element: (
+                  <Suspense fallback={<PageLoader />}>
+                    <Billing />
+                  </Suspense>
+                ),
+              },
+              {
+                path: "analytics",
+                element: (
+                  <Suspense fallback={<PageLoader />}>
+                    <Analytics />
+                  </Suspense>
+                ),
+              },
+              {
+                path: "push",
+                element: (
+                  <Suspense fallback={<PageLoader />}>
+                    <PushBroadcast />
+                  </Suspense>
+                ),
+              },
+            ]
+          : []),
+        // Souscription : usager qui crée son établissement, ou admin qui change d'offre
+        ...(user?.role === "admin" || user?.role === "user"
+          ? [
+              {
+                path: "subscription",
+                element: (
+                  <Suspense fallback={<PageLoaderSample />}>
+                    <SubscriptionPlan />
+                  </Suspense>
+                ),
+              },
+            ]
+          : []),
         {
           path: "profile",
           element: (

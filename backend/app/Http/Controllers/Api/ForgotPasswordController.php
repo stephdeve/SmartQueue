@@ -20,7 +20,13 @@ class ForgotPasswordController extends Controller
     {
         $request->validate(['email' => 'required|email|max:255']);
 
-        Password::sendResetLink($request->only('email'));
+        try {
+            Password::sendResetLink($request->only('email'));
+        } catch (\Throwable $e) {
+            // Serveur d'e-mails injoignable / mal configuré : on journalise sans exposer
+            // l'erreur (ni l'existence du compte) à l'appelant.
+            report($e);
+        }
 
         return response()->json([
             'message' => 'Si un compte correspond à cet email, un lien de réinitialisation a été envoyé.',

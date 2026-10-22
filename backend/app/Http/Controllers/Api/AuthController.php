@@ -80,7 +80,7 @@ class AuthController extends Controller
         $user = User::where('email', $request->validated('email'))->first();
 
         if (!$user || !Hash::check($request->validated('password'), (string) $user->password)) {
-            return response()->json(['message' => 'Invalid credentials'], Response::HTTP_UNAUTHORIZED);
+            return response()->json(['message' => 'E-mail ou mot de passe incorrect.'], Response::HTTP_UNAUTHORIZED);
         }
 
         // Agent désactivé par son administrateur
@@ -88,40 +88,46 @@ class AuthController extends Controller
             return response()->json(['message' => 'Compte désactivé. Contactez votre administrateur.'], Response::HTTP_FORBIDDEN);
         }
 
+        return $this->issueSession($user);
+    }
+
+    /**
+     * Émet un token Sanctum et la réponse de session commune aux connexions
+     * (e-mail / Google). establishment_id évite au web un passage par l'écran de
+     * création d'établissement juste après la connexion d'un admin.
+     */
+    private function issueSession(User $user, int $status = Response::HTTP_OK)
+    {
+        $user->forceFill(['last_login_at' => now()])->save();
+
         $token = $user->createToken('api')->plainTextToken;
 
-        // Build user response
         $userResponse = [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'phone' => $user->phone,
             'role' => $user->role,
+            'avatar' => $user->avatar,
+            'establishment_id' => $user->establishment_id,
         ];
 
-        // Include services for agents
+        // Services assignés (agents / admins)
         if ($user->role === 'agent' || $user->role === 'admin') {
-            // Load services with fresh query
-            $services = \App\Models\Service::whereHas('agents', function($q) use ($user) {
-                $q->where('users.id', $user->id);
-            })->get(['id', 'name', 'status', 'avg_service_time_minutes']);
-
-            \Log::info('Agent login services', ['user_id' => $user->id, 'services_count' => $services->count()]);
-
-            $userResponse['services'] = $services->map(function ($service) {
-                return [
+            $userResponse['services'] = $user->services()
+                ->get(['services.id', 'services.name', 'services.status', 'services.avg_service_time_minutes'])
+                ->map(fn ($service) => [
                     'id' => $service->id,
                     'name' => $service->name,
                     'status' => $service->status ?? 'closed',
                     'avg_service_time_minutes' => $service->avg_service_time_minutes,
-                ];
-            })->values()->toArray();
+                ])->values()->toArray();
         }
 
         return response()->json([
             'user' => $userResponse,
             'token' => $token,
-        ]);
+        ], $status);
     }
 
     /**
@@ -147,7 +153,7 @@ class AuthController extends Controller
         ]);
 
         if (!$googleResponse->ok()) {
-            return response()->json(['message' => 'Invalid Google token'], Response::HTTP_UNAUTHORIZED);
+            return response()->json(['message' => 'Connexion Google invalide. Réessayez.'], Response::HTTP_UNAUTHORIZED);
         }
 
         $googleUser = (array) $googleResponse->json();
@@ -158,19 +164,19 @@ class AuthController extends Controller
         )));
         if (!empty($allowedAudiences)) {
             if (!in_array($googleUser['aud'] ?? null, $allowedAudiences, true)) {
-                return response()->json(['message' => 'Invalid Google token audience'], Response::HTTP_UNAUTHORIZED);
+                return response()->json(['message' => 'Connexion Google refusée pour cette application.'], Response::HTTP_UNAUTHORIZED);
             }
         } else {
             \Log::warning('GOOGLE_CLIENT_IDS non configuré : audience des ID tokens Google non vérifiée');
         }
 
         if (!in_array($googleUser['iss'] ?? null, ['accounts.google.com', 'https://accounts.google.com'], true)) {
-            return response()->json(['message' => 'Invalid Google token issuer'], Response::HTTP_UNAUTHORIZED);
+            return response()->json(['message' => 'Connexion Google invalide. Réessayez.'], Response::HTTP_UNAUTHORIZED);
         }
 
         // Vérifier que l'email est vérifié par Google
         if (empty($googleUser['email']) || !isset($googleUser['email_verified']) || !filter_var($googleUser['email_verified'], FILTER_VALIDATE_BOOLEAN)) {
-            return response()->json(['message' => 'Google email not verified'], Response::HTTP_UNAUTHORIZED);
+            return response()->json(['message' => "L'adresse e-mail de ce compte Google n'est pas vérifiée."], Response::HTTP_UNAUTHORIZED);
         }
 
         return $googleUser;
@@ -217,18 +223,7 @@ class AuthController extends Controller
             }
         }
 
-        $token = $user->createToken('api')->plainTextToken;
-
-        return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'phone' => $user->phone,
-                'role' => $user->role,
-            ],
-            'token' => $token,
-        ]);
+        return $this->issueSession($user);
     }
 
     /**
@@ -258,18 +253,7 @@ class AuthController extends Controller
                 $existingUser->update(['phone' => $request->phone]);
             }
 
-            $token = $existingUser->createToken('api')->plainTextToken;
-
-            return response()->json([
-                'user' => [
-                    'id' => $existingUser->id,
-                    'name' => $existingUser->name,
-                    'email' => $existingUser->email,
-                    'phone' => $existingUser->phone,
-                    'role' => $existingUser->role,
-                ],
-                'token' => $token,
-            ]);
+            return $this->issueSession($existingUser);
         }
 
         // Créer un nouvel utilisateur
@@ -283,17 +267,6 @@ class AuthController extends Controller
             'avatar' => $googleUser['picture'] ?? null,
         ]);
 
-        $token = $user->createToken('api')->plainTextToken;
-
-        return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'phone' => $user->phone,
-                'role' => $user->role,
-            ],
-            'token' => $token,
-        ], Response::HTTP_CREATED);
+        return $this->issueSession($user, Response::HTTP_CREATED);
     }
 }

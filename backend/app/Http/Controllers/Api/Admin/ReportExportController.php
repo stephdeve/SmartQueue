@@ -20,8 +20,16 @@ class ReportExportController extends Controller
             abort(403, 'Forbidden establishment scope');
         }
 
-        $from = $request->query('from') ? now()->parse($request->query('from')) : now()->subDays(7);
-        $to = $request->query('to') ? now()->parse($request->query('to')) : now();
+        // Bornes ramenées au fuseau de l'application (le web envoie de l'ISO UTC) ;
+        // une date seule en borne haute couvre toute la journée.
+        $tz = (string) config('app.timezone', 'UTC');
+        $from = ($request->query('from') ? now()->parse((string) $request->query('from')) : now()->subDays(7))->setTimezone($tz);
+        $toRaw = (string) $request->query('to', '');
+        $to = $toRaw !== '' ? now()->parse($toRaw) : now();
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $toRaw)) {
+            $to = $to->endOfDay();
+        }
+        $to = $to->setTimezone($tz);
 
         $serviceId = $request->query('service_id');
         $counterId = $request->query('counter_id');

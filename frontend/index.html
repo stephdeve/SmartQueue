@@ -3,54 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    
+
     <!-- Titre et description principaux -->
     <title>SmartQueue - Solution de gestion de files d'attente intelligente</title>
-    <meta name="description" content="SmartQueue transforme vos files d'attente physiques en expérience fluide. Ticket à distance, alertes géolocalisées, et réduction de 70% du temps d'attente perçu pour vos usagers." />
-    <meta name="keywords" content="gestion de files d'attente, ticket à distance, file d'attente virtuelle, optimisation flux, hôpital, banque, mairie, commerce" />
+    <meta name="description" content="SmartQueue transforme vos files d'attente physiques en expérience fluide : ticket à distance par QR code ou application mobile, position en temps réel et alerte quand le tour approche." />
+    <meta name="keywords" content="gestion de files d'attente, ticket à distance, file d'attente virtuelle, optimisation flux, hôpital, banque, mairie, commerce, Bénin" />
     <meta name="author" content="SmartQueue" />
     <meta name="robots" content="index, follow" />
-    
-    <!-- Canonical URL -->
-    <link rel="canonical" href="https://smartqueue.fr" />
-    
-    <!-- Open Graph / Facebook / LinkedIn -->
+
+    <!-- Open Graph / Facebook / LinkedIn
+         (og:url, og:image et l'URL canonique sont à ajouter une fois le domaine définitif en ligne) -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://smartqueue.fr" />
     <meta property="og:title" content="SmartQueue - Solution intelligente de gestion de files d'attente" />
-    <meta property="og:description" content="Réduisez l'attente perçue de 70% et fluidifiez vos flux avec notre solution de ticket à distance et alertes géolocalisées." />
-    <meta property="og:image" content="https://smartqueue.fr/og-image.jpg" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Ticket à distance, position en temps réel et alertes au bon moment pour vos usagers ; tableau de bord et statistiques pour vos équipes." />
     <meta property="og:site_name" content="SmartQueue" />
     <meta property="og:locale" content="fr_FR" />
-    
+
     <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:url" content="https://smartqueue.fr" />
+    <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="SmartQueue - Gestion de files d'attente intelligente" />
     <meta name="twitter:description" content="Ticket à distance, alertes au bon moment, et tableau de bord en temps réel pour optimiser vos flux." />
-    <meta name="twitter:image" content="https://smartqueue.fr/twitter-card.jpg" />
-    
-    <!-- Balises supplémentaires pour le référencement local (optionnel) -->
-    <meta name="geo.region" content="FR" />
-    <meta name="geo.placename" content="France" />
-    
-    <!-- Favicon (à ajouter dans votre dossier public) -->
+
+    <!-- Référencement local -->
+    <meta name="geo.region" content="BJ" />
+    <meta name="geo.placename" content="Bénin" />
+
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="manifest" href="/site.webmanifest">
-    
-    <!-- Verification pour les moteurs de recherche (si nécessaire) -->
-    <!-- <meta name="google-site-verification" content="..." /> -->
-    <!-- <meta name="msvalidate.01" content="..." /> -->
-    
-    <!-- Preconnect pour les polices et ressources externes -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    
-    <!-- JSON-LD / Schema.org pour les données structurées -->
+
+    <!-- JSON-LD / Schema.org : uniquement des informations vérifiables (aucune note ni
+         coordonnée fictive, que les moteurs de recherche sanctionnent) -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -58,62 +42,27 @@
         "name": "SmartQueue",
         "applicationCategory": "BusinessApplication",
         "applicationSubCategory": "Gestion de files d'attente",
-        "description": "Solution de gestion de files d'attente intelligente avec ticket à distance, alertes géolocalisées et tableau de bord analytique.",
+        "description": "Solution de gestion de files d'attente avec ticket à distance, alertes et tableau de bord analytique.",
         "operatingSystem": "Web, iOS, Android",
         "offers": {
           "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "EUR",
-          "description": "Version gratuite disponible"
-        },
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.8",
-          "ratingCount": "124",
-          "bestRating": "5",
-          "worstRating": "1"
+          "price": "10000",
+          "priceCurrency": "XOF",
+          "description": "Offre Starter, par mois"
         },
         "featureList": [
           "Ticket à distance",
-          "Notifications géolocalisées",
+          "Ticket par QR code",
           "Tableau de bord en temps réel",
           "Statistiques d'affluence"
-        ],
-        "screenshot": "https://smartqueue.fr/screenshot.jpg",
-        "softwareVersion": "2.0",
-        "url": "https://smartqueue.fr",
-        "sameAs": [
-          "https://www.linkedin.com/company/smartqueue",
-          "https://twitter.com/smartqueue"
         ]
-      }
-    </script>
-    
-    <!-- Organisation Schema (optionnel) -->
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "Organization",
-        "name": "SmartQueue",
-        "url": "https://smartqueue.fr",
-        "logo": "https://smartqueue.fr/logo.png",
-        "contactPoint": {
-          "@type": "ContactPoint",
-          "telephone": "+33-1-23-45-67-89",
-          "contactType": "customer service",
-          "availableLanguage": "French"
-        },
-        "address": {
-          "@type": "PostalAddress",
-          "addressCountry": "FR"
-        }
       }
     </script>
   </head>
   <body class="bg-gray-50">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    
+
     <!-- Noscript fallback pour les moteurs de recherche qui n'exécutent pas JS -->
     <noscript>
       <div style="padding: 20px; text-align: center;">
@@ -121,12 +70,11 @@
         <p>SmartQueue transforme vos files d'attente physiques en expérience fluide. Ticket à distance, alerte intelligente, arrivée au bon moment.</p>
         <p>Fonctionnalités :</p>
         <ul>
-          <li>Ticket à distance</li>
-          <li>Notifications géolocalisées</li>
-          <li>Tableau de bord en temps réel</li>
-          <li>Réduction de 70% du temps d'attente perçu</li>
+          <li>Ticket à distance par application mobile ou QR code</li>
+          <li>Position et attente estimée en temps réel</li>
+          <li>Tableau de bord et statistiques pour les établissements</li>
         </ul>
-        <p>Contactez-nous pour plus d'informations.</p>
+        <p>Activez JavaScript pour utiliser SmartQueue.</p>
       </div>
     </noscript>
   </body>

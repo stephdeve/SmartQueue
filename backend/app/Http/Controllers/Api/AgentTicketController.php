@@ -30,16 +30,16 @@ class AgentTicketController extends Controller
         if (!is_null($counterId)) {
             $counter = Counter::query()->findOrFail($counterId);
             if ((int) $counter->establishment_id !== (int) $service->establishment_id) {
-                abort(422, 'Counter does not belong to this establishment');
+                abort(422, "Ce guichet n'appartient pas à votre établissement.");
             }
             if ($counter->status !== 'open') {
-                abort(422, 'Counter is closed');
+                abort(422, 'Ce guichet est fermé.');
             }
         }
 
         $ticket = $svc->callNext($service, $counterId);
         if (!$ticket) {
-            return response()->json(['message' => 'No eligible ticket'], 204);
+            return response()->json(['message' => 'Aucun ticket à appeler.'], 204);
         }
         return response()->json(['called_ticket' => [
             'id' => $ticket->id,

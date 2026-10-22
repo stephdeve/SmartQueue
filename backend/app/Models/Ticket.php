@@ -10,7 +10,7 @@ class Ticket extends Model
 {
     // Colonnes autorisées en écriture
     protected $fillable = [
-        'user_id', 'service_id', 'counter_id', 'number', 'status', 'priority', 'position',
+        'user_id', 'service_id', 'counter_id', 'agent_id', 'number', 'status', 'priority', 'position',
         'called_at', 'called_expires_at', 'closed_at', 'absent_at', 'last_distance_m', 'last_seen_at',
         'has_recalled', 'en_route_at', 'present_at', 'en_route_expires_at', 'response_received_at', 'estimated_travel_minutes', 'called_counter_id',
         'deferred_at', 'deferral_count', 'is_swapped', 'swapped_with_ticket_id',
@@ -66,6 +66,12 @@ class Ticket extends Model
         return $this->belongsTo(Counter::class);
     }
 
+    /** Agent (ou admin) qui a appelé / clôturé le ticket. */
+    public function agent()
+    {
+        return $this->belongsTo(User::class, 'agent_id');
+    }
+
     public function review()
     {
         return $this->hasOne(Review::class);
@@ -75,5 +81,17 @@ class Ticket extends Model
     public function scopeActive($q)
     {
         return $q->whereNotIn('status', ['closed','canceled','expired']);
+    }
+
+    /**
+     * Condition SQL « usager non présenté » : absence en cours, ou absence devenue
+     * définitive (statut expired avec au moins une absence enregistrée). Un simple
+     * status = 'absent' ne compte plus les absents définitifs depuis qu'ils expirent.
+     */
+    public static function noShowSql(string $table = 'tickets'): string
+    {
+        $p = $table !== '' ? $table.'.' : '';
+
+        return "({$p}status = 'absent' OR ({$p}status = 'expired' AND COALESCE({$p}absent_level, 0) > 0))";
     }
 }

@@ -330,14 +330,6 @@ export const ticketsApi = {
     await axiosClient.post("/user/stats", stats);
   },
 
-  // Obtenir les tickets récents
-  getRecentTickets: async (limit: number = 5): Promise<Ticket[]> => {
-    const response = await axiosClient.get("/tickets/recent", {
-      params: { limit },
-    });
-    return response.data;
-  },
-
   // Rejoindre à nouveau la file (créer un nouveau ticket pour le même service).
   // Pas d'endpoint dédié côté API : c'est une création de ticket classique.
   rejoinQueue: async (serviceId: number): Promise<Ticket> => {
@@ -345,34 +337,6 @@ export const ticketsApi = {
       service_id: serviceId,
     });
     return response.data?.data || response.data;
-  },
-
-  // Obtenir le temps d'attente estimé pour un service
-  getEstimatedWaitTime: async (
-    serviceId: number,
-  ): Promise<{
-    avg_wait_min: number;
-    people_waiting: number;
-    peak_hours: string[];
-  }> => {
-    const response = await axiosClient.get(`/services/${serviceId}/wait-time`);
-    return response.data;
-  },
-
-  // Signaler sa présence (mise à jour de la position GPS)
-  checkIn: async (
-    ticketId: number,
-    lat: number,
-    lng: number,
-  ): Promise<{
-    distance_m: number;
-    is_within_range: boolean;
-  }> => {
-    const response = await axiosClient.post(`/tickets/${ticketId}/checkin`, {
-      lat,
-      lng,
-    });
-    return response.data;
   },
 
   // Notifier que le ticket a été présenté au guichet
@@ -395,18 +359,6 @@ export const ticketsApi = {
     await axiosClient.post(`/tickets/${ticketId}/review`, { rating, comment });
   },
 
-  // Obtenir le QR code du ticket
-  getTicketQR: async (
-    ticketId: number,
-  ): Promise<{
-    qr_code: string;
-    ticket_number: string;
-    service_name: string;
-    establishment_name: string;
-  }> => {
-    const response = await axiosClient.get(`/tickets/${ticketId}/qr`);
-    return response.data;
-  },
 };
 
 export default ticketsApi;

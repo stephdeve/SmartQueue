@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { appInfo } from '../../config/appInfo';
 
 const FeatureItem: React.FC<{ icon: any; title: string; description: string; colors: any }> = ({ icon, title, description, colors }) => (
   <View style={[styles.featureItem, { borderBottomColor: colors.border }]}>
@@ -22,13 +23,6 @@ const FeatureItem: React.FC<{ icon: any; title: string; description: string; col
       <Text style={[styles.featureTitle, { color: colors.textPrimary }]}>{title}</Text>
       <Text style={[styles.featureDescription, { color: colors.textSecondary }]}>{description}</Text>
     </View>
-  </View>
-);
-
-const StatItem: React.FC<{ value: string; label: string; colors: any }> = ({ value, label, colors }) => (
-  <View style={styles.statItem}>
-    <Text style={[styles.statValue, { color: colors.primary }]}>{value}</Text>
-    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{label}</Text>
   </View>
 );
 
@@ -60,7 +54,7 @@ export const AboutAppScreen: React.FC = () => {
             <Ionicons name="ticket" size={36} color={colors.primary} />
           </View>
           <Text style={styles.appName}>SmartQueue</Text>
-          <Text style={styles.version}>Version 1.0.0</Text>
+          {!!appInfo.version && <Text style={styles.version}>Version {appInfo.version}</Text>}
         </View>
       </LinearGradient>
 
@@ -69,15 +63,6 @@ export const AboutAppScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
-        {/* Stats compact */}
-        <View style={[styles.statsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <StatItem value="10K+" label="Utilisateurs" colors={colors} />
-          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <StatItem value="10+" label="Établissements" colors={colors} />
-          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <StatItem value="50K+" label="Tickets" colors={colors} />
-        </View>
-
         {/* Description compact */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>Notre mission</Text>
@@ -98,23 +83,29 @@ export const AboutAppScreen: React.FC = () => {
         </View>
 
         {/* Legal Links compact */}
+        {(!!appInfo.termsUrl || !!appInfo.privacyUrl) && (
         <View style={[styles.linksCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <TouchableOpacity style={styles.linkItem} onPress={() => Linking.openURL('https://smartqueue.app/terms')}>
+          {!!appInfo.termsUrl && (
+          <TouchableOpacity style={styles.linkItem} onPress={() => Linking.openURL(appInfo.termsUrl)}>
             <Ionicons name="document-text-outline" size={18} color={colors.textSecondary} />
             <Text style={[styles.linkText, { color: colors.textPrimary }]}>Conditions d’utilisation</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
           </TouchableOpacity>
-          <View style={[styles.linkDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity style={styles.linkItem} onPress={() => Linking.openURL('https://smartqueue.app/privacy')}>
+          )}
+          {!!appInfo.termsUrl && !!appInfo.privacyUrl && <View style={[styles.linkDivider, { backgroundColor: colors.border }]} />}
+          {!!appInfo.privacyUrl && (
+          <TouchableOpacity style={styles.linkItem} onPress={() => Linking.openURL(appInfo.privacyUrl)}>
             <Ionicons name="shield-checkmark-outline" size={18} color={colors.textSecondary} />
             <Text style={[styles.linkText, { color: colors.textPrimary }]}>Politique de confidentialité</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
           </TouchableOpacity>
+          )}
         </View>
+        )}
 
         {/* Copyright compact */}
         <Text style={[styles.copyright, { color: colors.textTertiary }]}>
-          © 2026 SmartQueue
+          © {new Date().getFullYear()} SmartQueue
         </Text>
         <Text style={[styles.copyrightSub, { color: colors.textTertiary }]}>
           Conçu avec ❤️ au Bénin
@@ -146,11 +137,6 @@ const styles = StyleSheet.create({
   version: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
   content: { flex: 1 },
   contentContainer: { padding: 16, paddingBottom: 30 },
-  statsCard: { flexDirection: 'row', borderRadius: 16, padding: 14, marginBottom: 20, borderWidth: 1 },
-  statItem: { flex: 1, alignItems: 'center' },
-  statDivider: { width: 1, height: 40 },
-  statValue: { fontSize: 20, fontWeight: '800' },
-  statLabel: { fontSize: 11, fontWeight: '600', marginTop: 4 },
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10, marginLeft: 4 },
   description: { fontSize: 14, lineHeight: 20, borderRadius: 16, padding: 14, borderWidth: 1 },

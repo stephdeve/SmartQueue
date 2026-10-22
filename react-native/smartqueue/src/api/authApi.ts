@@ -138,13 +138,6 @@ export const authApi = {
     });
   },
 
-  // Vérifier si l'email est déjà utilisé
-  checkEmail: async (email: string): Promise<{ exists: boolean }> => {
-    // Note: Cet endpoint n'existe pas encore dans l'API Laravel, à implémenter si nécessaire
-    const response = await axiosClient.post("/auth/check-email", { email });
-    return response.data;
-  },
-
   // Demander un reset de mot de passe
   forgotPassword: async (email: string): Promise<void> => {
     await axiosClient.post("/auth/forgot", { email });

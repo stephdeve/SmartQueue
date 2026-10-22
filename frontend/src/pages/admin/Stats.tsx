@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api } from '@/api/axios'
-import { cn } from '@/lib/utils'
+import { cn, localDateString, parseApiDate } from '@/lib/utils'
 import { AnalyticsCard } from '@/components/ui/analytics-card'
 import { ChartContainer } from '@/components/ui/chart-container'
 import { AreaChartComponent, DonutChart, VerticalBarChart, LineChartComponent } from '@/components/ui/charts'
@@ -68,18 +68,18 @@ function mkChange(
   current: number,
   prev: number,
   lowerIsBetter = false,
-): { value: number; type: 'increase' | 'decrease' | 'neutral' } | undefined {
+): { value: number; type: 'increase' | 'decrease' | 'neutral'; positive: boolean } | undefined {
   if (prev === 0) return undefined
   const pct = Math.round(((current - prev) / prev) * 100)
-  if (pct === 0) return { value: 0, type: 'neutral' }
-  const isGood = lowerIsBetter ? pct < 0 : pct > 0
-  return { value: Math.abs(pct), type: isGood ? 'increase' : 'decrease' }
+  if (pct === 0) return { value: 0, type: 'neutral', positive: true }
+  // La flèche suit le sens de la variation, la couleur indique si elle est favorable
+  return { value: Math.abs(pct), type: pct > 0 ? 'increase' : 'decrease', positive: lowerIsBetter ? pct < 0 : pct > 0 }
 }
 
 function fmtMin(m: number | null) { return m !== null ? `${m} min` : '—' }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+  return (parseApiDate(iso) ?? new Date(iso)).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
 }
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -134,10 +134,10 @@ const TABS: Array<{ id: TabId; label: string }> = [
 ]
 
 function periodParams(period: Period, customFrom: string, customTo: string) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = localDateString()
   if (period === 'today') return { from: today, to: today }
-  if (period === 'week') return { from: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0], to: today }
-  if (period === 'month') return { from: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0], to: today }
+  if (period === 'week') return { from: localDateString(new Date(Date.now() - 7 * 86400000)), to: today }
+  if (period === 'month') return { from: localDateString(new Date(Date.now() - 30 * 86400000)), to: today }
   return { from: customFrom || today, to: customTo || today }
 }
 
@@ -329,7 +329,7 @@ export default function Stats() {
           <h1 className="text-2xl font-bold text-foreground">Analytics SmartQueue</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {advanced
-              ? `${new Date(advanced.from).toLocaleDateString('fr-FR')} → ${new Date(advanced.to).toLocaleDateString('fr-FR')}`
+              ? `${parseApiDate(advanced.from)?.toLocaleDateString('fr-FR') ?? ''} → ${parseApiDate(advanced.to)?.toLocaleDateString('fr-FR') ?? ''}`
               : 'Centre de pilotage intelligent'}
           </p>
         </div>
@@ -1220,34 +1220,25 @@ export default function Stats() {
                 </div>
               </div>
 
-              {/* Resolution Time Estimation */}
-              {advanced.deferred.total > 0 && (() => {
-                const avgMinutesPerTicket = 15
-                const estimatedMinutes = advanced.deferred.total * avgMinutesPerTicket
-                const estimatedHours = Math.round(estimatedMinutes / 60 * 10) / 10
-                const progressPct = k ? Math.round((k.served / Math.max(k.total, 1)) * 100) : 0
+              {/* Charge à venir : reportés × durée de service mesurée sur la période */}
+              {(() => {
+                const upcoming = advanced.deferred.upcoming_load.reduce((s, d) => s + d.count, 0)
+                const serviceAvg = k?.service_avg_minutes ?? null
+                if (upcoming === 0 || serviceAvg === null) return null
+                const estimatedHours = Math.round(((upcoming * serviceAvg) / 60) * 10) / 10
                 return (
                   <div className="bg-card rounded-xl shadow-lg border border-border p-5">
                     <div className="flex items-center gap-2 mb-3">
                       <Clock className="h-4 w-4 text-purple-500" />
-                      <span className="text-sm font-medium text-foreground">Temps estimé de traitement</span>
+                      <span className="text-sm font-medium text-foreground">Temps de guichet à prévoir</span>
                     </div>
-                    <div className="flex items-baseline gap-1 mb-3">
+                    <div className="flex items-baseline gap-1 mb-1">
                       <span className="text-2xl font-bold text-foreground">{estimatedHours}</span>
-                      <span className="text-sm text-muted-foreground">heures estimées</span>
+                      <span className="text-sm text-muted-foreground">heures</span>
                     </div>
-                    <div>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                        <span>Progression du traitement</span>
-                        <span>{progressPct}%</span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-purple-500 transition-all"
-                          style={{ width: `${Math.min(progressPct, 100)}%` }}
-                        />
-                      </div>
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {upcoming} ticket(s) reporté(s) sur 14 jours × {serviceAvg} min de service en moyenne sur la période
+                    </p>
                   </div>
                 )
               })()}

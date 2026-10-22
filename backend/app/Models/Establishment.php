@@ -38,6 +38,17 @@ class Establishment extends Model
         return $this->hasOne(Subscription::class);
     }
 
+    /** Comptes rattachés (admins et agents). */
+    public function staff()
+    {
+        return $this->hasMany(User::class);
+    }
+
+    public function tickets()
+    {
+        return $this->hasManyThrough(Ticket::class, Service::class);
+    }
+
     public function favoritedBy()
     {
         return $this->belongsToMany(User::class, 'favorites')->withTimestamps();

@@ -228,30 +228,6 @@ export const establishmentsApi = {
     return response.data;
   },
 
-  // Obtenir le statut en temps réel d'un établissement
-  getEstablishmentStatus: async (establishmentId: number): Promise<EstablishmentStatus> => {
-    const response = await axiosClient.get(`/establishments/${establishmentId}/status`);
-    return response.data;
-  },
-
-  // Résoudre un QR code d'établissement
-  resolveQRCode: async (qrCode: string): Promise<{
-    establishment: Establishment;
-    services: Service[];
-    current_wait: number;
-    is_open: boolean;
-  }> => {
-    const response = await axiosClient.get(`/establishments/qr/${qrCode}`);
-    return response.data;
-  },
-
-  // Obtenir les catégories disponibles
-  getCategories: async (): Promise<string[]> => {
-    // Note: Cet endpoint n'existe pas encore, à implémenter si nécessaire
-    const response = await axiosClient.get('/establishments/categories');
-    return response.data;
-  },
-
   // Obtenir les établissements par catégorie
   getEstablishmentsByCategory: async (category: string, params: EstablishmentsParams = {}): Promise<Establishment[]> => {
     const response = await axiosClient.get('/establishments', {
@@ -260,17 +236,6 @@ export const establishmentsApi = {
     return response.data;
   },
 
-  // Calculer la distance depuis un établissement
-  getDistanceToEstablishment: async (establishmentId: number, userLat: number, userLng: number): Promise<{
-    distance_km: number;
-    estimated_time_mins: number;
-  }> => {
-    // Note: Cet endpoint n'existe pas encore, à implémenter si nécessaire
-    const response = await axiosClient.get(`/establishments/${establishmentId}/distance`, {
-      params: { lat: userLat, lng: userLng }
-    });
-    return response.data;
-  },
 };
 
 export default establishmentsApi;

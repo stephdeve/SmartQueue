@@ -3,10 +3,9 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Search, Filter, User, Mail, Phone, Lock, Check, Loader2, Users, UserCheck, UserCog, Activity, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Filter, User, Mail, Phone, Lock, Check, Loader2, Users, UserCheck, Activity, Download, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { useAuth } from '@/hooks/useAuth';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,25 +37,33 @@ interface Agent {
   phone?: string | null;
   role: string;
   status: 'active' | 'inactive' | 'pending';
-  last_login?: string | null;
+  /** Dernière connexion (login) */
+  last_login_at?: string | null;
+  /** Dernier appel API authentifié (activité réelle) */
+  last_seen_at?: string | null;
+  /** Tickets clôturés par l'agent sur 30 jours */
+  tickets_closed_30d?: number;
   created_at: string;
   services?: { id: number; name: string }[];
   avatar?: string | null;
 }
 
+// Champ vide = pas de mot de passe saisi (création : mot de passe temporaire généré par le serveur)
+const optionalPassword = z
+  .union([z.literal(''), z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères')])
+  .optional();
+
 const agentSchema = z.object({
   name: z.string().min(2, 'Le nom doit contenir au moins 2 caractères'),
   email: z.string().email('Adresse email invalide'),
   phone: z.string().optional(),
-  role: z.enum(['admin', 'agent', 'supervisor']),
   status: z.enum(['active', 'inactive', 'pending']),
-  password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères').optional(),
-  confirmPassword: z.string().optional(),
+  password: optionalPassword,
   service_ids: z.array(z.number()).optional(),
-}).refine((data) => !data.confirmPassword || data.password === data.confirmPassword, {
-  message: "Les mots de passe ne correspondent pas",
-  path: ["confirmPassword"],
 });
+
+/** Date API ("Y-m-d H:i:s" ou ISO) → timestamp, NaN si absente. */
+const toTime = (value?: string | null) => (value ? new Date(String(value).replace(' ', 'T')).getTime() : NaN);
 
 type AgentFormData = z.infer<typeof agentSchema>;
 
@@ -71,10 +78,8 @@ export default function Agents() {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
-  const { user } = useAuth();
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -95,7 +100,6 @@ export default function Agents() {
   } = useForm<AgentFormData>({
     resolver: zodResolver(agentSchema),
     defaultValues: {
-      role: 'agent',
       status: 'active',
       service_ids: [],
     },
@@ -107,7 +111,6 @@ export default function Agents() {
     try {
       setLoading(prev => ({ ...prev, agents: true }));
       const { data } = await api.get('/api/admin/agents');
-      console.log('Agents data:', data);
       const list = Array.isArray(data)
         ? data
         : Array.isArray((data as any)?.data)
@@ -181,11 +184,10 @@ export default function Agents() {
         (agent.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
       
       const matchesStatus = statusFilter === 'all' || agent.status === statusFilter;
-      const matchesRole = roleFilter === 'all' || agent.role === roleFilter;
-      
-      return matchesSearch && matchesStatus && matchesRole;
+
+      return matchesSearch && matchesStatus;
     });
-  }, [agents, searchTerm, statusFilter, roleFilter]);
+  }, [agents, searchTerm, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAgents.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -214,8 +216,8 @@ export default function Agents() {
       name: agent.name,
       email: agent.email,
       phone: agent.phone || '',
-      role: agent.role as any,
       status: agent.status as any,
+      password: '',
       service_ids: agent.services?.map(s => s.id) || [],
     });
     setIsEditModalOpen(true);
@@ -225,14 +227,15 @@ export default function Agents() {
     setLoading(prev => ({ ...prev, submitting: true }));
     
     try {
+      const payload: any = { ...data };
+      if (!data.password) {
+        // Modification : mot de passe inchangé ; création : généré par le serveur
+        delete payload.password;
+      }
       if (currentAgent) {
-        await api.put(`/api/admin/agents/${currentAgent.id}`, data);
+        await api.put(`/api/admin/agents/${currentAgent.id}`, payload);
         toast.success('Agent mis à jour avec succès');
       } else {
-        const payload: any = { ...data };
-        if (!data.password) {
-          payload.password = null;
-        }
         const resp = await api.post('/api/admin/agents', payload);
         if (resp?.data?.temporary_password) {
           setCreatedAgentCredentials({
@@ -267,6 +270,8 @@ export default function Agents() {
     try {
       await api.delete(`/api/admin/agents/${agentId}`);
       toast.success('Agent supprimé avec succès');
+      setIsEditModalOpen(false);
+      setCurrentAgent(null);
       await fetchAgents();
     } catch (error) {
       console.error('Erreur lors de la suppression de l\'agent:', error);
@@ -287,40 +292,25 @@ export default function Agents() {
     }
   };
 
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 ring-1 ring-inset ring-blue-200 dark:ring-blue-800/30">Administrateur</span>;
-      case 'supervisor':
-        return <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-200 ring-1 ring-inset ring-purple-200 dark:ring-purple-800/30">Superviseur</span>;
-      case 'agent':
-      default:
-        return <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-200 ring-1 ring-inset ring-gray-200 dark:ring-gray-800/30">Agent</span>;
-    }
-  };
-
-  const getActivityDot = (lastLogin: string | null | undefined) => {
-    if (!lastLogin) return <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" title="Jamais connecté" />;
-    const now = Date.now();
-    const loginTime = new Date(lastLogin).getTime();
-    const hoursDiff = (now - loginTime) / (1000 * 60 * 60);
+  const getActivityDot = (agent: Agent) => {
+    const lastActivity = Math.max(toTime(agent.last_seen_at) || 0, toTime(agent.last_login_at) || 0);
+    if (!lastActivity) return <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" title="Jamais connecté" />;
+    const hoursDiff = (Date.now() - lastActivity) / (1000 * 60 * 60);
     if (hoursDiff <= 24) return <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" title="Actif récemment" />;
     if (hoursDiff <= 168) return <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" title="Actif cette semaine" />;
     return <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" title="Inactif depuis longtemps" />;
   };
 
-  const isOnline = (lastLogin: string | null | undefined) => {
-    if (!lastLogin) return false;
-    const now = Date.now();
-    const loginTime = new Date(lastLogin).getTime();
-    return (now - loginTime) < (1000 * 60 * 60);
+  // Actif = au moins un appel API dans les 15 dernières minutes
+  const isOnline = (agent: Agent) => {
+    const seen = toTime(agent.last_seen_at);
+    return Number.isFinite(seen) && Date.now() - seen < 15 * 60 * 1000;
   };
 
   const countByStatus = (status: string) => filteredAgents.filter(a => a.status === status).length;
-  const countByRole = (role: string) => filteredAgents.filter(a => a.role === role).length;
   const actifCount = countByStatus('active');
-  const enLigneCount = filteredAgents.filter(a => isOnline(a.last_login)).length;
-  const displayAdminCount = countByRole('admin') + (user?.role === 'admin' ? 1 : 0);
+  const enLigneCount = filteredAgents.filter(isOnline).length;
+  const closedCount = filteredAgents.reduce((sum, a) => sum + Number(a.tickets_closed_30d ?? 0), 0);
 
   const statusChartData = [
     { name: 'Actifs', value: countByStatus('active'), color: '#22c55e' },
@@ -333,10 +323,8 @@ export default function Agents() {
       name: '',
       email: '',
       phone: '',
-      role: 'agent',
       status: 'active',
       password: '',
-      confirmPassword: '',
       service_ids: []
     });
     setCurrentAgent(null);
@@ -347,14 +335,15 @@ export default function Agents() {
     toast.success('Préparation de l\'export...');
 
     try {
-      const headers = ['Nom', 'Email', 'Téléphone', 'Rôle', 'Statut', 'Services'];
+      const headers = ['Nom', 'Email', 'Téléphone', 'Statut', 'Services', 'Tickets clôturés (30 j)', 'Dernière connexion'];
       const rows = filteredAgents.map(agent => [
         agent.name,
         agent.email,
         agent.phone || '',
-        agent.role,
         agent.status,
         (agent.services || []).map(s => s.name).join('; '),
+        String(agent.tickets_closed_30d ?? 0),
+        agent.last_login_at || '',
       ]);
 
       const csvContent = [
@@ -410,16 +399,7 @@ export default function Agents() {
                     <SelectItem value="all">Tous les statuts</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select disabled>
-                  <SelectTrigger>
-                    <User className="mr-2 h-4 w-4" />
-                    <span className="mr-2">Rôle:</span>
-                    <SelectValue placeholder="Tous les rôles" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tous les rôles</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div />
                 <div className="flex items-center justify-end" />
               </div>
             </div>
@@ -431,7 +411,6 @@ export default function Agents() {
                   <TableRow>
                     <TableHead className="w-[50px]"><span className="sr-only">Photo</span></TableHead>
                     <TableHead>Nom</TableHead>
-                    <TableHead>Rôle</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead>Services</TableHead>
                     <TableHead>Dernière connexion</TableHead>
@@ -441,7 +420,7 @@ export default function Agents() {
                 <TableBody>
                   {Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: 6 }).map((_, j) => (
                         <TableCell key={j}>
                           <div className="h-4 bg-muted rounded animate-pulse" style={{ width: j === 0 ? 32 : j === 1 ? 160 : j === 6 ? 80 : 100 }} />
                         </TableCell>
@@ -494,12 +473,13 @@ export default function Agents() {
               title="En ligne"
               value={enLigneCount}
               icon={Activity}
-              description="Connectés dans la dernière heure"
+              description="Activité dans les 15 dernières minutes"
             />
             <AnalyticsCard
-              title="Répartition rôles"
-              value={`${countByRole('agent')} agent${countByRole('agent') > 1 ? 's' : ''} · ${countByRole('supervisor')} superviseur${countByRole('supervisor') > 1 ? 's' : ''}${displayAdminCount > 0 ? ` · ${displayAdminCount} admin${displayAdminCount > 1 ? 's' : ''}` : ''}`}
-              icon={UserCog}
+              title="Tickets clôturés"
+              value={closedCount}
+              icon={CheckCircle}
+              description="Par les agents affichés, sur 30 jours"
             />
           </div>
           <Card className="shadow-lg">
@@ -551,20 +531,8 @@ export default function Agents() {
                 </SelectContent>
               </Select>
               
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger>
-                  <User className="mr-2 h-4 w-4" />
-                  <span className="mr-2">Rôle:</span>
-                  <SelectValue placeholder="Tous les rôles" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les rôles</SelectItem>
-                  <SelectItem value="admin">Administrateur</SelectItem>
-                  <SelectItem value="supervisor">Superviseur</SelectItem>
-                  <SelectItem value="agent">Agent</SelectItem>
-                </SelectContent>
-              </Select>
-              
+              <div className="hidden md:block" />
+
               <div className="flex items-center justify-end">
                 <Button variant="outline" size="sm" onClick={exportCSV} disabled={loading.exporting || filteredAgents.length === 0}>
                   {loading.exporting ? (
@@ -588,11 +556,10 @@ export default function Agents() {
                     <span className="sr-only">Photo</span>
                   </TableHead>
                   <TableHead>Nom</TableHead>
-                  <TableHead>Rôle</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead>Services</TableHead>
                   <TableHead>Dernière connexion</TableHead>
-                  <TableHead>Tickets traités</TableHead>
+                  <TableHead>Tickets clôturés (30 j)</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -624,7 +591,6 @@ export default function Agents() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell>{getRoleBadge(agent.role)}</TableCell>
                       <TableCell>{getStatusBadge(agent.status)}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
@@ -655,17 +621,17 @@ export default function Agents() {
                         <div className="flex items-center gap-2">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span>{getActivityDot(agent.last_login)}</span>
+                              <span>{getActivityDot(agent)}</span>
                             </TooltipTrigger>
                             <TooltipContent>
-                              {agent.last_login
-                                ? `Dernière connexion: ${format(new Date(agent.last_login), 'PPpp', { locale: fr })}`
-                                : 'Jamais connecté'}
+                              {Number.isFinite(toTime(agent.last_seen_at))
+                                ? `Dernière activité : ${format(toTime(agent.last_seen_at), 'PPpp', { locale: fr })}`
+                                : 'Aucune activité enregistrée'}
                             </TooltipContent>
                           </Tooltip>
-                          {agent.last_login ? (
+                          {Number.isFinite(toTime(agent.last_login_at)) ? (
                             <div className="text-sm text-muted-foreground">
-                              {format(new Date(agent.last_login), 'PPpp', { locale: fr })}
+                              {format(toTime(agent.last_login_at), 'PPpp', { locale: fr })}
                             </div>
                           ) : (
                             <span className="text-sm text-muted-foreground">Jamais connecté</span>
@@ -673,9 +639,7 @@ export default function Agents() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">—</span>
-                        </div>
+                        <span className="font-mono text-sm">{agent.tickets_closed_30d ?? 0}</span>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end space-x-2">
@@ -712,7 +676,7 @@ export default function Agents() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
+                    <TableCell colSpan={7} className="h-24 text-center">
                       Aucun agent trouvé
                     </TableCell>
                   </TableRow>
@@ -802,31 +766,14 @@ export default function Agents() {
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="+33 6 12 34 56 78"
+                      placeholder="+229 01 00 00 00 00"
                       className="pl-10"
                       {...register('phone')}
                     />
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Rôle</Label>
-                    <Select
-                      value={watch('role')}
-                      onValueChange={(value) => setValue('role', value as any)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sélectionner un rôle" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="agent">Agent</SelectItem>
-                        <SelectItem value="supervisor">Superviseur</SelectItem>
-                        <SelectItem value="admin">Administrateur</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
+                <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="status">Statut</Label>
                     <Select
@@ -867,7 +814,7 @@ export default function Agents() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Mot de passe temporaire</Label>
+                  <Label htmlFor="password">Mot de passe (optionnel)</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -878,8 +825,9 @@ export default function Agents() {
                       {...register('password')}
                     />
                   </div>
+                  {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
                   <p className="text-xs text-muted-foreground">
-                    L'agent devra changer ce mot de passe lors de sa première connexion.
+                    Laissez vide pour générer un mot de passe temporaire, affiché une seule fois après la création.
                   </p>
                 </div>
               </div>
@@ -962,31 +910,14 @@ export default function Agents() {
                     <Input
                       id="edit-phone"
                       type="tel"
-                      placeholder="+33 6 12 34 56 78"
+                      placeholder="+229 01 00 00 00 00"
                       className="pl-10"
                       {...register('phone')}
                     />
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-role">Rôle</Label>
-                    <Select
-                      value={watch('role')}
-                      onValueChange={(value) => setValue('role', value as any)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sélectionner un rôle" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="agent">Agent</SelectItem>
-                        <SelectItem value="supervisor">Superviseur</SelectItem>
-                        <SelectItem value="admin">Administrateur</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
+                <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-status">Statut</Label>
                     <Select
@@ -1038,8 +969,9 @@ export default function Agents() {
                       {...register('password')}
                     />
                   </div>
+                  {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
                   <p className="text-xs text-muted-foreground">
-                    Laissez vide pour ne pas modifier le mot de passe.
+                    Laissez vide pour ne pas modifier le mot de passe. Un compte passé « Inactif » est déconnecté immédiatement.
                   </p>
                 </div>
 

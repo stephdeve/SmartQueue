@@ -61,7 +61,7 @@ class DashboardController extends Controller
         }
 
         $today = Carbon::today();
-        $now = Carbon::now();
+        $noShow = Ticket::noShowSql('');
 
         // Statistiques du jour
         $todayStats = DB::table('tickets')
@@ -74,7 +74,7 @@ class DashboardController extends Controller
                 SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present,
                 SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed,
                 SUM(CASE WHEN status = 'waiting' THEN 1 ELSE 0 END) as waiting,
-                SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent
+                SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as absent
             ")
             ->first();
 
@@ -245,43 +245,52 @@ class DashboardController extends Controller
     }
 
     /**
-     * Performance de l'agent sur les 7 derniers jours.
+     * Performance sur les N derniers jours (?days=7 par défaut, 1 à 90).
      */
     public function performance(Request $request)
     {
         $user = $request->user();
         $assignedServiceIds = $this->managedServiceIds($user);
+        $days = max(1, min(90, (int) $request->query('days', 7)));
 
         if ($assignedServiceIds->isEmpty()) {
             return response()->json([
+                'days' => $days,
                 'daily' => [],
+                'total' => 0,
+                'total_called' => 0,
                 'total_closed' => 0,
                 'total_absent' => 0,
                 'avg_service_time' => null,
             ]);
         }
 
-        // Performance quotidienne sur 7 jours
+        $since = Carbon::today()->subDays($days - 1);
+        $noShow = Ticket::noShowSql('');
+
+        // Performance quotidienne
         $dailyStats = DB::table('tickets')
             ->whereIn('service_id', $assignedServiceIds)
-            ->where('created_at', '>=', Carbon::now()->subDays(7))
+            ->where('created_at', '>=', $since)
             ->selectRaw("
                 DATE(created_at) as date,
                 COUNT(*) as total,
                 SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed,
-                SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent
+                SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as absent
             ")
             ->groupBy('date')
             ->orderBy('date')
             ->get();
 
-        // Totals
+        // Totaux de la période
         $totals = DB::table('tickets')
             ->whereIn('service_id', $assignedServiceIds)
-            ->where('created_at', '>=', Carbon::now()->subDays(7))
+            ->where('created_at', '>=', $since)
             ->selectRaw("
+                COUNT(*) as total,
+                SUM(CASE WHEN called_at IS NOT NULL THEN 1 ELSE 0 END) as total_called,
                 SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as total_closed,
-                SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as total_absent
+                SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as total_absent
             ")
             ->first();
 
@@ -290,19 +299,22 @@ class DashboardController extends Controller
             ->whereIn('service_id', $assignedServiceIds)
             ->whereNotNull('called_at')
             ->whereNotNull('closed_at')
-            ->where('closed_at', '>=', Carbon::now()->subDays(7))
+            ->where('closed_at', '>=', $since)
             ->selectRaw('AVG('.$this->minutesBetween('called_at', 'closed_at').') as avg_time')
             ->value('avg_time');
 
         return response()->json([
+            'days' => $days,
             'daily' => $dailyStats->map(function ($d) {
                 return [
-                    'date' => $d->date,
+                    'date' => (string) $d->date,
                     'total' => (int) $d->total,
                     'closed' => (int) $d->closed,
                     'absent' => (int) $d->absent,
                 ];
             }),
+            'total' => (int) ($totals->total ?? 0),
+            'total_called' => (int) ($totals->total_called ?? 0),
             'total_closed' => (int) ($totals->total_closed ?? 0),
             'total_absent' => (int) ($totals->total_absent ?? 0),
             'avg_service_time' => $avgServiceTime ? (int) round($avgServiceTime) : null,

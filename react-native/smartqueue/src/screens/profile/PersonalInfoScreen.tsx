@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,8 +24,11 @@ export const PersonalInfoScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const isDark = !!colors.dark?.background;
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, logout } = useAuth();
   const { AlertComponent, showError, showSuccess } = useCustomAlert();
+  const [deleteVisible, setDeleteVisible] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -52,6 +57,27 @@ export const PersonalInfoScreen: React.FC = () => {
       showError('Erreur', errorMsg);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Suppression définitive (DELETE /me) : exigée par l'App Store et le Play Store
+  // pour toute application permettant de créer un compte.
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true);
+    try {
+      await usersApi.deleteAccount(deletePassword);
+      setDeleteVisible(false);
+      await logout();
+      router.replace('/login');
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const message =
+        status === 422
+          ? 'Mot de passe incorrect.'
+          : error?.response?.data?.message || 'Impossible de supprimer le compte. Réessayez plus tard.';
+      showError('Suppression impossible', message);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -87,9 +113,6 @@ export const PersonalInfoScreen: React.FC = () => {
             <View style={[styles.avatar, { backgroundColor: colors.surface }]}>
               <Text style={[styles.avatarText, { color: colors.primary }]}>{getInitials()}</Text>
             </View>
-            <TouchableOpacity style={[styles.cameraButton, { backgroundColor: colors.primary, borderColor: colors.surface }]} activeOpacity={0.8}>
-              <Ionicons name="camera" size={14} color="#FFF" />
-            </TouchableOpacity>
           </View>
           <Text style={styles.userName}>{user?.name || 'Utilisateur'}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
@@ -134,9 +157,6 @@ export const PersonalInfoScreen: React.FC = () => {
                 placeholderTextColor={colors.textTertiary}
               />
             </View>
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-            </View>
           </View>
 
           {/* Phone Field */}
@@ -150,7 +170,7 @@ export const PersonalInfoScreen: React.FC = () => {
                 style={[styles.fieldInput, { color: colors.textPrimary }, !isEditing && { color: colors.textSecondary }]}
                 value={phone}
                 onChangeText={setPhone}
-                placeholder="+33 6 12 34 56 78"
+                placeholder="+229 01 00 00 00 00"
                 placeholderTextColor={colors.textTertiary}
                 keyboardType="phone-pad"
                 editable={isEditing}
@@ -183,7 +203,10 @@ export const PersonalInfoScreen: React.FC = () => {
           <Text style={[styles.dangerTitle, { color: colors.textTertiary }]}>Zone de danger</Text>
           <TouchableOpacity 
             style={[styles.dangerButton, { backgroundColor: colors.danger + '10', borderColor: colors.danger + '20' }]}
-            onPress={() => showError('Supprimer mon compte', 'Cette action est irréversible. Contactez le support à support@smartqueue.com pour supprimer votre compte.', 'J\'ai compris')}
+            onPress={() => {
+              setDeletePassword('');
+              setDeleteVisible(true);
+            }}
             activeOpacity={0.8}
           >
             <Ionicons name="trash-outline" size={18} color={colors.danger} />
@@ -194,6 +217,50 @@ export const PersonalInfoScreen: React.FC = () => {
 
         {AlertComponent}
       </ScrollView>
+
+      <Modal visible={deleteVisible} transparent animationType="fade" onRequestClose={() => setDeleteVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Supprimer mon compte</Text>
+            <Text style={[styles.modalText, { color: colors.textSecondary }]}>
+              Votre compte et vos données personnelles seront supprimés définitivement. Vos tickets en cours seront annulés.
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { color: colors.textPrimary, borderColor: colors.border }]}
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              placeholder="Mot de passe"
+              placeholderTextColor={colors.textTertiary}
+              secureTextEntry
+              autoCapitalize="none"
+              editable={!isDeleting}
+            />
+            <Text style={[styles.modalHint, { color: colors.textTertiary }]}>
+              Compte créé avec Google : laissez ce champ vide.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { borderColor: colors.border }]}
+                onPress={() => setDeleteVisible(false)}
+                disabled={isDeleting}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.textPrimary }]}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: colors.danger, borderColor: colors.danger }]}
+                onPress={handleDeleteAccount}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: '#FFF' }]}>Supprimer</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -209,7 +276,6 @@ const styles = StyleSheet.create({
   avatarContainer: { position: 'relative', marginBottom: 12 },
   avatar: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4 },
   avatarText: { fontSize: 32, fontWeight: '700' },
-  cameraButton: { position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 2 },
   userName: { fontSize: 20, fontWeight: '700', color: '#FFF', marginBottom: 2 },
   userEmail: { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
   content: { flex: 1 },
@@ -220,7 +286,6 @@ const styles = StyleSheet.create({
   fieldContent: { flex: 1 },
   fieldLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   fieldInput: { fontSize: 15, fontWeight: '500', padding: 0, height: 22 },
-  verifiedBadge: { marginLeft: 8 },
   saveButton: { borderRadius: 14, overflow: 'hidden', marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
   saveButtonDisabled: { opacity: 0.7 },
   saveButtonGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, gap: 8 },
@@ -229,6 +294,15 @@ const styles = StyleSheet.create({
   dangerTitle: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginLeft: 4 },
   dangerButton: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, padding: 14, borderWidth: 1 },
   dangerButtonText: { flex: 1, fontSize: 14, fontWeight: '600', marginLeft: 10 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
+  modalCard: { borderRadius: 18, padding: 20 },
+  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  modalText: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  modalInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
+  modalHint: { fontSize: 12, marginTop: 6, marginBottom: 18 },
+  modalActions: { flexDirection: 'row', gap: 12 },
+  modalButton: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
+  modalButtonText: { fontSize: 15, fontWeight: '700' },
 });
 
 export default PersonalInfoScreen;

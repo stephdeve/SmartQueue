@@ -12,7 +12,30 @@ export default function SetupEstablishment() {
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Sans coordonnées, l'établissement n'apparaît pas dans la recherche « à proximité »
+  // de l'application mobile (elles restent modifiables dans Paramètres).
+  const locate = () => {
+    if (!navigator.geolocation) {
+      toast.error("La géolocalisation n'est pas disponible sur ce navigateur");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: Number(pos.coords.latitude.toFixed(7)), lng: Number(pos.coords.longitude.toFixed(7)) });
+        setLocating(false);
+      },
+      () => {
+        toast.error("Position refusée ou indisponible");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -34,7 +57,11 @@ export default function SetupEstablishment() {
     }
     setLoading(true);
     try {
-      await api.post("/api/admin/establishments", { name, address });
+      await api.post("/api/admin/establishments", {
+        name,
+        address: address || null,
+        ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
+      });
       await dispatch(refreshMe());
       toast.success("Établissement créé");
       navigate("/dashboard", { replace: true });
@@ -87,6 +114,25 @@ export default function SetupEstablishment() {
             value={address}
             onChange={(e) => setAddress(e.target.value)}
           />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-foreground">Position (recommandé)</label>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted transition-colors"
+              onClick={locate}
+              disabled={locating}
+            >
+              {locating ? "Localisation…" : "Utiliser ma position actuelle"}
+            </button>
+            <span className="text-sm text-muted-foreground">
+              {coords ? `${coords.lat}, ${coords.lng}` : "Non renseignée"}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Faites-le depuis l'établissement : les usagers le trouveront dans la recherche à proximité de l'application.
+          </p>
         </div>
 
         <div className="flex justify-end">

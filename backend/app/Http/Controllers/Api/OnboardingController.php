@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\OnboardingRegisterEstablishmentRequest;
 use App\Models\User;
+use App\Services\SubscriptionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -48,9 +49,14 @@ class OnboardingController extends Controller
     }
 
     /**
-     * Mock paiement: active l'abonnement de l'établissement de l'admin connecté.
+     * Demande d'abonnement d'un établissement.
+     *
+     * Aucun paiement n'est encaissé en ligne : la demande ouvre une période d'essai
+     * (config plans.trial_days) et l'équipe SmartQueue active l'abonnement depuis le
+     * back-office SaaS après règlement. Un éventuel champ "paid" envoyé par un ancien
+     * client est ignoré : il ne doit plus permettre de s'auto-déclarer payé.
      */
-    public function subscribe(Request $request)
+    public function subscribe(Request $request, SubscriptionService $subscriptions)
     {
         $user = $request->user();
         if (!$user) {
@@ -61,24 +67,25 @@ class OnboardingController extends Controller
         }
 
         $data = $request->validate([
-            'plan' => ['required','string','max:32'],
-            'paid' => ['required','boolean'],
+            'plan' => ['required', 'string', 'max:32', function ($attribute, $value, $fail) {
+                if (!SubscriptionService::normalizePlan($value)) {
+                    $fail('Offre inconnue.');
+                }
+            }],
+            'billing_cycle' => ['sometimes', 'in:month,year'],
         ]);
 
-        if (!$data['paid']) {
-            abort(422, 'Payment required');
-        }
+        $pending = [
+            'status' => 'trial',
+            'plan' => SubscriptionService::normalizePlan($data['plan']),
+            'billing_cycle' => $data['billing_cycle'] ?? 'month',
+            'requested_at' => now()->toISOString(),
+            'source' => 'onboarding',
+        ];
 
-        $user->forceFill([
-            'pending_subscription' => [
-                'status' => 'active',
-                'plan' => $data['plan'],
-                'paid_at' => now()->toISOString(),
-                'source' => 'onboarding',
-            ],
-        ])->save();
+        $user->forceFill(['pending_subscription' => $pending])->save();
 
-        // Promote newly subscribed user to admin (scoped admin must create establishment next)
+        // Un usager qui souscrit devient l'administrateur de son futur établissement
         if ($user->role === 'user') {
             $user->forceFill([
                 'role' => 'admin',
@@ -86,26 +93,14 @@ class OnboardingController extends Controller
             ])->save();
         }
 
-        // Admin déjà rattaché à un établissement (inscription avec établissement) :
-        // l'abonnement est matérialisé immédiatement, sinon il ne l'était jamais
-        // (seule la création d'établissement le faisait).
+        // Admin déjà rattaché à un établissement : la demande est enregistrée tout de suite
+        $subscription = null;
         if ($user->role === 'admin' && !empty($user->establishment_id)) {
-            $sub = \App\Models\Subscription::query()->firstOrNew([
-                'establishment_id' => (int) $user->establishment_id,
-            ]);
-            $sub->fill([
-                'plan' => $data['plan'],
-                'status' => 'active',
-                'current_period_start' => now(),
-                'current_period_end' => now()->addMonth(),
-                'canceled_at' => null,
-                'meta' => $user->pending_subscription,
-            ])->save();
-
-            $user->forceFill(['pending_subscription' => null])->save();
+            $subscription = $subscriptions->materializePending($user, (int) $user->establishment_id);
         }
 
         return response()->json([
+            'subscription' => SubscriptionService::present($subscription),
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -152,8 +147,11 @@ class OnboardingController extends Controller
             'email' => $user->email,
             'phone' => $user->phone,
             'role' => $user->role,
+            'status' => $user->status ?? 'active',
+            'avatar' => $user->avatar,
             'establishment_id' => $user->establishment_id,
             'pending_subscription' => $user->pending_subscription,
+            'created_at' => $user->created_at?->toIso8601String(),
             'services' => $services,
             'counters' => $counters,
         ]);

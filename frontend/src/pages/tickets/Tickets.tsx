@@ -98,6 +98,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
+import { useSearchParams } from 'react-router-dom'
 
 type TicketData = {
   id: number
@@ -305,6 +306,20 @@ export default function TicketsPage() {
   // Determine API endpoint
   const apiEndpoint = role === 'agent' ? '/api/agent/tickets' : '/api/admin/tickets'
   const servicesEndpoint = role === 'agent' ? '/api/agent/services' : '/api/admin/tickets/services'
+
+  // Lien direct vers un ticket (dashboard, recherche) : /dashboard/tickets?ticket=ID
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const id = Number(searchParams.get('ticket'))
+    if (!Number.isInteger(id) || id <= 0) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('ticket')
+    setSearchParams(next, { replace: true })
+    api.get(`${apiEndpoint}/${id}`)
+      .then(({ data }) => setSelectedTicket(data as TicketData))
+      .catch(() => toast.error('Ticket introuvable ou inaccessible'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, apiEndpoint])
 
   // Filtrer et trier les tickets
   const filteredAndSortedTickets = useMemo(() => {
@@ -1473,7 +1488,7 @@ export default function TicketsPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium block mb-1.5">Téléphone</label>
-                    <Input placeholder="+33 6 00 00 00 00" value={createForm.customer_phone} onChange={(e) => setCreateForm(f => ({ ...f, customer_phone: e.target.value }))} />
+                    <Input placeholder="+229 01 00 00 00 00" value={createForm.customer_phone} onChange={(e) => setCreateForm(f => ({ ...f, customer_phone: e.target.value }))} />
                   </div>
                   <div>
                     <p className="text-sm font-medium mb-2">Attributs spéciaux</p>

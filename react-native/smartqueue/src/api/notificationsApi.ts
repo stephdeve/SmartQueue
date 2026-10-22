@@ -79,11 +79,6 @@ export const notificationsApi = {
     await axiosClient.delete(`/notifications/${notificationId}`);
   },
 
-  // Supprimer toutes les notifications lues
-  deleteReadNotifications: async (): Promise<void> => {
-    await axiosClient.delete("/notifications/read");
-  },
-
   // Obtenir le nombre de notifications non lues
   getUnreadCount: async (): Promise<{ count: number }> => {
     const response = await axiosClient.get("/notifications/unread-count");
@@ -119,11 +114,6 @@ export const notificationsApi = {
     });
   },
 
-  // Mettre à jour le token FCM d'un appareil
-  updateDeviceToken: async (deviceId: string, token: string): Promise<void> => {
-    await axiosClient.put(`/auth/devices/${deviceId}`, { token });
-  },
-
   // Activer/Désactiver les notifications push
   togglePushNotifications: async (enabled: boolean): Promise<void> => {
     await axiosClient.put("/notification-preferences", {
@@ -151,60 +141,6 @@ export const notificationsApi = {
     });
   },
 
-  // Envoyer une notification de test (pour le développement)
-  sendTestNotification: async (
-    type: "push" | "sms" | "email",
-  ): Promise<void> => {
-    await axiosClient.post("/notifications/test", { type });
-  },
-
-  // Obtenir l'historique des notifications envoyées
-  getNotificationHistory: async (
-    params: {
-      from?: string;
-      to?: string;
-      type?: string;
-      page?: number;
-    } = {},
-  ): Promise<NotificationListResponse> => {
-    const response = await axiosClient.get("/notifications/history", {
-      params,
-    });
-    return response.data;
-  },
-
-  // Bloquer les notifications d'un établissement
-  blockEstablishmentNotifications: async (
-    establishmentId: number,
-  ): Promise<void> => {
-    await axiosClient.post("/notifications/block-establishment", {
-      establishment_id: establishmentId,
-    });
-  },
-
-  // Débloquer les notifications d'un établissement
-  unblockEstablishmentNotifications: async (
-    establishmentId: number,
-  ): Promise<void> => {
-    await axiosClient.delete(
-      `/notifications/block-establishment/${establishmentId}`,
-    );
-  },
-
-  // Obtenir la liste des établissements bloqués
-  getBlockedEstablishments: async (): Promise<number[]> => {
-    const response = await axiosClient.get(
-      "/notifications/blocked-establishments",
-    );
-    return response.data;
-  },
-
-  // Signaler une notification comme non pertinente
-  reportIrrelevantNotification: async (
-    notificationId: string,
-  ): Promise<void> => {
-    await axiosClient.post(`/notifications/${notificationId}/report`);
-  },
 };
 
 export default notificationsApi;

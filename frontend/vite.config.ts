@@ -27,10 +27,15 @@ export default defineConfig(({ mode }) => {
         '/storage': { target: API, changeOrigin: true }
       }
     },
-    resolve: { 
-      alias: { 
+    resolve: {
+      alias: {
         '@': path.resolve(__dirname, './src')
-      } 
-    }
+      }
+    },
+    // En production, les traces de débogage (données utilisateur, réponses API) ne
+    // doivent pas finir dans la console des navigateurs ; console.error/warn restent.
+    esbuild: mode === 'production'
+      ? { pure: ['console.log', 'console.debug', 'console.info'], drop: ['debugger'] }
+      : undefined,
   }
 })

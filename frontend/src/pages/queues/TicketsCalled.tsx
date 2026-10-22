@@ -124,6 +124,17 @@ const TicketsCalled: React.FC = () => {
   }, []);
 
   // Gestion de la connexion WebSocket
+  // Secours sans temps réel (Reverb indisponible ou non configuré) : rechargement périodique
+  useEffect(() => {
+    const numericId = Number(serviceId);
+    if (isConnected || !Number.isFinite(numericId) || numericId <= 0) return;
+    const id = setInterval(() => {
+      loadCalledTickets(numericId);
+    }, 15000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceId, isConnected]);
+
   useEffect(() => {
     const numericId = Number(serviceId);
     if (!Number.isFinite(numericId) || numericId <= 0) {
@@ -209,7 +220,7 @@ const TicketsCalled: React.FC = () => {
       // `channel` (state) vaut encore null dans cette closure : quitter par nom,
       // sinon chaque changement de service empilait un abonnement supplémentaire.
       try {
-        getEcho().leave(`service.${numericId}`);
+        getEcho()?.leave(`service.${numericId}`);
       } catch (_) { }
       setChannel(null);
       setIsConnected(false);

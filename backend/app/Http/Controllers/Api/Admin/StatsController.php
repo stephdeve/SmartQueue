@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Service;
+use App\Models\Ticket;
 use App\Models\User;
 
 class StatsController extends Controller
@@ -32,7 +33,11 @@ class StatsController extends Controller
             $to = $to->endOfDay();
         }
 
-        return [$from, $to];
+        // Le web envoie des dates ISO en UTC ("…Z") : sans conversion, la borne serait
+        // comparée telle quelle aux horodatages stockés dans le fuseau de l'application.
+        $tz = (string) config('app.timezone', 'UTC');
+
+        return [$from->setTimezone($tz), $to->setTimezone($tz)];
     }
 
     /**
@@ -43,6 +48,7 @@ class StatsController extends Controller
         [$from, $to] = $this->parseRange($request, 7);
 
         $scopedId = $request->attributes->get('scoped_establishment_id');
+        $noShow = Ticket::noShowSql();
 
         // Base query for tickets with establishment filter
         $ticketQuery = function () use ($scopedId, $from, $to) {
@@ -61,7 +67,7 @@ class StatsController extends Controller
         $totals = $ticketQuery()
             ->selectRaw("COUNT(*) as created,
                 SUM(CASE WHEN tickets.status='closed' THEN 1 ELSE 0 END) as closed,
-                SUM(CASE WHEN tickets.status='absent' THEN 1 ELSE 0 END) as absent")
+                SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as absent")
             ->first();
 
         // Temps d'attente moyen (diff called_at - created_at) en minutes
@@ -95,6 +101,8 @@ class StatsController extends Controller
                 ->join('services', 'services.id', '=', 'tickets.service_id')
                 ->where('services.establishment_id', (int) $scopedId)
                 ->where('tickets.status', 'waiting')
+                // File du jour : les tickets reportés à une date future ne sont pas « en attente »
+                ->whereDate('tickets.valid_date', now()->toDateString())
                 ->count());
 
             $avgServiceTime = (int) round(Service::query()
@@ -134,11 +142,12 @@ class StatsController extends Controller
             ->findOrFail($serviceId);
 
         [$from, $to] = $this->parseRange($request, 7);
+        $noShow = Ticket::noShowSql('');
 
         $totals = DB::table('tickets')
             ->selectRaw("COUNT(*) as created,
                 SUM(CASE WHEN status='closed' THEN 1 ELSE 0 END) as closed,
-                SUM(CASE WHEN status='absent' THEN 1 ELSE 0 END) as absent")
+                SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as absent")
             ->where('service_id', $serviceId)
             ->whereBetween('created_at', [$from, $to])
             ->first();
@@ -160,6 +169,21 @@ class StatsController extends Controller
         }
         $serviceAvg = $n > 0 ? (int) round($sum / $n) : (int) $service->avg_service_time_minutes;
 
+        // Temps d'attente moyen (création → appel) sur la période
+        $waitRows = DB::table('tickets')
+            ->where('service_id', $serviceId)
+            ->whereNotNull('called_at')
+            ->whereBetween('created_at', [$from, $to])
+            ->select(['created_at', 'called_at'])
+            ->limit(2000)
+            ->get();
+        $wSum = 0; $wN = 0;
+        foreach ($waitRows as $r) {
+            $created = \Illuminate\Support\Carbon::parse($r->created_at);
+            $called = \Illuminate\Support\Carbon::parse($r->called_at);
+            if ($called->greaterThan($created)) { $wSum += $created->diffInMinutes($called); $wN++; }
+        }
+
         return response()->json([
             'service_id' => $serviceId,
             'from' => $from->toDateTimeString(),
@@ -169,6 +193,7 @@ class StatsController extends Controller
                 'closed' => (int) ($totals->closed ?? 0),
                 'absent' => (int) ($totals->absent ?? 0),
                 'service_time_avg_minutes' => $serviceAvg,
+                'wait_avg_minutes' => $wN > 0 ? (int) round($wSum / $wN) : null,
             ],
         ]);
     }
@@ -191,6 +216,7 @@ class StatsController extends Controller
         };
 
         $scopedId = $request->attributes->get('scoped_establishment_id');
+        $noShow = Ticket::noShowSql();
 
         $diffSec = (int) abs($from->diffInSeconds($to, false));
         $prevFrom = $from->copy()->subSeconds($diffSec);
@@ -205,8 +231,8 @@ class StatsController extends Controller
         $kRow = $base($from, $to)->selectRaw("
             COUNT(*) as total,
             SUM(CASE WHEN tickets.status = 'closed'  THEN 1 ELSE 0 END) as served,
-            SUM(CASE WHEN tickets.status = 'absent'  THEN 1 ELSE 0 END) as absent,
-            SUM(CASE WHEN tickets.status = 'expired' THEN 1 ELSE 0 END) as expired,
+            SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as absent,
+            SUM(CASE WHEN tickets.status = 'expired' AND COALESCE(tickets.absent_level, 0) = 0 THEN 1 ELSE 0 END) as expired,
             SUM(CASE WHEN tickets.status IN ('waiting','called','en_route','present') THEN 1 ELSE 0 END) as active_now,
             SUM(CASE WHEN tickets.auto_deferred THEN 1 ELSE 0 END) as deferred
         ")->first();
@@ -214,7 +240,7 @@ class StatsController extends Controller
         $pRow = $base($prevFrom, $prevTo)->selectRaw("
             COUNT(*) as total,
             SUM(CASE WHEN tickets.status = 'closed' THEN 1 ELSE 0 END) as served,
-            SUM(CASE WHEN tickets.status = 'absent' THEN 1 ELSE 0 END) as absent
+            SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as absent
         ")->first();
 
         $waitRows = $base($from, $to)->whereNotNull('tickets.called_at')
@@ -272,7 +298,7 @@ class StatsController extends Controller
             services.name as service_name,
             COUNT(*) as total,
             SUM(CASE WHEN tickets.status = 'closed'  THEN 1 ELSE 0 END) as served,
-            SUM(CASE WHEN tickets.status = 'absent'  THEN 1 ELSE 0 END) as absent,
+            SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as absent,
             SUM(CASE WHEN tickets.auto_deferred THEN 1 ELSE 0 END) as deferred,
             SUM(CASE WHEN tickets.priority = 'normal'  THEN 1 ELSE 0 END) as p_normal,
             SUM(CASE WHEN tickets.priority = 'high'    THEN 1 ELSE 0 END) as p_high,
@@ -321,7 +347,7 @@ class StatsController extends Controller
             COALESCE(tickets.priority, 'normal') as priority,
             COUNT(*) as total,
             SUM(CASE WHEN tickets.status = 'closed' THEN 1 ELSE 0 END) as served,
-            SUM(CASE WHEN tickets.status = 'absent' THEN 1 ELSE 0 END) as absent
+            SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as absent
         ")->groupByRaw("COALESCE(tickets.priority, 'normal')")->get();
 
         $prioWaitRaw = $base($from, $to)->whereNotNull('tickets.called_at')
@@ -358,7 +384,7 @@ class StatsController extends Controller
             COALESCE(tickets.source, 'app') as source,
             COUNT(*) as total,
             SUM(CASE WHEN tickets.status = 'closed' THEN 1 ELSE 0 END) as served,
-            SUM(CASE WHEN tickets.status = 'absent' THEN 1 ELSE 0 END) as absent
+            SUM(CASE WHEN {$noShow} THEN 1 ELSE 0 END) as absent
         ")->groupByRaw("COALESCE(tickets.source, 'app')")->get();
 
         $bySource = $srcAgg->map(function ($r) {
@@ -449,7 +475,7 @@ class StatsController extends Controller
      * Séries temporelles (jour ou heure).
      * Query params:
      * - from/to (ISO ou Y-m-d)
-     * - bucket = day|hour (default day)
+     * - bucket = day|week|hour (default day)
      * - service_id (optionnel)
      */
     public function series(Request $request)
@@ -460,24 +486,31 @@ class StatsController extends Controller
 
         $scopedId = $request->attributes->get('scoped_establishment_id');
 
-        if (!in_array($bucket, ['day', 'hour'], true)) {
+        if (!in_array($bucket, ['day', 'week', 'hour'], true)) {
             abort(422, 'Invalid bucket');
         }
 
         $driver = DB::connection()->getDriverName();
         if ($driver === 'pgsql') {
-            $expr = $bucket === 'hour'
-                ? "to_char(date_trunc('hour', tickets.created_at), 'YYYY-MM-DD HH24:00:00')"
-                : "to_char(date_trunc('day', tickets.created_at), 'YYYY-MM-DD')";
+            $expr = match ($bucket) {
+                'hour' => "to_char(date_trunc('hour', tickets.created_at), 'YYYY-MM-DD HH24:00:00')",
+                'week' => "to_char(date_trunc('week', tickets.created_at), 'YYYY-MM-DD')",
+                default => "to_char(date_trunc('day', tickets.created_at), 'YYYY-MM-DD')",
+            };
         } elseif ($driver === 'sqlite') {
-            $expr = $bucket === 'hour'
-                ? "strftime('%Y-%m-%d %H:00:00', tickets.created_at)"
-                : "date(tickets.created_at)";
+            $expr = match ($bucket) {
+                'hour' => "strftime('%Y-%m-%d %H:00:00', tickets.created_at)",
+                // Lundi de la semaine (ISO) : dimanche suivant - 6 jours
+                'week' => "date(tickets.created_at, 'weekday 0', '-6 days')",
+                default => "date(tickets.created_at)",
+            };
         } else {
             // mysql / mariadb
-            $expr = $bucket === 'hour'
-                ? "DATE_FORMAT(tickets.created_at, '%Y-%m-%d %H:00:00')"
-                : "DATE(tickets.created_at)";
+            $expr = match ($bucket) {
+                'hour' => "DATE_FORMAT(tickets.created_at, '%Y-%m-%d %H:00:00')",
+                'week' => "DATE(DATE_SUB(tickets.created_at, INTERVAL WEEKDAY(tickets.created_at) DAY))",
+                default => "DATE(tickets.created_at)",
+            };
         }
 
         $query = DB::table('tickets')
@@ -485,7 +518,7 @@ class StatsController extends Controller
             ->selectRaw($expr." as bucket")
             ->selectRaw("COUNT(*) as created")
             ->selectRaw("SUM(CASE WHEN tickets.status='closed' THEN 1 ELSE 0 END) as closed")
-            ->selectRaw("SUM(CASE WHEN tickets.status='absent' THEN 1 ELSE 0 END) as absent")
+            ->selectRaw('SUM(CASE WHEN '.Ticket::noShowSql().' THEN 1 ELSE 0 END) as absent')
             ->whereBetween('tickets.created_at', [$from, $to]);
 
         // Filter by establishment scope

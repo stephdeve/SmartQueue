@@ -49,7 +49,7 @@ class SmartQueueEngine
         // Hard reject: admin manually closed the service. Auto-defer would be
         // misleading because no schedule predicts the reopening.
         if ($service->status !== 'open') {
-            abort(422, 'Service is manually closed, please try again later');
+            abort(422, 'Ce service est fermé pour le moment. Réessayez plus tard.');
         }
 
         $reason = $this->availability->reasonClosedAt($service, $when);
@@ -168,7 +168,7 @@ class SmartQueueEngine
         };
         $next = $this->availability->nextOpeningFrom($service, $from);
         if (!$next) {
-            abort(422, 'No upcoming opening found for this service');
+            abort(422, "Aucune prochaine ouverture n'est prévue pour ce service.");
         }
         return [
             'mode' => 'deferred',

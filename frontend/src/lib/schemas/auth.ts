@@ -102,11 +102,7 @@ export const subscribeSchema = z.object({
     .string()
     .min(1, 'Le plan est requis')
     .max(32, 'Le plan ne doit pas dépasser 32 caractères'),
-  paid: z
-    .boolean()
-    .refine((val) => val === true, {
-      message: 'Le paiement est requis pour activer l\'abonnement',
-    }),
+  billing_cycle: z.enum(['month', 'year']).optional(),
 })
 
 // Types dérivés des schémas

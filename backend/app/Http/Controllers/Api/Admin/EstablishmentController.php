@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\EstablishmentResource;
 use App\Models\Establishment;
-use App\Models\Subscription;
+use App\Services\SubscriptionService;
 use Illuminate\Http\Request;
 
 class EstablishmentController extends Controller
@@ -34,7 +34,7 @@ class EstablishmentController extends Controller
 
         // If admin already has an establishment scope, do not allow creating another one
         if (!empty($user->establishment_id)) {
-            abort(403, 'Admin already has an establishment');
+            abort(403, 'Votre compte est déjà rattaché à un établissement.');
         }
 
         $data = $request->validate([
@@ -42,8 +42,8 @@ class EstablishmentController extends Controller
             'address' => ['nullable','string'],
             'lat' => ['nullable','numeric','between:-90,90'],
             'lng' => ['nullable','numeric','between:-180,180'],
-            'open_at' => ['nullable'],
-            'close_at' => ['nullable'],
+            'open_at' => ['nullable','date_format:H:i,H:i:s'],
+            'close_at' => ['nullable','date_format:H:i,H:i:s'],
             'is_active' => ['boolean'],
         ]);
         $est = Establishment::create($data);
@@ -51,29 +51,12 @@ class EstablishmentController extends Controller
         $user->establishment_id = $est->id;
         $user->save();
 
-        // Materialize subscription after establishment exists
-        if (is_array($user->pending_subscription) && !empty($user->pending_subscription)) {
-            $plan = (string) ($user->pending_subscription['plan'] ?? 'free');
-            $status = (string) ($user->pending_subscription['status'] ?? 'active');
-
-            $sub = Subscription::query()->firstOrNew([
-                'establishment_id' => (int) $est->id,
-            ]);
-            $sub->fill([
-                'plan' => $plan,
-                'status' => in_array($status, ['trial','active','past_due','canceled'], true) ? $status : 'active',
-                'current_period_start' => now(),
-                'current_period_end' => now()->addMonth(),
-                'canceled_at' => null,
-                'meta' => $user->pending_subscription,
-            ]);
-            $sub->save();
-
-            $user->forceFill(['pending_subscription' => null])->save();
-        }
+        // La demande d'abonnement faite avant la création de l'établissement y est rattachée
+        app(SubscriptionService::class)->materializePending($user, (int) $est->id);
 
         $request->attributes->set('scoped_establishment_id', (int) $est->id);
-        return new EstablishmentResource($est);
+        // refresh() : valeurs par défaut de la base (is_active…) absentes du modèle fraîchement créé
+        return new EstablishmentResource($est->refresh());
     }
 
     /** Détail. */
@@ -100,8 +83,8 @@ class EstablishmentController extends Controller
             'lng' => ['sometimes','nullable','numeric','between:-180,180'],
             'latitude' => ['sometimes','nullable','numeric','between:-90,90'],
             'longitude' => ['sometimes','nullable','numeric','between:-180,180'],
-            'open_at' => ['sometimes','nullable'],
-            'close_at' => ['sometimes','nullable'],
+            'open_at' => ['sometimes','nullable','date_format:H:i,H:i:s'],
+            'close_at' => ['sometimes','nullable','date_format:H:i,H:i:s'],
             'is_active' => ['sometimes','boolean'],
         ]);
 

@@ -24,12 +24,23 @@ function readToken(): string | null {
     : null;
 }
 
+// Configuration absente ou invalide : le temps réel est désactivé (les pages
+// rechargent leurs données via l'API) au lieu de faire planter l'écran.
+let echoUnavailable = false;
+
+/** Instance Echo, ou null si le temps réel n'est pas configuré. */
 export function getEcho(): any {
   const token = readToken();
   authHeaders.Authorization = token ? `Bearer ${token}` : "";
   if (echoInstance) return echoInstance;
+  if (echoUnavailable) return null;
   const key =
     import.meta.env.VITE_REVERB_APP_KEY || import.meta.env.VITE_PUSHER_KEY;
+  if (!key) {
+    console.warn("[Echo] VITE_REVERB_APP_KEY absente : temps réel désactivé");
+    echoUnavailable = true;
+    return null;
+  }
   const host =
     import.meta.env.VITE_REVERB_HOST ||
     import.meta.env.VITE_PUSHER_HOST ||
@@ -46,25 +57,31 @@ export function getEcho(): any {
     scheme === "https" || import.meta.env.VITE_REVERB_SCHEME === "https";
 
   (window as any).Pusher = Pusher;
-  echoInstance = new Echo({
-    broadcaster: "pusher", // Reverb parle le protocole Pusher
-    key,
-    cluster:
-      import.meta.env.VITE_REVERB_CLUSTER ||
-      import.meta.env.VITE_PUSHER_CLUSTER,
-    wsHost: host,
-    // Ne pas passer le port quand c'est le port par défaut (80 pour ws, 443 pour wss)
-    // pusher-js ajoute "/:PORT/" dans le chemin URL quand le port est explicitément défini
-    // Ex: wssPort=443 -> wss://host/:443/app/key  (incorrect)
-    // Solution: passer undefined pour les ports standard -> wss://host/app/key  (correct)
-    wsPort: !forceTLS && port !== 80 ? port : undefined,
-    wssPort: forceTLS && port !== 443 ? port : undefined,
-    forceTLS,
-    disableStats: true,
-    enabledTransports: ["ws", "wss"],
-    authEndpoint: `${import.meta.env.VITE_API_BASE_URL || ""}/api/broadcasting/auth`,
-    auth: { headers: authHeaders },
-  });
+  try {
+    echoInstance = new Echo({
+      broadcaster: "pusher", // Reverb parle le protocole Pusher
+      key,
+      cluster:
+        import.meta.env.VITE_REVERB_CLUSTER ||
+        import.meta.env.VITE_PUSHER_CLUSTER,
+      wsHost: host,
+      // Ne pas passer le port quand c'est le port par défaut (80 pour ws, 443 pour wss)
+      // pusher-js ajoute "/:PORT/" dans le chemin URL quand le port est explicitément défini
+      // Ex: wssPort=443 -> wss://host/:443/app/key  (incorrect)
+      // Solution: passer undefined pour les ports standard -> wss://host/app/key  (correct)
+      wsPort: !forceTLS && port !== 80 ? port : undefined,
+      wssPort: forceTLS && port !== 443 ? port : undefined,
+      forceTLS,
+      disableStats: true,
+      enabledTransports: ["ws", "wss"],
+      authEndpoint: `${import.meta.env.VITE_API_BASE_URL || ""}/api/broadcasting/auth`,
+      auth: { headers: authHeaders },
+    });
+  } catch (error) {
+    console.error("[Echo] Initialisation impossible, temps réel désactivé :", error);
+    echoUnavailable = true;
+    echoInstance = null;
+  }
   return echoInstance;
 }
 

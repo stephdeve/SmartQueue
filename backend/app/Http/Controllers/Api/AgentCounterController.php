@@ -20,7 +20,7 @@ class AgentCounterController extends Controller
             && $counter->current_agent_id !== null
             && (int) $counter->current_agent_id !== (int) $request->user()->id
             && $request->user()->role === 'agent') {
-            abort(409, 'Counter already opened by another agent');
+            abort(409, 'Ce guichet est déjà ouvert par un autre agent.');
         }
 
         $counter->status = 'open';
@@ -44,7 +44,7 @@ class AgentCounterController extends Controller
         $this->assertSameEstablishment($counter, $request);
 
         if ($request->user()->role === 'agent' && (int) $counter->current_agent_id !== (int) $request->user()->id) {
-            abort(403, 'You are not assigned to this counter');
+            abort(403, "Vous n'êtes pas affecté à ce guichet.");
         }
 
         $counter->status = 'closed';

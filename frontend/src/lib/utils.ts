@@ -56,3 +56,40 @@ export function isEmpty(value: any): boolean {
   if (typeof value === 'object' && Object.keys(value).length === 0) return true;
   return false;
 }
+
+/**
+ * Date locale au format AAAA-MM-JJ (toISOString() donnerait la date UTC :
+ * la veille entre minuit et 1 h au Bénin).
+ */
+export function localDateString(date: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
+ * Lit une date renvoyée par l'API ("2026-10-20 10:00:00" ou ISO 8601).
+ * Safari refuse le format avec espace : il est converti en ISO.
+ */
+export function parseApiDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const d = new Date(/^\d{4}-\d{2}-\d{2} \d/.test(value) ? value.replace(' ', 'T') : value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Variation en % entre deux valeurs (null si la période de référence est vide). */
+export function percentChange(current: number, previous: number): number | null {
+  if (!previous) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+/** Déclenche le téléchargement d'un fichier reçu de l'API (réponse "blob"). */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

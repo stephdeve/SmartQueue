@@ -23,7 +23,7 @@ use Illuminate\Database\QueryException;
 
 class TicketService
 {
-    private const ACTIVE_STATUSES = ['waiting','called','en_route','present','absent'];
+    public const ACTIVE_STATUSES = ['waiting','called','en_route','present','absent'];
 
     public function __construct(
         private readonly ?ServiceAvailabilityService $availability = null,
@@ -44,6 +44,17 @@ class TicketService
     /**
      * Broadcast event safely - logs error but doesn't crash on failure
      */
+    /**
+     * Agent ou admin à l'origine de l'action en cours (null pour le planificateur
+     * ou quand l'usager agit lui-même) : sert à attribuer les tickets traités.
+     */
+    private function actingStaffId(): ?int
+    {
+        $user = auth()->user();
+
+        return $user && in_array($user->role ?? null, ['agent', 'admin'], true) ? (int) $user->id : null;
+    }
+
     private function broadcastSafely(callable $broadcastFn): void
     {
         try {
@@ -204,12 +215,12 @@ class TicketService
                 ->whereDate('valid_date', $targetDate)
                 ->count();
             if ($waitingCount >= (int) $service->capacity) {
-                abort(422, 'Service queue is full');
+                abort(422, 'La file de ce service est complète pour le moment.');
             }
         }
 
         if ($this->findActiveTicketFor($service->id, $user->id)) {
-            abort(422, 'You already have an active ticket for this service');
+            abort(422, 'Vous avez déjà un ticket en cours pour ce service.');
         }
     }
 
@@ -534,6 +545,7 @@ class TicketService
             if (!is_null($counterId)) {
                 $ticket->counter_id = $counterId;
             }
+            $ticket->agent_id = $this->actingStaffId() ?? $ticket->agent_id;
             $ticket->called_at = Carbon::now();
             $timeoutMinutes = max(1, $service->call_timeout_minutes
                 ?? (int) ceil((int) config('queue.call_timeout_seconds', 600) / 60));
@@ -788,6 +800,7 @@ class TicketService
 
         $ticket->status = 'closed';
         $ticket->closed_at = Carbon::now();
+        $ticket->agent_id = $this->actingStaffId() ?? $ticket->agent_id;
         $ticket->en_route_expires_at = null;
         $ticket->position = null;
         $ticket->eta_minutes = null;
@@ -876,7 +889,7 @@ class TicketService
         // Vérifier la période de grâce (24h depuis appel original ou premier appel)
         $referenceTime = $ticket->original_called_at ?? $ticket->called_at;
         if ($referenceTime && Carbon::parse($referenceTime)->addHours(24)->isPast()) {
-            throw new \InvalidArgumentException('Grace period expired, cannot defer');
+            throw new \InvalidArgumentException('Le délai pour laisser passer votre tour est dépassé.');
         }
 
         return DB::transaction(function () use ($ticket) {
@@ -936,6 +949,7 @@ class TicketService
             $nextTicket->position = null;
             $nextTicket->status = 'called';
             $nextTicket->counter_id = $ticketCounterId;
+            $nextTicket->agent_id = $this->actingStaffId() ?? $nextTicket->agent_id;
             $nextTicket->en_route_at = null; // Nouvel appel : pas encore de réponse
             $nextTicket->present_at = null;
             $nextTicket->response_received_at = null;
@@ -1127,6 +1141,7 @@ class TicketService
         if (!is_null($counterId)) {
             $ticket->counter_id = $counterId;
         }
+        $ticket->agent_id = $this->actingStaffId() ?? $ticket->agent_id;
         $ticket->called_at = Carbon::now();
         $ticket->called_expires_at = Carbon::now()->addMinutes($timeoutMinutes);
         $ticket->position = null;

@@ -40,6 +40,8 @@ use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ForgotPasswordController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\PlanController;
+use App\Http\Controllers\Api\Admin\SubscriptionController as AdminSubscriptionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -83,6 +85,9 @@ Route::prefix('onboarding')->group(function () {
     Route::middleware('auth:sanctum')->post('subscribe', [OnboardingController::class, 'subscribe']);
 });
 
+// Offres d'abonnement (catalogue public)
+Route::get('plans', [PlanController::class, 'index']);
+
 // Établissements (public: recherche; détails: public)
 Route::get('establishments', [EstablishmentController::class, 'index']); // ?lat&lng&radius
 Route::get('establishments/nearby', [EstablishmentController::class, 'index']); // alias mobile: ?lat&lng&radius
@@ -104,6 +109,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Mise à jour du profil + changement de mot de passe
     Route::match(['put', 'patch'], 'me', [ProfileController::class, 'update']);
     Route::post('me/change-password', [ProfileController::class, 'changePassword']);
+    // Suppression du compte (exigence App Store / Play Store pour les comptes créés dans l'app)
+    Route::delete('me', [ProfileController::class, 'destroy']);
 
     // CRUD tickets utilisateur
     Route::post('tickets', [TicketController::class, 'store']);
@@ -230,6 +237,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Push notifications (FCM)
         Route::post('push/broadcast', [PushNotificationController::class, 'broadcast']);
 
+        // Abonnement de l'établissement
+        Route::get('subscription', [AdminSubscriptionController::class, 'show']);
+
         // Évaluations des services
         Route::get('reviews/stats', [AdminReviewController::class, 'stats']);
 
@@ -246,6 +256,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('establishments/{establishment}/subscription', [SaasSubscriptionController::class, 'upsert']);
         Route::get('monitoring/overview', [SaasMonitoringController::class, 'overview']);
         Route::get('admin/system-stats', [SaasMonitoringController::class, 'systemStats']);
+        Route::get('admin/config', [SaasMonitoringController::class, 'config']);
         Route::post('admin/system/{action}', [SaasMonitoringController::class, 'systemAction'])->where('action', '[a-z-]+');
     });
 

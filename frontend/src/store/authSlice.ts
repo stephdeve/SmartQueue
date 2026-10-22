@@ -106,8 +106,8 @@ export const registerEstablishment = createAsyncThunk<
 });
 
 export const subscribe = createAsyncThunk<
-  { pending_subscription: any; next_step: string; user?: User },
-  { plan: string; paid: boolean },
+  { pending_subscription: any; next_step: string; user?: User; subscription?: any },
+  { plan: string; billing_cycle?: "month" | "year" },
   { rejectValue: AuthError }
 >("auth/subscribe", async (payload, { rejectWithValue }) => {
   try {
@@ -271,8 +271,10 @@ const slice = createSlice({
     });
 
     b.addCase(updateProfile.fulfilled, (s, a: PayloadAction<User>) => {
-      s.user = a.payload;
-      localStorage.setItem("user", JSON.stringify(a.payload));
+      // La réponse de PATCH /me est partielle : fusion pour conserver services,
+      // guichets et abonnement en attente (sinon perdus jusqu'au rechargement)
+      s.user = { ...(s.user ?? {}), ...a.payload } as User;
+      localStorage.setItem("user", JSON.stringify(s.user));
     });
   },
 });

@@ -34,7 +34,8 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json([
                     'error' => [
                         'code' => 'validation_error',
-                        'message' => 'The given data was invalid.',
+                        // Premier message explicite (traduit) : les clients l'affichent tel quel
+                        'message' => $e->validator->errors()->first() ?: 'Les données envoyées sont invalides.',
                         'details' => $e->errors(),
                     ],
                 ], 422);
